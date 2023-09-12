@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import math
-from shapely import LineString, Point
+from tqdm import tqdm
+from loguru import logger
+# from shapely import LineString, Point
 import os
 
 
@@ -43,9 +45,9 @@ def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     return list_dropWell
 
 
-def first_row_of_well_geometry(df_WellOneArea,
-                               wellNumberInj,
-                               verticalWellAngle, MaxOverlapPercent, angle_horizontalT1, angle_horizontalT3):
+def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
+                               verticalWellAngle, MaxOverlapPercent,
+                               angle_horizontalT1, angle_horizontalT3):
     """
     Поиск для нагнетательной скважины окружения первого ряда на основе геометрии
     :param angle_horizontalT3: sector expansion angle for horizontal well's T1 point
@@ -63,13 +65,16 @@ def first_row_of_well_geometry(df_WellOneArea,
         если нагенатетльная вертикальная используется только точка T1
         горизонтальная -    Т1, середина ствола и Т3
         """
-        list_startingPoints = [[df_WellOneArea.XT1.loc[wellNumberInj]], [df_WellOneArea.YT1.loc[wellNumberInj]]]
+        list_startingPoints = [[df_WellOneArea.coordinateX.loc[wellNumberInj]],
+                               [df_WellOneArea.coordinateY.loc[wellNumberInj]]]
     else:
-        list_startingPoints = [[df_WellOneArea.XT1.loc[wellNumberInj], (df_WellOneArea.XT1.loc[wellNumberInj] +
-                                df_WellOneArea.XT3.loc[wellNumberInj]) / 2, df_WellOneArea.XT3.loc[wellNumberInj]],
-                               [df_WellOneArea.YT1.loc[wellNumberInj],
-                                (df_WellOneArea.YT1.loc[wellNumberInj] + df_WellOneArea.YT3.loc[wellNumberInj]) / 2,
-                                df_WellOneArea.YT3.loc[wellNumberInj]]]
+        list_startingPoints = [
+            [df_WellOneArea.coordinateX.loc[wellNumberInj], (df_WellOneArea.coordinateX.loc[wellNumberInj] +
+                                                             df_WellOneArea.coordinateX3.loc[wellNumberInj]) / 2,
+             df_WellOneArea.coordinateX3.loc[wellNumberInj]],
+            [df_WellOneArea.coordinateY.loc[wellNumberInj],
+             (df_WellOneArea.coordinateY.loc[wellNumberInj] + df_WellOneArea.coordinateY3.loc[wellNumberInj]) / 2,
+             df_WellOneArea.coordinateY3.loc[wellNumberInj]]]
 
     #  checking the points of inj well
     listNamesFisrtRowWells = []
@@ -79,10 +84,10 @@ def first_row_of_well_geometry(df_WellOneArea,
         #  centering
         X0 = list_startingPoints[0][point]
         Y0 = list_startingPoints[1][point]
-        df_OnePoint["X_T1"] = df_OnePoint.XT1 - X0
-        df_OnePoint["X_T3"] = df_OnePoint.XT3 - X0
-        df_OnePoint["Y_T1"] = df_OnePoint.YT1 - Y0
-        df_OnePoint["Y_T3"] = df_OnePoint.YT3 - Y0
+        df_OnePoint["X_T1"] = df_OnePoint.coordinateX - X0
+        df_OnePoint["X_T3"] = df_OnePoint.coordinateX - X0
+        df_OnePoint["Y_T1"] = df_OnePoint.coordinateY - Y0
+        df_OnePoint["Y_T3"] = df_OnePoint.coordinateY - Y0
 
         #  to polar coordinate system
         df_OnePoint["r_t1"] = np.sqrt(np.power(df_OnePoint["X_T1"], 2) + np.power(df_OnePoint["Y_T1"], 2))
@@ -125,7 +130,7 @@ def first_row_of_well_geometry(df_WellOneArea,
                                                           (df_OnePoint['distance'] == 0),
                                                           df_OnePoint["fi_t3"] - angle_horizontalT3)
 
-        """# график перед очисткой
+        '''# график перед очисткой
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         for i in range(df_OnePoint["fi_t1"].shape[0]):
             ax.plot([df_OnePoint["fi_t1"].iloc[i], df_OnePoint["fi_t3"].iloc[i]], [df_OnePoint["r_t1"].iloc[i],
@@ -134,10 +139,9 @@ def first_row_of_well_geometry(df_WellOneArea,
                     fontsize="xx-small", c='k')
 
         ax.set_title("A line plot on a polar axis: before edit for well " + str(wellNumberInj), va='bottom')
-        my_path = os.path.dirname(__file__).replace("\\","/")
+        my_path = os.path.dirname(__file__).replace("\\", "/")
         plt.show()
-        #plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) +' before edit.png')"""
-
+        # plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) +' before edit.png')'''
 
         df_OnePoint["fi_t1_grad"] = df_OnePoint["fi_t1"] * 180 / np.pi
         df_OnePoint["fi_t1_grad"] = df_OnePoint["fi_t1_grad"].where(df_OnePoint["fi_t1_grad"] >= 0,
@@ -153,6 +157,7 @@ def first_row_of_well_geometry(df_WellOneArea,
         df_crossLine = df_OnePoint[(df_OnePoint["fi_min"] >= 0) & (df_OnePoint["fi_min"] <= 90)
                                    & (df_OnePoint["fi_max"] >= 270) & (df_OnePoint["fi_max"] <= 360)]
         if not df_crossLine.empty:
+            count = 0
             while not df_crossLine.empty:
                 angleRotation = 360 - df_crossLine["fi_max"].min() + 1
                 df_OnePoint[["fi_t1_grad", "fi_t3_grad"]] = df_OnePoint[["fi_t1_grad", "fi_t3_grad"]] + angleRotation
@@ -164,6 +169,13 @@ def first_row_of_well_geometry(df_WellOneArea,
                 df_crossLine = df_OnePoint[(df_OnePoint["fi_min"] >= 0) & (df_OnePoint["fi_min"] <= 90)
                                            & (df_OnePoint["fi_max"] >= 270) & (df_OnePoint["fi_max"] <= 360)]
                 df_OnePoint = df_OnePoint.sort_values(by=["fi_min"])
+                count += 1
+                # print('count value is:', count)
+                if count > df_OnePoint.shape[0]:
+                    df_OnePoint = df_OnePoint.drop(df_OnePoint['distance'].idxmax())
+                    count = 1
+                    df_crossLine = df_OnePoint[(df_OnePoint["fi_min"] >= 0) & (df_OnePoint["fi_min"] <= 90)
+                                               & (df_OnePoint["fi_max"] >= 270) & (df_OnePoint["fi_max"] <= 360)]
                 # print("пересекает!" + str(wellNumberInj))
 
         # well sector center
@@ -194,7 +206,7 @@ def first_row_of_well_geometry(df_WellOneArea,
                     list_dropWell = check_well_intersection(df_intersectionWells, MaxOverlapPercent)
                     listNamesClean = list(set(listNamesClean) - set(list_dropWell))
 
-        """# график после очистки
+        '''# график после очистки
         df_OnePoint = df_OnePoint[df_OnePoint.index.isin(listNamesClean)]
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         for i in range(df_OnePoint["fi_t1"].shape[0]):
@@ -205,63 +217,49 @@ def first_row_of_well_geometry(df_WellOneArea,
                     fontsize="xx-small", c='k')
         ax.set_title("A line plot on a polar axis: after edit for well " + str(wellNumberInj), va='bottom')
         plt.show()
-        #plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) + ' after edit.png')"""
+        #plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) + ' after edit.png')'''
 
         listNamesFisrtRowWells.extend(listNamesClean)
     listNamesFisrtRowWells = list(set(listNamesFisrtRowWells))
     return listNamesFisrtRowWells
 
 
-def first_row_of_well_drainage_front(gdf_WellOneArea, wellNumberInj):
-    """ В разработке
-    Функция аналогичная firstRow_of_Wells_geometry - с учетом областей дреннирования и нагнетания скважин
-    :return:
-    """
-    # map for zones:
-    gdf_WellOneArea.insert(loc=gdf_WellOneArea.shape[1], column="area",
-                           value=gpd.GeoSeries(gdf_WellOneArea.drainage_area).area)
-    df_WellOneArea = gdf_WellOneArea.sort_values(by=['area'], ascending=False)
-    # add shapely types for well coordinates
-    gdf_WellOneArea.insert(loc=gdf_WellOneArea.shape[1], column="POINT T1",
-                           value=list(map(lambda x, y: Point(x, y),
-                                          gdf_WellOneArea.XT1, gdf_WellOneArea.YT1)))
-    gdf_WellOneArea.insert(loc=gdf_WellOneArea.shape[1], column="POINT T3",
-                           value=list(map(lambda x, y: Point(x, y),
-                                          gdf_WellOneArea.XT3, gdf_WellOneArea.YT3)))
-    gdf_WellOneArea.insert(loc=gdf_WellOneArea.shape[1], column="LINESTRING",
-                           value=list(map(lambda x, y: LineString([x, y]),
-                                          gdf_WellOneArea["POINT T1"], gdf_WellOneArea["POINT T3"])))
+def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
+                angle_horizontalT1, angle_horizontalT3, max_distance):
+    '''
+    :param df_in_contour: DataFrame со скважинами, вошедшими в текущий контур
+    :param verticalWellAngle: угол для обозначения зоны вертикальных скважин на карте
+    :param MaxOverlapPercent: максимальный процент перекрытия одной скважины другой
+    :param angle_horizontalT1: sector expansion angle for horizontal well's T1 point
+    :param angle_horizontalT3: sector expansion angle for horizontal well's T3 point
+    :param max_distance: максимальное расстояние между скважинами
+    :return: возвращает средний радиус взаимодействия скважин по объекту
+    '''
+    df_in_contour.set_index("wellName", inplace=True, drop=False)
+    df_in_contour.insert(loc=df_in_contour.shape[1], column="distance", value=0)
+    df_in_contour.insert(loc=df_in_contour.shape[1], column="mean_dist", value=0)
+    df_in_contour = gpd.GeoDataFrame(df_in_contour, geometry="GEOMETRY")
+    wells = df_in_contour.wellName.unique()
+    for well in tqdm(wells, "calculation mean radius", position=0, leave=False, colour='green', ncols=80):
+        # Обновляем столбец distance
+        # print(well)
+        df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
+                                             df_in_contour.GEOMETRY))
 
-    PROD_MARKER: str = "prod"
-    INJ_MARKER: str = "inj"
-    fontsize = 6  # Размер шрифта
-    size_point = 13
 
-    ax = gpd.GeoSeries(df_WellOneArea.drainage_area).plot(cmap="Blues", figsize=[20, 20])
-    area_inj = gdf_WellOneArea["drainage_area"].loc[wellNumberInj].boundary
-    gpd.GeoSeries(area_inj).plot(ax=ax, color="red")
-    gpd.GeoSeries(gdf_WellOneArea["LINESTRING"]).plot(ax=ax, color="black")
+        # с помощью вызова другой функции получаем скажины окружения первого ряда
+        first_row_list = first_row_of_well_geometry(df_in_contour[df_in_contour['distance'] <= max_distance],
+                                                    well,
+                                                    verticalWellAngle, MaxOverlapPercent,
+                                                    angle_horizontalT1, angle_horizontalT3)
+        # в новом DataFrame оставляем скважины первого окружения
+        df_first_row = df_in_contour[df_in_contour["wellName"].isin(first_row_list)]
+        # считаем среднее значение по столбцу distance
+        df_in_contour.loc[well, 'mean_dist'] = df_first_row["distance"].mean()
+    mean_rad = df_in_contour["mean_dist"].mean()
+    # print(type(mean_rad))
+    if mean_rad is np.nan:
+        mean_rad = max_distance
 
-    # Подпись нагнетательных скважин
-    for x, y, label in zip(gdf_WellOneArea[gdf_WellOneArea["well marker"] == INJ_MARKER].XT1.values,
-                           gdf_WellOneArea[gdf_WellOneArea["well marker"] == INJ_MARKER].YT1.values,
-                           gdf_WellOneArea[gdf_WellOneArea["well marker"] == INJ_MARKER].index):
-        ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=fontsize)
-
-    for x, y, label in zip(gdf_WellOneArea[gdf_WellOneArea["well marker"] == PROD_MARKER].XT1.values,
-                           gdf_WellOneArea[gdf_WellOneArea["well marker"] == PROD_MARKER].YT1.values,
-                           gdf_WellOneArea[gdf_WellOneArea["well marker"] == PROD_MARKER].index):
-        ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=fontsize)
-
-    # Точки скважин - черные добывающие, синие треугольники - нагнетательные
-    gdf_WellOneArea = gdf_WellOneArea.set_geometry(gdf_WellOneArea["POINT T1"])
-    gdf_WellOneArea[gdf_WellOneArea["well marker"] == INJ_MARKER].plot(ax=ax, color="blue",
-                                                                   markersize=size_point, marker="^")
-    gdf_WellOneArea[gdf_WellOneArea["well marker"] == PROD_MARKER].plot(ax=ax, color="black",
-                                                                    markersize=size_point)
-
-    my_path = os.path.dirname(__file__).replace("\\", "/")
-    plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + ' zones.png', dpi=200, quality=100)
-    print(str(wellNumberInj))
-    # plt.show()
-    return
+    df_in_contour.drop(columns=['distance', 'mean_dist'], inplace=True)
+    return mean_rad

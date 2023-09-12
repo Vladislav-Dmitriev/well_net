@@ -1,7 +1,8 @@
 from shapely.geometry import LineString, Point
 import geopandas as gpd
 import xlwings as xw
-
+import pandas as pd
+from shapely.geometry import Polygon
 
 def get_polygon_well(R_well, type_well, *coordinates):
     '''
@@ -32,7 +33,7 @@ def check_intersection_area(area, df_points):
     '''
     df_points = gpd.GeoDataFrame(df_points, geometry="GEOMETRY")
     df_points = df_points[df_points["GEOMETRY"].intersects(area)]
-    return df_points.wellNumberColumn.values
+    return df_points.wellName.values
 
 
 def unpack(dict_constant):
@@ -42,7 +43,7 @@ def unpack(dict_constant):
     :return: возвращает статусы и характер работы скважин как отдельные переменные типа string
     '''
     return dict_constant.get("PROD_STATUS"), dict_constant.get("PROD_MARKER"), dict_constant.get("PIEZ_STATUS"),\
-            dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS")
+        dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS")
 
 
 def check_intersection_point(point, df_areas):
@@ -54,7 +55,7 @@ def check_intersection_point(point, df_areas):
     '''
     df_areas = gpd.GeoDataFrame(df_areas, geometry="AREA")
     df_areas = df_areas[df_areas["AREA"].intersects(point)]
-    return df_areas.wellNumberColumn.values
+    return df_areas.wellName.values
 
 
 def intersect_number(df_prod, df_inj_piez):
@@ -94,9 +95,9 @@ def optimization(df_prod, df_inj_piez):
     # выделяем пьезометры/нагнеталки, у которых есть только 1 пересечение
     list_inj_piez_wells += list(df_prod[df_prod.number == 1].intersection.explode().unique())
     list_prod_wells = df_inj_piez[
-        df_inj_piez.wellNumberColumn.isin(list_inj_piez_wells)].intersection.explode().unique()
+        df_inj_piez.wellName.isin(list_inj_piez_wells)].intersection.explode().unique()
     # создаем dataframe оптимизации, исключая скважины с одним пересечением
-    df_optim = df_inj_piez[~df_inj_piez.wellNumberColumn.isin(list_inj_piez_wells)]
+    df_optim = df_inj_piez[~df_inj_piez.wellName.isin(list_inj_piez_wells)]
     df_optim.intersection = list(
         map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim.intersection))
     df_optim.number = list(map(lambda x: len(x), df_optim.intersection))
@@ -109,16 +110,41 @@ def optimization(df_prod, df_inj_piez):
         df_optim = df_optim.sort_values(by=['number'], ascending=True)
         # на каждой итерации создается набор исключений, кроме итерируемой скважины,
         # он сравнивается с набором скважин, входящих в список перечесений выше
-        for well in df_optim.wellNumberColumn.values:
-            set_exception = set(df_optim[df_optim.wellNumberColumn != well].intersection.explode().unique())
+        for well in df_optim.wellName.values:
+            set_exception = set(df_optim[df_optim.wellName != well].intersection.explode().unique())
             # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина
             # и добавляется к списку нагн./пьез.
             if set_exception == set_visible_wells:
-                df_optim = df_optim[df_optim.wellNumberColumn != well]
-        list_inj_piez_wells += list(df_optim.wellNumberColumn.values)
+                df_optim = df_optim[df_optim.wellName != well]
+        list_inj_piez_wells += list(df_optim.wellName.values)
 
     return list_inj_piez_wells
 
+
+def add_shapely_types(df_input, mean_radius):
+    '''
+    :param df_input: DataFrame, полученный из исходного файла
+    :param mean_radius: средний радиус окружения для итерируемого объекта
+    :return: Возвращается DataFrame с добавленными столбцами геометрии и площади влияния каждой скважины
+    '''
+
+    # add to input dataframe columns for shapely types of coordinates
+
+    # df_input_ver = df_input[df_input["well type"] == "vertical"]
+    # df_input_hor = df_input[df_input["well type"] == "horizontal"]
+
+    df_input.insert(loc=df_input.shape[1], column="AREA", value=0)
+    df_input["AREA"] = df_input["AREA"].where(
+        df_input["well type"] != "vertical", list(map(lambda x, y: get_polygon_well(
+            mean_radius,"vertical",x, y), df_input.coordinateX, df_input.coordinateY)))
+    df_input["AREA"] = df_input["AREA"].where(df_input["well type"] != "horizontal", list(map(lambda x, y, x1, y1:
+                                                                    get_polygon_well(mean_radius,
+                                                                   "horizontal", x, y, x1, y1),
+                                                                    df_input.coordinateX,
+                                                                    df_input.coordinateY,
+                                                                    df_input.coordinateX3,
+                                                                    df_input.coordinateY3)))
+    return df_input
 
 def write_to_excel(dict_result):
     '''
@@ -152,6 +178,14 @@ def write_to_excel(dict_result):
     # End print
     app1.kill()
     pass
+
+def load_contour(contour_path):
+    columns_name = ['coordinateX', 'coordinateY']
+    df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
+    gdf_contour = gpd.GeoDataFrame(df_contour)
+    list_of_coord = [[x, y] for x, y in zip(gdf_contour.coordinateX, gdf_contour.coordinateY)]
+    polygon = Polygon(list_of_coord)
+    return polygon
 
 
 

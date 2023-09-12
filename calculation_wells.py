@@ -1,7 +1,8 @@
 import pandas as pd
-from functions import intersect_number, optimization, check_intersection_area, unpack
+from functions import intersect_number, optimization, check_intersection_area, unpack, add_shapely_types
 from tqdm import tqdm
 from mapping import visualisation
+from FirstRowWells import mean_radius
 
 
 def piez_calc(horizon, df_piez_wells, hor_prod_wells, df_result):
@@ -28,14 +29,14 @@ def piez_calc(horizon, df_piez_wells, hor_prod_wells, df_result):
         list_piez_wells = optimization(hor_prod_wells, hor_piez_wells)
 
         # final list of piezometers to result_df
-        df_result = pd.concat([df_result, hor_piez_wells[hor_piez_wells.wellNumberColumn.isin(list_piez_wells)]],
+        df_result = pd.concat([df_result, hor_piez_wells[hor_piez_wells.wellName.isin(list_piez_wells)]],
                               axis=0, sort=False).reset_index(drop=True)
 
         # wells without communication with piezometer
-        isolated_wells = hor_prod_wells[hor_prod_wells.number == 0].wellNumberColumn.values
+        isolated_wells = hor_prod_wells[hor_prod_wells.number == 0].wellName.values
         hor_prod_wells.drop(["intersection", "number"], axis=1, inplace=True)
     else:
-        isolated_wells = hor_prod_wells.wellNumberColumn.values
+        isolated_wells = hor_prod_wells.wellName.values
     return isolated_wells, hor_piez_wells, hor_prod_wells, df_result
 
 
@@ -52,7 +53,7 @@ def inj_calc(horizon, isolated_wells, hor_prod_wells, df_inj_wells, df_result):
                            3) DataFrame добывающих;
                            4) Общий DataFrame со всеми результатами расчета по объекту
     '''
-    hor_prod_wells = hor_prod_wells[hor_prod_wells.wellNumberColumn.isin(isolated_wells)]
+    hor_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(isolated_wells)]
 
     hor_inj_wells = df_inj_wells[
         list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
@@ -67,15 +68,15 @@ def inj_calc(horizon, isolated_wells, hor_prod_wells, df_inj_wells, df_result):
         list_inj_wells = optimization(hor_prod_wells, hor_inj_wells)
 
         # final list of injection to result_df
-        df_result = pd.concat([df_result, hor_inj_wells[hor_inj_wells.wellNumberColumn.isin(list_inj_wells)]],
-            axis=0, sort=False).reset_index(drop=True)
+        df_result = pd.concat([df_result, hor_inj_wells[hor_inj_wells.wellName.isin(list_inj_wells)]],
+                              axis=0, sort=False).reset_index(drop=True)
 
         # wells without communication with injection wells
-        isolated_wells = hor_prod_wells[hor_prod_wells.number == 0].wellNumberColumn.values
+        isolated_wells = hor_prod_wells[hor_prod_wells.number == 0].wellName.values
 
         hor_prod_wells.drop(["intersection", "number"], axis=1, inplace=True)
     else:
-        isolated_wells = hor_prod_wells.wellNumberColumn.values
+        isolated_wells = hor_prod_wells.wellName.values
 
     return isolated_wells, hor_prod_wells, df_inj_wells, df_result
 
@@ -91,73 +92,86 @@ def single_calc(isolated_wells, hor_prod_wells, df_result):
                            3) Общий DataFrame со всеми результатами расчета по объекту
     '''
     single_wells = []
-    hor_prod_wells = hor_prod_wells[hor_prod_wells.wellNumberColumn.isin(isolated_wells)]
+    hor_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(isolated_wells)]
 
     # check_intersection
     hor_prod_wells.insert(loc=hor_prod_wells.shape[1], column="intersection",
                           value=list(map(lambda x, y:
                                          check_intersection_area(x, hor_prod_wells
-                                         [hor_prod_wells.wellNumberColumn != y]),
-                                         hor_prod_wells.AREA, hor_prod_wells.wellNumberColumn)))
+                                         [hor_prod_wells.wellName != y]),
+                                         hor_prod_wells.AREA, hor_prod_wells.wellName)))
     hor_prod_wells.insert(loc=hor_prod_wells.shape[1], column="number",
                           value=list(map(lambda x: len(x), hor_prod_wells.intersection)))
 
-    single_wells += list(hor_prod_wells[hor_prod_wells.number == 0].wellNumberColumn)
+    single_wells += list(hor_prod_wells[hor_prod_wells.number == 0].wellName)
 
     df_optim = hor_prod_wells[hor_prod_wells.number > 0]
 
     # !!!OPTIMIZATION!!!
     if not df_optim.empty:
         df_optim = df_optim.sort_values(by=['oilRate'], ascending=True)
-        list_wells = df_optim.wellNumberColumn.values
+        list_wells = df_optim.wellName.values
         while len(list_wells) != 0:
             single_wells += [list_wells[0]]
             list_exeption = [list_wells[0]] + \
-                            list(df_optim[df_optim.wellNumberColumn == list_wells[0]].intersection.explode().unique())
+                            list(df_optim[df_optim.wellName == list_wells[0]].intersection.explode().unique())
             list_wells = [x for x in list_wells if x not in list_exeption]
 
         # final list of injection to result_df
     df_result = pd.concat(
-        [df_result, hor_prod_wells[hor_prod_wells.wellNumberColumn.isin(single_wells)]],
+        [df_result, hor_prod_wells[hor_prod_wells.wellName.isin(single_wells)]],
         axis=0, sort=False).reset_index(drop=True)
 
     return single_wells, hor_prod_wells, df_result
 
 
-def calc_contour(df_input, polygon, contour_name, **dict_constant):
+def calc_contour(df_input, polygon, contour_name, max_distance, **dict_constant):
     '''
-    Функция для расчета всех типов скважин, включающая в себя все функции расчета отдельных типов скважин
-    :param df_input: DataFrame, полученны из исходного файла со свкажинами
+    Функция для расчета скважин, включающая в себя все функции расчета отдельных типов скважин
+    :param df_input: DataFrame, полученные из исходного файла со свкажинами
     :param polygon: Геометрический объект GeoPandas, полученный из координат контура, подающегося в программу
     :param contour_name: Название файла с координатами текущего контура без расширения файла
     :param dict_constant: Словарь с характером работы и состоянием скажины
     :return: Возвращается общий DataFrame с результатами расчета по всем объектам и DataFrame с добывающими скважинами
     '''
+    # add shapely types for geometry
+
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack(dict_constant)
-    df_prod_wells = df_input.loc[(df_input.workMarker == PROD_MARKER) & (df_input.wellStatus.isin(PROD_STATUS))]
-    df_piez_wells = df_input.loc[df_input.wellStatus == PIEZ_STATUS]
-    df_inj_wells = df_input.loc[(df_input.workMarker == INJ_MARKER) & (df_input.wellStatus.isin(INJ_STATUS))]
     list_objects = df_input.workHorizon.str.replace(" ", "").str.split(",").explode().unique()
     list_objects.sort()
 
     df_result_all = pd.DataFrame()
     for horizon in tqdm(list_objects, "calculation for objects"):
         df_result = pd.DataFrame()
+        # для каждого объекта определяется свой df_horizon_input
+        df_horizon_input = df_input[list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
+                                             df_input.workHorizon))]
+        mean_rad = mean_radius(df_horizon_input, 10, 30,
+                               10, 10, max_distance)
+        df_horizon_input = add_shapely_types(df_horizon_input, mean_rad)
+        df_prod_wells = df_horizon_input.loc[(df_horizon_input.workMarker == PROD_MARKER)
+                                             & (df_horizon_input.wellStatus.isin(PROD_STATUS))]
+        df_piez_wells = df_horizon_input.loc[df_horizon_input.wellStatus == PIEZ_STATUS]
+        df_inj_wells = df_horizon_input.loc[(df_horizon_input.workMarker == INJ_MARKER)
+                                            & (df_horizon_input.wellStatus.isin(INJ_STATUS))]
 
-        hor_prod_wells_first = df_prod_wells[list(map(lambda x: len(set(x.replace(" ", "").split(",")) &
-                                                                    set([horizon])) > 0, df_prod_wells.workHorizon))]
-        if hor_prod_wells_first.empty:
+        # hor_prod_wells_first = df_prod_wells[list(map(lambda x: len(set(x.replace(" ", "").split(",")) &
+        #                                                             set([horizon])) > 0, df_prod_wells.workHorizon))]
+
+        if df_prod_wells.empty:
             continue
 
         # I. Piezometric wells__________________________________________________________________________________________
 
-        isolated_wells, hor_piez_wells, hor_prod_wells, df_result = piez_calc(horizon, df_piez_wells,
-                                                                              hor_prod_wells_first,
+        isolated_wells, hor_piez_wells, hor_prod_wells, df_result = piez_calc(horizon,
+                                                                              df_piez_wells,
+                                                                              df_prod_wells.copy(),
                                                                               df_result)
 
         # II. Injection wells___________________________________________________________________________________________
         if len(isolated_wells):
-            isolated_wells, hor_prod_wells, df_inj_wells, df_result = inj_calc(horizon, isolated_wells,
+            isolated_wells, hor_prod_wells, df_inj_wells, df_result = inj_calc(horizon,
+                                                                               isolated_wells,
                                                                                hor_prod_wells,
                                                                                df_inj_wells,
                                                                                df_result)
@@ -165,12 +179,12 @@ def calc_contour(df_input, polygon, contour_name, **dict_constant):
             # III. Single wells_________________________________________________________________________________________
             if len(isolated_wells):
                 single_wells, hor_prod_wells, df_result = single_calc(isolated_wells,
-                                                                                hor_prod_wells,
-                                                                                     df_result)
+                                                                      hor_prod_wells,
+                                                                      df_result)
         # MAP drawing_______________________________________________________________________________________________
-        visualisation(polygon, contour_name, horizon, df_result, hor_prod_wells_first, **dict_constant)
+        visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **dict_constant)
+        df_result.insert(loc=df_result.shape[1], column="mean_radius", value=mean_rad)
         df_result_all = pd.concat([df_result_all, df_result],
-            axis=0, sort=False).reset_index(drop=True)
+                                  axis=0, sort=False).reset_index(drop=True)
 
-    return df_result_all, df_prod_wells
-
+    return df_result_all

@@ -3,8 +3,8 @@ import pandas as pd
 import yaml
 from loguru import logger
 import geopandas as gpd
-from shapely.geometry import Polygon
-from functions import write_to_excel
+from shapely.geometry import Point, Polygon
+from functions import write_to_excel, load_contour
 from preparing_data import preparing
 from calculation_wells import calc_contour
 import warnings
@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
 
 dict_names_column = {
-    '№ скважины': 'wellNumberColumn',
+    '№ скважины': 'wellName',
     'Дата': 'nameDate',
     'Характер работы': 'workMarker',
     "Состояние": 'wellStatus',
@@ -36,12 +36,12 @@ if __name__ == '__main__':
     with open('conf_files/parameters.yml', encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
     data_file = dict_parameters['data_file']
-
+    # maximum distance between wells, m
+    max_distance = dict_parameters['max_distance']
+    # minimum length between points T1 and T3 to consider the well as horizontal, m
+    min_length_horWell = dict_parameters['min_length_horWell']
     # get preparing dataframes
-    df_input = preparing(dict_names_column, data_file, max_distance_piez=dict_parameters['max_distance_piez'],
-                         max_distance_inj=dict_parameters['max_distance_inj'],
-                         min_length_horWell=dict_parameters['min_length_horWell'],
-                         max_distance_single_well=dict_parameters['max_distance_single_well'])
+    df_input = preparing(dict_names_column, data_file, min_length_horWell)
 
     logger.info("CHECKING FOR CONTOURS")
 
@@ -54,25 +54,20 @@ if __name__ == '__main__':
 
     logger.info("check the content of contours")
 
-    well_out_contour = set(df_input.wellNumberColumn.values)
+    well_out_contour = set(df_input.wellName.values)
 
     if contours_content:
         logger.info(f"contours: {len(contours_content)}")
         for contour in contours_content:
             contour_name = contour.replace(".txt", "")
             contour_path = contours_path + f"\\{contour}"
-            columns_name = ['coordinateX', 'coordinateY']
-            df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
-            gdf_contour = gpd.GeoDataFrame(df_contour)
-            list_of_coord = [[x, y] for x, y in zip(gdf_contour.coordinateX, gdf_contour.coordinateY)]
-            polygon = Polygon(list_of_coord)
+            polygon = load_contour(contour_path)
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(df_input[df_points.intersects(polygon)].wellNumberColumn)
-            df_input_contour = df_input[df_input.wellNumberColumn.isin(wells_in_contour)]
+            wells_in_contour = set(df_points[df_points.intersects(polygon)].wellName)
+            df_input_contour = df_input[df_input.wellName.isin(wells_in_contour)]
             if df_input_contour.empty:
                 continue
-
-            df_result_all, df_prod_wells = calc_contour(df_input_contour, polygon, contour_name, **dict_constant)
+            df_result_all = calc_contour(df_input_contour, polygon, contour_name, max_distance, **dict_constant)
             dict_result[contour_name] = df_result_all
             well_out_contour = well_out_contour.difference(wells_in_contour)
 
@@ -81,11 +76,11 @@ if __name__ == '__main__':
         contour_name = 'out_contour'
 
     polygon = None
-    df_out_contour = df_input[df_input.wellNumberColumn.isin(well_out_contour)]
+    df_out_contour = df_input[df_input.wellName.isin(well_out_contour)]
 
     if not df_out_contour.empty:
         # расчет для скважин вне контура
-        df_result_all, df_prod_wells = calc_contour(df_out_contour, polygon, contour_name, **dict_constant)
+        df_result_all = calc_contour(df_out_contour, polygon, contour_name, max_distance, **dict_constant)
         dict_result["out_contour"] = df_result_all
 
     # Start print in Excel

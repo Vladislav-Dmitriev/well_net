@@ -20,6 +20,7 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
     hor_prod_wells = df_prod_wells[list(map(lambda x: len(set(x.replace(" ", "").split(","))) > 0,
                                             df_prod_wells.workHorizon))]
 
+    # geodataframe
     gdf_measuring_wells = gpd.GeoDataFrame(df_result)
     gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells.wellStatus == PIEZ_STATUS]
     gdf_inj = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker == INJ_MARKER)
@@ -35,12 +36,12 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         # Signature of piezometric wells
         for x, y, label in zip(gdf_measuring_wells.coordinateX.values,
                                gdf_measuring_wells.coordinateY.values,
-                               gdf_measuring_wells.wellNumberColumn):
+                               gdf_measuring_wells.wellName):
             ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
         # Signature of production wells
         for x, y, label in zip(hor_prod_wells.coordinateX.values,
                                hor_prod_wells.coordinateY.values,
-                               hor_prod_wells.wellNumberColumn):
+                               hor_prod_wells.wellName):
             ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy",
                         fontsize=6)
 
@@ -73,12 +74,12 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         # Signature of piezometric wells
         for x, y, label in zip(gdf_measuring_wells.coordinateX.values,
                                gdf_measuring_wells.coordinateY.values,
-                               gdf_measuring_wells.wellNumberColumn):
+                               gdf_measuring_wells.wellName):
             ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
         # Signature of production wells
         for x, y, label in zip(hor_prod_wells.coordinateX.values,
                                hor_prod_wells.coordinateY.values,
-                               hor_prod_wells.wellNumberColumn):
+                               hor_prod_wells.wellName):
             ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
 
         # production well areas drawing
