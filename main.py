@@ -4,7 +4,7 @@ import yaml
 from loguru import logger
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
-from functions import write_to_excel, load_contour
+from functions import write_to_excel, load_contour, get_time_coef
 from preparing_data import preparing
 from calculation_wells import calc_contour
 import warnings
@@ -42,17 +42,22 @@ if __name__ == '__main__':
     min_length_horWell = dict_parameters['min_length_horWell']
     # get preparing dataframes
     df_input = preparing(dict_names_column, data_file, min_length_horWell)
-
+    # path to file with properties for current object
+    logger.info("Checking for properties")
+    property_path = 'conf_files/reservoir_properties.yml'
+    logger.info(f"path:{property_path}")
+    # path to folder with contours
     logger.info("CHECKING FOR CONTOURS")
-
     dir_path = os.path.dirname(os.path.realpath(__file__))
     logger.info(f"path:{dir_path}")
+    logger.info("check the content of contours")
 
     contours_path = dir_path + "\\contours"
     contours_content = os.listdir(path=contours_path)
+    # словарь для записи резульатов по контурам
     dict_result = {}
+    # список коэффициентов на средний радиус охвата
 
-    logger.info("check the content of contours")
 
     well_out_contour = set(df_input.wellName.values)
 
@@ -67,7 +72,8 @@ if __name__ == '__main__':
             df_input_contour = df_input[df_input.wellName.isin(wells_in_contour)]
             if df_input_contour.empty:
                 continue
-            df_result_all = calc_contour(df_input_contour, polygon, contour_name, max_distance, **dict_constant)
+            df_result_all = calc_contour(df_input_contour, polygon, contour_name,
+                                         max_distance, property_path, **dict_constant)
             dict_result[contour_name] = df_result_all
             well_out_contour = well_out_contour.difference(wells_in_contour)
 
@@ -80,7 +86,8 @@ if __name__ == '__main__':
 
     if not df_out_contour.empty:
         # расчет для скважин вне контура
-        df_result_all = calc_contour(df_out_contour, polygon, contour_name, max_distance, **dict_constant)
+        df_result_all = calc_contour(df_out_contour, polygon, contour_name,
+                                     property_path, max_distance, **dict_constant)
         dict_result["out_contour"] = df_result_all
 
     # Start print in Excel

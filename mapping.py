@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 from functions import unpack
 
 
-def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **dict_constant):
+def visualisation(polygon, contour_name, horizon, mean_radius, df_result, df_prod_wells, **dict_constant):
     '''
     Функция визуализации полученных результатов
     :param polygon: Геометрический объект GeoPandas, созданный из координат контура,
     подается для построения границы контура
     :param contour_name: Геометрический объект GeoPandas, полученный из координат контура, подающегося в программу
     :param horizon: Название файла с координатами текущего контура без расширения файла
+    :param mean_radius: Значение радиуса первого ряда для текущего контура
     :param df_result: Промежуточный DataFrame, посчитанный для одного объекта
     :param df_prod_wells: DataFrame добывающих скважин
     :param dict_constant: Словарь с характером работы и состоянием скажины
@@ -28,7 +29,7 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
     gdf_prod = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker == PROD_MARKER)
                                        & (gdf_measuring_wells.wellStatus.isin(PROD_STATUS))]
 
-    if polygon == None:
+    if polygon is None:
         # Piezometric well areas drawing
         ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="lightsalmon", figsize=[20, 20])
         gpd.GeoSeries(gdf_piez.AREA).boundary.plot(ax=ax, color="orangered")
@@ -54,6 +55,12 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         gpd.GeoSeries(gdf_inj["AREA"]).boundary.plot(ax=ax, color="lightseagreen")
 
         # Black points is production, blue triangle is piezometric
+        gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["POINT"])
+        gdf_measuring_wells.plot(ax=ax, color="blue", markersize=13, marker="^")
+        hor_prod_wells = hor_prod_wells.set_geometry(hor_prod_wells["POINT"])
+        hor_prod_wells.plot(ax=ax, color="black", markersize=13)
+
+        # Trajectory of wells
         gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["GEOMETRY"])
         gdf_measuring_wells.plot(ax=ax, color="blue", markersize=13, marker="^")
         hor_prod_wells = hor_prod_wells.set_geometry(hor_prod_wells["GEOMETRY"])
@@ -62,9 +69,10 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         # Boundary contour
         # gpd.GeoSeries(polygons).boundary.plot(ax=ax, color='saddlebrown')
 
-        plt.savefig('output/pictures/' + str(horizon + "_out_contour").replace("/", " ") + '.png', dpi=200, quality=100)
-        plt.title(horizon)
-        # plt.show()
+        plt.savefig('output/pictures/' + str(horizon + "_out_contour (R = ")
+                    .replace("/", " ") + str(mean_radius) + ')' + '.png', dpi=200, quality=100)
+        plt.title("Объект: " + horizon + ', out contour,' + ' R = ' + str(mean_radius))
+        plt.show()
 
     else:
         # Piezometric well areas drawing
@@ -91,6 +99,12 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         gpd.GeoSeries(gdf_inj["AREA"]).boundary.plot(ax=ax, color="lightseagreen")
 
         # Black points is production, blue triangle is piezometric
+        gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["POINT"])
+        gdf_measuring_wells.plot(ax=ax, color="blue", markersize=13, marker="^")
+        hor_prod_wells = hor_prod_wells.set_geometry(hor_prod_wells["POINT"])
+        hor_prod_wells.plot(ax=ax, color="black", markersize=13)
+
+        # Trajectory of wells
         gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["GEOMETRY"])
         gdf_measuring_wells.plot(ax=ax, color="blue", markersize=13, marker="^")
         hor_prod_wells = hor_prod_wells.set_geometry(hor_prod_wells["GEOMETRY"])
@@ -99,7 +113,8 @@ def visualisation(polygon, contour_name, horizon, df_result, df_prod_wells, **di
         # Boundary contour
         gpd.GeoSeries(polygon).boundary.plot(ax=ax, color='saddlebrown')
 
-        plt.savefig('output/pictures/' + str(horizon + "_" + contour_name).replace("/", " ") + '.png', dpi=200, quality=100)
-        plt.title(horizon + "_" + contour_name)
-        # plt.show()
+        plt.savefig('output/pictures/' + str(horizon + "_" + contour_name + " (R = ").replace("/", " ")
+                    + str(mean_radius).replace("/", " ") + ')' + '.png', dpi=200, quality=100)
+        plt.title("Объект: " + horizon + ", контур: " + contour_name + ", R_охвата = " + str(mean_radius))
+        plt.show()
     pass

@@ -3,6 +3,10 @@ import geopandas as gpd
 import xlwings as xw
 import pandas as pd
 from shapely.geometry import Polygon
+import yaml
+from loguru import logger
+from statistics import mean
+
 
 def get_polygon_well(R_well, type_well, *coordinates):
     '''
@@ -123,27 +127,23 @@ def optimization(df_prod, df_inj_piez):
 
 def add_shapely_types(df_input, mean_radius):
     '''
+    Добавление в DataFrame столбца с площадью охвата скважин, в зависимости от среднего радиуса охвата по контуру
     :param df_input: DataFrame, полученный из исходного файла
     :param mean_radius: средний радиус окружения для итерируемого объекта
     :return: Возвращается DataFrame с добавленными столбцами геометрии и площади влияния каждой скважины
     '''
-
-    # add to input dataframe columns for shapely types of coordinates
-
-    # df_input_ver = df_input[df_input["well type"] == "vertical"]
-    # df_input_hor = df_input[df_input["well type"] == "horizontal"]
-
     df_input.insert(loc=df_input.shape[1], column="AREA", value=0)
     df_input["AREA"] = df_input["AREA"].where(
         df_input["well type"] != "vertical", list(map(lambda x, y: get_polygon_well(
-            mean_radius,"vertical",x, y), df_input.coordinateX, df_input.coordinateY)))
-    df_input["AREA"] = df_input["AREA"].where(df_input["well type"] != "horizontal", list(map(lambda x, y, x1, y1:
-                                                                    get_polygon_well(mean_radius,
-                                                                   "horizontal", x, y, x1, y1),
-                                                                    df_input.coordinateX,
-                                                                    df_input.coordinateY,
-                                                                    df_input.coordinateX3,
-                                                                    df_input.coordinateY3)))
+            mean_radius, "vertical", x, y), df_input.coordinateX, df_input.coordinateY)))
+    df_input["AREA"] = df_input["AREA"].where(df_input["well type"] != "horizontal",
+                                              list(map(lambda x, y, x1, y1:
+                                                       get_polygon_well(
+                                                           mean_radius,"horizontal", x, y, x1, y1),
+                                                       df_input.coordinateX,
+                                                       df_input.coordinateY,
+                                                       df_input.coordinateX3,
+                                                       df_input.coordinateY3)))
     return df_input
 
 def write_to_excel(dict_result):
@@ -171,15 +171,16 @@ def write_to_excel(dict_result):
         sht.range('A1').options().value = df
 
     new_wb.save("output\out_file_2.xlsx")
-        # sht.range('A1').options().value = df
-        # sht_out.range('A1').options().value = wells_out_contour
-
-    # new_wb.save("output\out_file.xlsx")
     # End print
     app1.kill()
     pass
 
 def load_contour(contour_path):
+    '''
+    Загрузка файла с координатами контура и построение многоугольника
+    :param contour_path: Путь к файлу с координатами контура
+    :return: Возвращается многоугольник GeoPandas на основе координат из файла
+    '''
     columns_name = ['coordinateX', 'coordinateY']
     df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
     gdf_contour = gpd.GeoDataFrame(df_contour)
@@ -187,5 +188,69 @@ def load_contour(contour_path):
     polygon = Polygon(list_of_coord)
     return polygon
 
+def get_time_research(path, df_result, horizon):
+    '''
+    Добавление в результирующий DataFrame столбца со временем исследования, при условии,
+    что дебит у скважины не 0
+    :param path: путь к yaml-файлу с параметрами
+    :param df_result: DataFrame рассчитанный для контура
+    :param horizon: имя контура
+    :return: возвращает DataFrame с добавленным столбцом времени исследования
+    '''
+    dict_property = get_property(path)
+    df_result.insert(loc=df_result.shape[1], column="research_time", value=0)
+    df_result["research_time"] = df_result["research_time"].where((df_result["well type"] != "vertical") |
+                                                                  (df_result["oilRate"] == 0),
+                                                                  list(map(lambda x:
+                                                                           462.2824 * x * dict_property[horizon]['mu'] *
+                                                                           dict_property[horizon]['ct'] *
+                                                                           dict_property[horizon]['phi']/
+                                                                           dict_property[horizon]['k'],
+                                                                           df_result.mean_radius)))
+    df_result["research_time"] = df_result["research_time"].where((df_result["well type"] != "horizontal") |
+                                                                  (df_result["oilRate"] == 0),
+                                                                  list(map(lambda x:
+                                                                           462.2824 * x * dict_property[horizon]['mu'] *
+                                                                           dict_property[horizon]['ct'] *
+                                                                           dict_property[horizon]['phi']/
+                                                                           dict_property[horizon]['k'],
+                                                                           df_result.mean_radius)))
+    return df_result
 
+def get_property(path):
+    '''
+    Считывание параметров из yaml-файла в словарь
+    :param path: путь к файлу с параметрами
+    :return: возвращает словарь с параметрами по ключу объекта
+    '''
+    logger.info(f"upload conf_files")
+    with open(path, 'rt', encoding='utf8') as yml:
+        reservoir_properties = yaml.load(yml, Loader=yaml.Loader)
+    return reservoir_properties
 
+def get_time_coef(path, list_obj, *parameters):
+    '''
+    Рассчет коэффициента для формулы по вычислению времени исследования скважины
+    При умножении этого коэффицента на радиус охвата, получаем время исследования
+    :param path: путь к файлу с параметрами
+    :param well_name: имя скважины
+    :param df_result: DataFrame с данными по контуру
+    :param parameters: набор необходимых параметров для расчета времени исследования
+    :return: возвращает коэффициент для расчета времени исследования
+    '''
+    dict_property = get_property(path)
+    mu, ct, phi, k = 0, 0, 0, 0
+    for obj in list_obj:
+        if obj in dict_property.keys():
+            mu += dict_property[obj][parameters[0]]
+            ct += dict_property[obj][parameters[1]]
+            phi += dict_property[obj][parameters[2]]
+            k += dict_property[obj][parameters[3]]
+
+        else:
+            mu += dict_property['DEFAULT_OBJ'][parameters[0]]
+            ct += dict_property['DEFAULT_OBJ'][parameters[1]]
+            phi += dict_property['DEFAULT_OBJ'][parameters[2]]
+            k += dict_property['DEFAULT_OBJ'][parameters[3]]
+    time_coef = 462.2824 * (mu * ct * phi / k) / len(list_obj)
+    return time_coef
