@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from functions import unpack
 
 
-def visualisation(polygon, contour_name, horizon, mean_radius, df_result, df_prod_wells, **dict_constant):
+def visualisation(polygon, contour_name, horizon, mean_radius, mult_coef, df_result, df_prod_wells, **dict_constant):
     '''
     Функция визуализации полученных результатов
     :param polygon: Геометрический объект GeoPandas, созданный из координат контура,
@@ -69,10 +69,9 @@ def visualisation(polygon, contour_name, horizon, mean_radius, df_result, df_pro
         # Boundary contour
         # gpd.GeoSeries(polygons).boundary.plot(ax=ax, color='saddlebrown')
 
-        plt.savefig('output/pictures/' + str(horizon + "_out_contour (R = ")
-                    .replace("/", " ") + str(mean_radius) + ')' + '.png', dpi=200, quality=100)
-        plt.title("Объект: " + horizon + ', out contour,' + ' R = ' + str(mean_radius))
-        plt.show()
+        plt.savefig(f'output/pictures/{horizon},out contour, R = {int(mean_radius)}, k = {mult_coef}.png', dpi=200, quality=100)
+        plt.title(f'Объект: + {horizon}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
+        # plt.show()
 
     else:
         # Piezometric well areas drawing
@@ -113,8 +112,8 @@ def visualisation(polygon, contour_name, horizon, mean_radius, df_result, df_pro
         # Boundary contour
         gpd.GeoSeries(polygon).boundary.plot(ax=ax, color='saddlebrown')
 
-        plt.savefig('output/pictures/' + str(horizon + "_" + contour_name + " (R = ").replace("/", " ")
-                    + str(mean_radius).replace("/", " ") + ')' + '.png', dpi=200, quality=100)
-        plt.title("Объект: " + horizon + ", контур: " + contour_name + ", R_охвата = " + str(mean_radius))
-        plt.show()
+        plt.savefig(f'output/pictures/{horizon},{contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    dpi=200, quality=100)
+        plt.title(f'Объект: {horizon}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
+        # plt.show()
     pass
