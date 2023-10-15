@@ -1,12 +1,12 @@
+import math
+
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import math
 from tqdm import tqdm
-from loguru import logger
+
+
 # from shapely import LineString, Point
-import os
 
 
 def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
@@ -245,7 +245,6 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
         df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
                                              df_in_contour.GEOMETRY))
 
-
         # с помощью вызова другой функции получаем скажины окружения первого ряда
         first_row_list = first_row_of_well_geometry(df_in_contour[df_in_contour['distance'] <= max_distance],
                                                     well,
@@ -256,7 +255,6 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
         # считаем среднее значение по столбцу distance
         df_in_contour.loc[well, 'mean_dist'] = df_first_row["distance"].mean()
     mean_rad = df_in_contour["mean_dist"].mean()
-    # print(type(mean_rad))
     if mean_rad is np.nan:
         mean_rad = max_distance
 
