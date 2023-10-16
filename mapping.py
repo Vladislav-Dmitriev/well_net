@@ -9,6 +9,7 @@ from functions import unpack_status, clean_pictures_folder, check_intersection_a
 def visualization(df_input_prod, percent, dict_result, **dict_constant):
     """
     Функция визуализации полученных результатов
+    :param percent: процент длины траектории скважины, при котором она попадает в контур
     :param df_input_prod: DataFrame продуктивных скважин из исходного файла
     :param dict_result: словарь для записи результатов
     :param dict_constant: Словарь с характером работы и состоянием скважины
@@ -32,13 +33,13 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                          df_input_prod.workHorizon))]
-
             try:
-                contour_prod_wells = hor_prod_wells[hor_prod_wells["GEOMETRY"].isin(
-                    check_intersection_area(polygon, hor_prod_wells, percent, True))]
+                contour_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(
+                    set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
                 # contour_prod_wells = hor_prod_wells[hor_prod_wells["GEOMETRY"].isin(list_wells_in_contour)]
             except TypeError:
-                contour_prod_wells = hor_prod_wells
+                contour_prod_wells = hor_prod_wells[
+                    hor_prod_wells["wellName"].isin(list(set(df_result["intersection"].explode().unique())))]
             df_current_calc = df_result.loc[df_result.current_horizon == horizon]
 
             if df_current_calc.empty:

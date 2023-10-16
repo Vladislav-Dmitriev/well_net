@@ -13,6 +13,7 @@ from preparing_data import upload_input_data, upload_gdis_data
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
 
+# input data column names
 dict_names_column = {
     '№ скважины': 'wellName',
     'Дата': 'nameDate',
@@ -39,12 +40,13 @@ if __name__ == '__main__':
 
     # Upload files and initial data preparation_________________________________________________________________________
     df_input, date = upload_input_data(dict_names_column, dict_parameters)
-    df_input = df_input.iloc[1500:4500, :]  # выделение DataFrame меньшего размера для проверки
 
     # Upload files and GDIS data preparation____________________________________________________________________________
     if (dict_parameters['gdis_option'] is not None) and (dict_parameters['gdis_file'] is not None):
         df_input = upload_gdis_data(df_input, date, dict_parameters)
 
+    # add logs to file
+    logger.add('output/logfile.log', level='INFO', format="{message}")
     # path to file with properties for current object
     logger.info("Checking for properties")
     path_property = 'conf_files/reservoir_properties.yml'

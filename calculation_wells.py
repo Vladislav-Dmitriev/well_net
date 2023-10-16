@@ -310,18 +310,17 @@ def separation_gdis(df_invisible):
     :param df_invisible: DataFrame скважин, которые попали в слепую зону
     :return: Возвращает два DataFrame, по которым распределены скаважины в слепой зоне(каждая вторая)
     """
-    logger.info("Separation invisible wells on 2 years")
+    logger.info("Separation invisible wells")
     df_invisible = gpd.GeoDataFrame(df_invisible, geometry='GEOMETRY')
     df_invisible['dist_from_0'] = list(map(lambda x: x.distance(df_invisible['GEOMETRY'].iloc[0]),
                                            df_invisible['GEOMETRY']))
     df_invisible.sort_values(by=['dist_from_0'], ascending=True)
     list_separation = list(set(df_invisible.wellName.explode().unique()))
     list_first_year = []
-    list_second_year = []
-    for i in tqdm(range(1, len(list_separation), 2), "Separation"):
-        list_second_year += list_separation[i]
-        list_first_year += list_separation[i - 1]
+    for i in tqdm(range(0, len(list_separation), 2), "Separation", position=0, leave=False,
+                  colour='green', ncols=80):
+        list_first_year += [list_separation[i]]
     df_invisible.drop(['dist_from_0'], axis=1, inplace=True)
 
     return (df_invisible[df_invisible['wellName'].isin(list_first_year)],
-            df_invisible[df_invisible['wellName'].isin(list_second_year)])
+            df_invisible[~df_invisible['wellName'].isin(list_first_year)])

@@ -6,9 +6,6 @@ import pandas as pd
 from tqdm import tqdm
 
 
-# from shapely import LineString, Point
-
-
 def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     """
     Проверка пересечений между скважинами в исходном массиве, для исключения перекрываемых скважин второго ряда
