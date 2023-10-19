@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import Point, LineString
 
+from functions import get_path
+
 
 def upload_input_data(dict_names_column, dict_parameters):
     """
@@ -12,7 +14,9 @@ def upload_input_data(dict_names_column, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
-    df_input = pd.read_excel(os.path.join(os.path.dirname(__file__), dict_parameters['data_file']))
+
+    application_path = get_path()
+    df_input = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']))
     df_input, date = preparing(dict_names_column, df_input, dict_parameters['min_length_horWell'])
 
     return df_input, date
@@ -26,7 +30,8 @@ def upload_gdis_data(df_input, date, dict_parameters):
     :return: функция возвращает исходный DataFrame очищенный от скважин,
              на которых проводились ГДИС не более n лет назад
     """
-    df_gdis = pd.read_excel(os.path.join(os.path.dirname(__file__), dict_parameters['gdis_file']), skiprows=[0])
+    application_path = get_path()
+    df_gdis = pd.read_excel(os.path.join(application_path, dict_parameters['gdis_file']), skiprows=[0])
 
     # get preparing dataframes
     df_gdis = gdis_preparing(df_gdis, df_input['wellName'], date, dict_parameters['gdis_option'])

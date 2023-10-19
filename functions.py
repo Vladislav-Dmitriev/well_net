@@ -1,4 +1,5 @@
 import os
+import sys
 
 import geopandas as gpd
 import pandas as pd
@@ -96,8 +97,8 @@ def check_intersection_point(point, df_areas, percent, calc_option=True):
 def intersect_number(df_prod, df_inj_piez, percent):
     """
     Функция добавляет в DataFrame столбец 'intersection', в него записываются
-    имена скважин из другого DataFrame, с которыми пересекается текущая, затем добавляется
-    столбец 'number', в который заносится кол-во пересечений конкретной скважины с остальными
+    имена скважин из другого DataFrame, с которыми пересекается текущая, затем добавляется столбец 'number',
+    в который заносится кол-во пересечений конкретной скважины с остальными
     :param percent: процент попадания скважины в зону охвата
     :param df_prod: добывающие
     :param df_inj_piez: нагнетательные/пьезометры
@@ -187,14 +188,16 @@ def add_shapely_types(df_input, mean_radius, coeff):
     return df_input
 
 
-def write_to_excel(dict_result, **dict_constant):
+def write_to_excel(dict_result, dict_rename_columns, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
+    :param dict_rename_columns: переименование столбцов на русский язык
     :param dict_constant: словарь со статусами скважин
     :param dict_result: словарь, по ключам которого содержатся DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
     """
+
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -204,12 +207,10 @@ def write_to_excel(dict_result, **dict_constant):
             xw.Sheet[f"{name}"].delete()
         new_wb.sheets.add(f"{name}")
         sht = new_wb.sheets(f"{name}")
-        df = value[0]
+        df = value[0].copy()
         df["intersection"] = list(map(lambda x: " ".join(str(y) for y in x), df["intersection"]))
-        del df["POINT"]
-        del df["POINT3"]
-        del df["GEOMETRY"]
-        del df["AREA"]
+        df.drop(columns=['distance', 'mean_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA'], axis=1, inplace=True)
+        df.columns = dict_rename_columns.values()
         sht.range('A1').options().value = df
     df_report = get_report(dict_result, **dict_constant)
     if "report" in new_wb.sheets:
@@ -407,3 +408,14 @@ def upload_parameters(path):
     dict_parameters['separation_by_years'] = separation
 
     return dict_parameters
+
+
+def get_path():
+    """
+    :return: Функция возвращает путь, по которому находится exe файл
+    """
+    if getattr(sys, 'frozen', False):
+        application_path = os.path.dirname(sys.executable)
+    elif __file__:
+        application_path = os.path.dirname(__file__)
+    return application_path

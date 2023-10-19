@@ -167,13 +167,11 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                                            & (df_OnePoint["fi_max"] >= 270) & (df_OnePoint["fi_max"] <= 360)]
                 df_OnePoint = df_OnePoint.sort_values(by=["fi_min"])
                 count += 1
-                # print('count value is:', count)
                 if count > df_OnePoint.shape[0]:
                     df_OnePoint = df_OnePoint.drop(df_OnePoint['distance'].idxmax())
                     count = 1
                     df_crossLine = df_OnePoint[(df_OnePoint["fi_min"] >= 0) & (df_OnePoint["fi_min"] <= 90)
                                                & (df_OnePoint["fi_max"] >= 270) & (df_OnePoint["fi_max"] <= 360)]
-                # print("пересекает!" + str(wellNumberInj))
 
         # well sector center
         df_OnePoint["x_fi_t1"] = df_OnePoint["r_t1"] * np.cos(df_OnePoint["fi_t1"])
@@ -223,15 +221,6 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
 
 def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
                 angle_horizontalT1, angle_horizontalT3, max_distance):
-    '''
-    :param df_in_contour: DataFrame со скважинами, вошедшими в текущий контур
-    :param verticalWellAngle: угол для обозначения зоны вертикальных скважин на карте
-    :param MaxOverlapPercent: максимальный процент перекрытия одной скважины другой
-    :param angle_horizontalT1: sector expansion angle for horizontal well's T1 point
-    :param angle_horizontalT3: sector expansion angle for horizontal well's T3 point
-    :param max_distance: максимальное расстояние между скважинами
-    :return: возвращает средний радиус взаимодействия скважин по объекту
-    '''
     df_in_contour.set_index("wellName", inplace=True, drop=False)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="distance", value=0)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="mean_dist", value=0)

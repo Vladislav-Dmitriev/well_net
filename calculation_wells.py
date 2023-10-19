@@ -308,7 +308,7 @@ def separation_gdis(df_invisible):
     """
     Функция разделения скважин в слепых зонах на 2 года
     :param df_invisible: DataFrame скважин, которые попали в слепую зону
-    :return: Возвращает два DataFrame, по которым распределены скаважины в слепой зоне(каждая вторая)
+    :return: Возвращает два DataFrame, по которым распределены скважины в слепой зоне(каждая вторая)
     """
     logger.info("Separation invisible wells")
     df_invisible = gpd.GeoDataFrame(df_invisible, geometry='GEOMETRY')

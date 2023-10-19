@@ -6,7 +6,7 @@ import pandas as pd
 from loguru import logger
 
 from calculation_wells import calc_contour
-from functions import write_to_excel, load_contour, check_intersection_area, unpack_status, upload_parameters
+from functions import write_to_excel, load_contour, check_intersection_area, unpack_status, upload_parameters, get_path
 from mapping import visualization
 from preparing_data import upload_input_data, upload_gdis_data
 
@@ -26,6 +26,30 @@ dict_names_column = {
     "Координата забоя Y (по траектории)": 'coordinateYT3',
     'Дебит нефти (ТР), т/сут': 'oilRate',
     'Приемистость (ТР), м3/сут': 'injectivity'}
+
+# result dict rename columns in russian
+dict_rename_columns = {
+    'wellName': '№ скважины',
+    'nameDate': 'Дата',
+    'workMarker': 'Характер работы',
+    'wellStatus': 'Состояние',
+    'workHorizon': 'Объекты работы',
+    'oilRate': 'Дебит нефти (ТР), т/сут',
+    'injectivity': 'Приемистость (ТР), м3/сут',
+    'wellType': 'Тип скважины',
+    'coordinateX': 'Координата X',
+    'coordinateX3': 'Координата забоя Х (по траектории)',
+    'coordinateY': 'Координата Y',
+    'coordinateY3': 'Координата забоя Y (по траектории)',
+    'intersection': 'Пересечения со скважинами',
+    'number': 'Кол-во пересечений',
+    'mean_radius': 'Средний радиус по объекту',
+    'time_coef': 'Коэффициент для расчет времени исследования',
+    'current_horizon': 'Объект расчета',
+    'research_time': 'Время исследования',
+    'oil_loss': 'Потери нефти',
+    'injection_loss': 'Потери закачки',
+    'year_of_survey': 'Год исследования'}
 
 # CONSTANT
 dict_constant = {'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "НАК"],
@@ -47,19 +71,20 @@ if __name__ == '__main__':
 
     # add logs to file
     logger.add('output/logfile.log', level='INFO', format="{message}")
+    logger.info("Starting calculation")
     # path to file with properties for current object
     logger.info("Checking for properties")
     path_property = 'conf_files/reservoir_properties.yml'
-    logger.info(f"path:{path_property}")
+    logger.info(f"path: {path_property}")
 
     # path to folder with contours
     logger.info("CHECKING FOR CONTOURS")
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    logger.info(f"path:{dir_path}")
+    application_path = get_path()
+    logger.info(f"path: {application_path}")
     logger.info("check the content of contours")
 
     # get path and names of contour files with coordinates
-    contours_path = dir_path + "\\contours"
+    contours_path = application_path + "\\contours"
     contours_content = os.listdir(path=contours_path)
 
     well_out_contour = set(df_input.wellName.values)
@@ -110,5 +135,6 @@ if __name__ == '__main__':
                                  & (df_input.wellStatus.isin(PROD_STATUS))]
     visualization(df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
     # Start print in Excel
-    write_to_excel(dict_result, **dict_constant)
+    write_to_excel(dict_result, dict_rename_columns, **dict_constant)
+    logger.info("End of calculation")
     pass

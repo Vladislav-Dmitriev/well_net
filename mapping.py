@@ -36,7 +36,6 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
             try:
                 contour_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
-                # contour_prod_wells = hor_prod_wells[hor_prod_wells["GEOMETRY"].isin(list_wells_in_contour)]
             except TypeError:
                 contour_prod_wells = hor_prod_wells[
                     hor_prod_wells["wellName"].isin(list(set(df_result["intersection"].explode().unique())))]
@@ -84,17 +83,6 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                                                            label=f'{legend_labels[year]} для исследуемых скважин',
                                                            color=colors_piez[year])
 
-                # Signature of piezometric wells
-                for x, y, label in zip(gdf_measuring_wells.coordinateX.values,
-                                       gdf_measuring_wells.coordinateY.values,
-                                       gdf_measuring_wells.wellName):
-                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
-                # Signature of production wells
-                for x, y, label in zip(contour_prod_wells.coordinateX.values,
-                                       contour_prod_wells.coordinateY.values,
-                                       contour_prod_wells.wellName):
-                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
-
                 # production well areas drawing
                 gpd.GeoSeries(gdf_prod["AREA"]).plot(ax=ax, color="springgreen")
                 gpd.GeoSeries(gdf_prod["AREA"]).boundary.plot(ax=ax, ls=type_lines[year],
@@ -107,33 +95,43 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                                                              label=f'{legend_labels[year]} для нагнетательных скважин',
                                                              color=colors_inj[year])
 
-                # Trajectory of wells
-                gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["GEOMETRY"])
-                gdf_measuring_wells.plot(ax=ax, color="blue", markersize=14, marker="^")
-                contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["GEOMETRY"])
-                contour_prod_wells.plot(ax=ax, color="black", markersize=14)
-
-                # Black points is production, blue triangle is piezometric
-                gdf_measuring_wells = gdf_measuring_wells.set_geometry(df_result["POINT"])
-                gdf_measuring_wells.plot(ax=ax, color="blue", markersize=14, marker="^")
-                contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["POINT"])
-                contour_prod_wells.plot(ax=ax, color="black", markersize=14)
-
                 # Boundary contour
                 gpd.GeoSeries(polygon).boundary.plot(ax=ax, color='saddlebrown')
+
+            # Signature of piezometric wells
+            gdf_measuring_all = gpd.GeoDataFrame(df_current_calc)
+            for x, y, label in zip(gdf_measuring_all.coordinateX.values,
+                                   gdf_measuring_all.coordinateY.values,
+                                   gdf_measuring_all.wellName):
+                ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
+            # Signature of production wells
+            for x, y, label in zip(contour_prod_wells.coordinateX.values,
+                                   contour_prod_wells.coordinateY.values,
+                                   contour_prod_wells.wellName):
+                ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
+            # Trajectory of wells
+            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["GEOMETRY"])
+            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
+            contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["GEOMETRY"])
+            contour_prod_wells.plot(ax=ax, color="black", markersize=14)
+
+            # Black points is production, blue triangle is piezometric
+            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
+            gdf_measuring_all.plot(ax=ax, label='Исследуемые скважины', color="blue", markersize=14, marker="^")
+            contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["POINT"])
+            contour_prod_wells.plot(ax=ax, label='Добывающие скважины', color="black", markersize=14)
 
             if polygon is None:
                 plt.legend()
                 plt.savefig(f'output/pictures/{horizon}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                             dpi=200)
                 plt.title(f'Объект: {horizon}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
-                # plt.show()
-                # plt.clf()
+
             else:
                 plt.legend()
                 plt.savefig(f'output/pictures/{horizon}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                             dpi=200)
                 plt.title(f'Объект: {horizon}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
-                # plt.show()
-                # plt.clf()
+
     pass
