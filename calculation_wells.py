@@ -161,6 +161,7 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
 
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=False,
                         colour='green', ncols=80):
+        horizon = 'АЧ0/3-1'  #######################################################################################
         logger.info(f'Current horizon: {horizon}')
         # для каждого объекта определяется свой df_horizon_input
         df_horizon_input = df_in_contour[
@@ -171,6 +172,7 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
         logger.info(f'Radius: {mean_rad}')
 
         for key, coeff in zip(dict_result, list_mult_coef):
+            coeff = 1  #############################################################################################
             logger.info(f'Add shapely types with coefficient = {coeff}')
             df_horizon_input = add_shapely_types(df_horizon_input, mean_rad, coeff)
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта

@@ -128,9 +128,10 @@ def gdis_preparing(df_gdis, input_wells, current_date, year):
         'Оценка': 'quality'
     }
 
-    # HIGH: str = "Высокая"
-    # MEDIUM: str = "Хорошая"
-    LOW: str = "Низкая"
+    # HIGH: str = "результат достоверный"
+    # MEDIUM: str = "результат оценочный"
+    LOW: str = "результат ненадежен"
+    # LOW: str = "низкая"
 
     df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
     df_gdis.columns = dict_names_gdis.values()

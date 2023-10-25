@@ -117,7 +117,7 @@ def intersect_number(df_prod, df_inj_piez, percent):
     df_inj_piez["number"] = list(map(lambda x: len(x), df_inj_piez.intersection))
     df_inj_piez = df_inj_piez[df_inj_piez.number > 0]
     df_prod["intersection"] = list(map(lambda x: check_intersection_point(x, df_inj_piez, percent, True),
-                                       df_prod.POINT))
+                                       df_prod.GEOMETRY))
     df_prod["number"] = list(map(lambda x: len(x), df_prod.intersection))
     return df_prod, df_inj_piez
 
@@ -188,16 +188,37 @@ def add_shapely_types(df_input, mean_radius, coeff):
     return df_input
 
 
-def write_to_excel(dict_result, dict_rename_columns, **dict_constant):
+def write_to_excel(dict_result, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
-    :param dict_rename_columns: переименование столбцов на русский язык
     :param dict_constant: словарь со статусами скважин
     :param dict_result: словарь, по ключам которого содержатся DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
     """
-
+    # result dict rename columns in russian
+    dict_rename_columns = {
+        'wellName': '№ скважины',
+        'nameDate': 'Дата',
+        'workMarker': 'Характер работы',
+        'wellStatus': 'Состояние',
+        'workHorizon': 'Объекты работы',
+        'oilRate': 'Дебит нефти (ТР), т/сут',
+        'injectivity': 'Приемистость (ТР), м3/сут',
+        'wellType': 'Тип скважины',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
+        'intersection': 'Пересечения со скважинами',
+        'number': 'Кол-во пересечений',
+        'mean_radius': 'Средний радиус по объекту',
+        'time_coef': 'Коэффициент для расчет времени исследования',
+        'current_horizon': 'Объект расчета',
+        'research_time': 'Время исследования',
+        'oil_loss': 'Потери нефти',
+        'injection_loss': 'Потери закачки',
+        'year_of_survey': 'Год исследования'}
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -231,25 +252,25 @@ def get_report(dict_result, **dict_constant):
     :param dict_constant: словарь со статусами скважин
     :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом домножения радиуса
     """
-    dict_names_report = {'Сценарий': "contour_k",
-                         'Кол-во объектов': "obj_count",
-                         'Средний радиус': "mean_rad",
-                         'Среднее время исследования': "mean_time",
-                         'Кол-во пьезометров': "piez_count",
-                         'Кол-во нагн': "inj_count",
-                         'Кол-во доб': "prod_count",
-                         'Кол-во исслед. скв. текущ. год': "well_quantity0",
-                         'Кол-во исслед. скв. 1 год': "well_quantity1",
-                         'Кол-во исслед. скв. 2 год': "well_quantity2",
-                         'Охваченные исследованиями текущ. год': "research_wells0",
-                         'Охваченные исследованиями 1 год': "research_wells1",
-                         'Охваченные исследованиями 2 год': "research_wells2",
-                         'Потери нефти текущ. год, т': "oil_loss0",
-                         'Потери нефти 1 год, т': "oil_loss1",
-                         'Потери нефти 2 год, т': "oil_loss2",
-                         'Потери закачки текущ. год, м3': "injection_loss0",
-                         'Потери закачки 1 год, м3': "injection_loss1",
-                         'Потери закачки 2 год, м3': "injection_loss2"}
+    dict_names_report = {'contour_k': 'Сценарий',
+                         'obj_count': 'Кол-во объектов',
+                         'mean_rad': 'Средний радиус',
+                         'mean_time': 'Среднее время исследования',
+                         'piez_count': 'Кол-во пьезометров',
+                         'inj_count': 'Кол-во нагн',
+                         'prod_count': 'Кол-во доб',
+                         'well_quantity0': 'Кол-во исслед. скв. 1 год',
+                         'well_quantity1': 'Кол-во исслед. скв. 2 год',
+                         'well_quantity2': 'Кол-во исслед. скв. 3 год',
+                         'research_wells0': 'Охваченные исследованиями 1 год',
+                         'research_wells1': 'Охваченные исследованиями 2 год',
+                         'research_wells2': 'Охваченные исследованиями 3 год',
+                         'oil_loss0': 'Потери нефти 1 год, т',
+                         'oil_loss1': 'Потери нефти 2 год, т',
+                         'oil_loss2': 'Потери нефти 3 год, т',
+                         'injection_loss0': 'Потери закачки 1 год, м3',
+                         'injection_loss1': 'Потери закачки 2 год, м3',
+                         'injection_loss2': 'Потери закачки 3 год, м3'}
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
     dict_report = {}

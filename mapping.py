@@ -1,6 +1,8 @@
 import geopandas as gpd
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from loguru import logger
+from matplotlib.lines import Line2D
 from tqdm import tqdm
 
 from functions import unpack_status, clean_pictures_folder, check_intersection_area
@@ -27,6 +29,7 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
         polygon = value[1]
         df_result = value[0]
         list_objects = df_result.workHorizon.str.split(', ').explode().unique()
+        graphics = []
 
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=False, ncols=80):
             PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
@@ -48,10 +51,9 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 mean_radius = df_current_calc.iloc[0]['mean_radius']
             # задание типов линий по годам исследования
             type_lines = {0: "-", 1: ":", 2: "-."}
-            legend_labels = {0: "Текущий год", 1: "1 год", 2: "2 год"}
-            colors_piez = {0: "orangered", 1: "tomato", 2: "coral"}
+            colors_piez = {0: "darkgreen", 1: "green", 2: "limegreen"}
             colors_inj = {0: "lightseagreen", 1: "turquoise", 2: "lightskyblue"}
-            colors_prod = {0: "darkgreen", 1: "green", 2: "limegreen"}
+            colors_prod = {0: "orangered", 1: "tomato", 2: "coral"}
             years_list = [0]
             if mult_coef > 1.5:
                 years_list += [1, 2]
@@ -66,7 +68,6 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 if df_current_year.empty:
                     continue
 
-                type_line = type_lines[year]
                 # geodataframe
                 gdf_measuring_wells = gpd.GeoDataFrame(df_current_year)
                 gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells.wellStatus == PIEZ_STATUS]
@@ -75,24 +76,21 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 gdf_prod = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker == PROD_MARKER)
                                                    & (gdf_measuring_wells.wellStatus.isin(PROD_STATUS))]
                 if year == 0:
-                    ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="lightsalmon", figsize=[20, 20])
+                    ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="springgreen", figsize=[20, 20])
                 else:
                     # Piezometric well areas drawing
-                    gpd.GeoSeries(gdf_piez.AREA).plot(ax=ax, color="lightsalmon")
+                    gpd.GeoSeries(gdf_piez.AREA).plot(ax=ax, color="springgreen")
                 gpd.GeoSeries(gdf_piez.AREA).boundary.plot(ax=ax, ls=type_lines[year],
-                                                           label=f'{legend_labels[year]} для исследуемых скважин',
                                                            color=colors_piez[year])
 
                 # production well areas drawing
-                gpd.GeoSeries(gdf_prod["AREA"]).plot(ax=ax, color="springgreen")
+                gpd.GeoSeries(gdf_prod["AREA"]).plot(ax=ax, color="lightsalmon")
                 gpd.GeoSeries(gdf_prod["AREA"]).boundary.plot(ax=ax, ls=type_lines[year],
-                                                              label=f'{legend_labels[year]} для добывающих скважин',
                                                               color=colors_prod[year])
 
                 # Injection well areas drawing
                 gpd.GeoSeries(gdf_inj["AREA"]).plot(ax=ax, color="azure")
                 gpd.GeoSeries(gdf_inj["AREA"]).boundary.plot(ax=ax, ls=type_lines[year],
-                                                             label=f'{legend_labels[year]} для нагнетательных скважин',
                                                              color=colors_inj[year])
 
                 # Boundary contour
@@ -111,27 +109,42 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
 
             # Trajectory of wells
-            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["GEOMETRY"])
-            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
             contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["GEOMETRY"])
             contour_prod_wells.plot(ax=ax, color="black", markersize=14)
+            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["GEOMETRY"])
+            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
 
             # Black points is production, blue triangle is piezometric
-            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
-            gdf_measuring_all.plot(ax=ax, label='Исследуемые скважины', color="blue", markersize=14, marker="^")
             contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["POINT"])
-            contour_prod_wells.plot(ax=ax, label='Добывающие скважины', color="black", markersize=14)
+            contour_prod_wells.plot(ax=ax, color="black", markersize=14)
+            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
+            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
+
+            piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
+            inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
+            prod = mpatches.Patch(color='black', fc='lightsalmon', label='Добыващие(с исследованием)')
+            piez_point = Line2D([0], [0], marker='^', color='white', label='Скважины опорной сети',
+                                markerfacecolor='blue', markersize=14)
+            prod_point = Line2D([0], [0], marker='.', color='white', label='Добывающий фонд',
+                                markerfacecolor='black', markersize=14)
+            line_1_year = Line2D([0], [0], color='gray', linestyle="-", lw=1, label='Исследования на текущий год')
+            line_2_year = Line2D([0], [0], color='gray', linestyle=":", lw=1, label='На 2 год')
+            line_3_year = Line2D([0], [0], color='gray', linestyle="-.", lw=1, label='На 3 год')
 
             if polygon is None:
-                plt.legend()
-                plt.savefig(f'output/pictures/{horizon}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
-                            dpi=200)
-                plt.title(f'Объект: {horizon}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
+                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, line_1_year, line_2_year, line_3_year])
+                plt.savefig(
+                    f'output/pictures/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    dpi=200)
+                plt.title(
+                    f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
 
             else:
-                plt.legend()
-                plt.savefig(f'output/pictures/{horizon}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
-                            dpi=200)
-                plt.title(f'Объект: {horizon}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
+                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, line_1_year, line_2_year, line_3_year])
+                plt.savefig(
+                    f'output/pictures/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    dpi=200)
+                plt.title(
+                    f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
 
     pass

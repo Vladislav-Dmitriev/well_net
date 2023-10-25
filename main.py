@@ -27,30 +27,6 @@ dict_names_column = {
     'Дебит нефти (ТР), т/сут': 'oilRate',
     'Приемистость (ТР), м3/сут': 'injectivity'}
 
-# result dict rename columns in russian
-dict_rename_columns = {
-    'wellName': '№ скважины',
-    'nameDate': 'Дата',
-    'workMarker': 'Характер работы',
-    'wellStatus': 'Состояние',
-    'workHorizon': 'Объекты работы',
-    'oilRate': 'Дебит нефти (ТР), т/сут',
-    'injectivity': 'Приемистость (ТР), м3/сут',
-    'wellType': 'Тип скважины',
-    'coordinateX': 'Координата X',
-    'coordinateX3': 'Координата забоя Х (по траектории)',
-    'coordinateY': 'Координата Y',
-    'coordinateY3': 'Координата забоя Y (по траектории)',
-    'intersection': 'Пересечения со скважинами',
-    'number': 'Кол-во пересечений',
-    'mean_radius': 'Средний радиус по объекту',
-    'time_coef': 'Коэффициент для расчет времени исследования',
-    'current_horizon': 'Объект расчета',
-    'research_time': 'Время исследования',
-    'oil_loss': 'Потери нефти',
-    'injection_loss': 'Потери закачки',
-    'year_of_survey': 'Год исследования'}
-
 # CONSTANT
 dict_constant = {'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "НАК"],
                  'PROD_MARKER': "НЕФ",
@@ -135,6 +111,6 @@ if __name__ == '__main__':
                                  & (df_input.wellStatus.isin(PROD_STATUS))]
     visualization(df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
     # Start print in Excel
-    write_to_excel(dict_result, dict_rename_columns, **dict_constant)
+    write_to_excel(dict_result, **dict_constant)
     logger.info("End of calculation")
     pass
