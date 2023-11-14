@@ -226,7 +226,7 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
     df_in_contour.insert(loc=df_in_contour.shape[1], column="mean_dist", value=0)
     df_in_contour = gpd.GeoDataFrame(df_in_contour, geometry="GEOMETRY")
     wells = df_in_contour.wellName.unique()
-    for well in tqdm(wells, "calculation mean radius", position=0, leave=False, colour='green', ncols=80):
+    for well in tqdm(wells, "calculation mean radius", position=0, leave=True, colour='green', ncols=80):
         # Обновляем столбец distance
         df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
                                              df_in_contour.GEOMETRY))

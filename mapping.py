@@ -1,3 +1,5 @@
+import os
+
 import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -5,10 +7,22 @@ from loguru import logger
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 
-from functions import unpack_status, clean_pictures_folder, check_intersection_area
+from functions import unpack_status
+from geometry import check_intersection_area
 
 
-def visualization(df_input_prod, percent, dict_result, **dict_constant):
+def clean_pictures_folder(path):
+    """
+    Функция очищает папку с рисунками предыдущего расчета
+    :param path: путь к папке с рисунками
+    :return: не возвращает объектов, удаляет содержимое папки
+    """
+    for f in os.listdir(path):
+        os.remove(os.path.join(path, f))
+    pass
+
+
+def visualization(list_exception, df_input_prod, percent, dict_result, **dict_constant):
     """
     Функция визуализации полученных результатов
     :param percent: процент длины траектории скважины, при котором она попадает в контур
@@ -28,10 +42,12 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
 
         polygon = value[1]
         df_result = value[0]
+        if df_result.empty:
+            continue
         list_objects = df_result.workHorizon.str.split(', ').explode().unique()
         graphics = []
 
-        for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=False, ncols=80):
+        for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='green', ncols=80):
             PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
@@ -43,6 +59,13 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 contour_prod_wells = hor_prod_wells[
                     hor_prod_wells["wellName"].isin(list(set(df_result["intersection"].explode().unique())))]
             df_current_calc = df_result.loc[df_result.current_horizon == horizon]
+            # division production wells on two parts
+            contour_prod_nonexception = list(set(contour_prod_wells.wellName.explode().unique()).difference(
+                set(list_exception)))
+            contour_prod_exception = list(set(contour_prod_wells.wellName.explode().unique())
+                                          .intersection(set(list_exception)))
+            df_prod_nonexception = contour_prod_wells[contour_prod_wells['wellName'].isin(contour_prod_nonexception)]
+            df_prod_exception = contour_prod_wells[contour_prod_wells['wellName'].isin(contour_prod_exception)]
 
             if df_current_calc.empty:
                 continue
@@ -103,11 +126,16 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                                    gdf_measuring_all.wellName):
                 ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
             # Signature of production wells
-            for x, y, label in zip(contour_prod_wells.coordinateX.values,
-                                   contour_prod_wells.coordinateY.values,
-                                   contour_prod_wells.wellName):
+            for x, y, label in zip(df_prod_nonexception.coordinateX.values,
+                                   df_prod_nonexception.coordinateY.values,
+                                   df_prod_nonexception.wellName):
                 ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
-
+            # Signature of excluded production wells
+            if len(contour_prod_exception):
+                for x, y, label in zip(df_prod_exception.coordinateX.values,
+                                       df_prod_exception.coordinateY.values,
+                                       df_prod_exception.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
             # Trajectory of wells
             contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["GEOMETRY"])
             contour_prod_wells.plot(ax=ax, color="black", markersize=14)
@@ -115,8 +143,11 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
             gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
 
             # Black points is production, blue triangle is piezometric
-            contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["POINT"])
-            contour_prod_wells.plot(ax=ax, color="black", markersize=14)
+            df_prod_nonexception = df_prod_nonexception.set_geometry(df_prod_nonexception["POINT"])
+            df_prod_nonexception.plot(ax=ax, color="black", markersize=14)
+            if len(contour_prod_exception):
+                df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["POINT"])
+                df_prod_exception.plot(ax=ax, color="gray", markersize=14)
             gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
             gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
 

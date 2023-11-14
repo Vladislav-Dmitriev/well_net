@@ -4,8 +4,8 @@ from loguru import logger
 from tqdm import tqdm
 
 from FirstRowWells import mean_radius
-from functions import (intersect_number, optimization, check_intersection_area,
-                       unpack_status, add_shapely_types, get_time_coef)
+from functions import unpack_status, get_time_coef, get_property
+from geometry import intersect_number, optimization, check_intersection_area, add_shapely_types
 
 
 def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent):
@@ -79,9 +79,10 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
     return isolated_wells, hor_prod_wells, df_inj_wells, df_result
 
 
-def single_calc(isolated_wells, hor_prod_wells, df_result, percent):
+def single_calc(list_prod_exception, isolated_wells, hor_prod_wells, df_result, percent):
     """
     Функция обарабатывает DataFrame одиночных скважин
+    :param list_prod_exception:
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
@@ -92,6 +93,7 @@ def single_calc(isolated_wells, hor_prod_wells, df_result, percent):
     """
     logger.info("Calculation of single wells")
     single_wells = []
+    df_prod_wells = hor_prod_wells.copy()
     hor_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(isolated_wells)]
 
     # check_intersection
@@ -102,6 +104,9 @@ def single_calc(isolated_wells, hor_prod_wells, df_result, percent):
                                          hor_prod_wells.AREA, hor_prod_wells.wellName)))
     hor_prod_wells.insert(loc=hor_prod_wells.shape[1], column="number",
                           value=list(map(lambda x: len(x), hor_prod_wells.intersection)))
+
+    # delete exception wells
+    hor_prod_wells = hor_prod_wells[~hor_prod_wells['wellName'].isin(list_prod_exception)]
 
     single_wells += list(hor_prod_wells[hor_prod_wells.number == 0].wellName)
 
@@ -117,10 +122,21 @@ def single_calc(isolated_wells, hor_prod_wells, df_result, percent):
                             list(df_optim[df_optim.wellName == list_wells[0]].intersection.explode().unique())
             list_wells = [x for x in list_wells if x not in list_exeption]
 
-    # final list of injection to result_df
-    df_result = pd.concat(
-        [df_result, hor_prod_wells[hor_prod_wells.wellName.isin(single_wells)]],
-        axis=0, sort=False).reset_index(drop=True)
+    # final list of injection to result DataFrame
+    clean_single_wells = []
+    df = hor_prod_wells[hor_prod_wells.wellName.isin(single_wells)]
+
+    # delete duplicates
+    clean_single_wells += list(set(df['wellName']).difference(set(df['intersection'].explode().unique())))
+    df = df[df.wellName.isin(clean_single_wells)]
+
+    list_exception_intersect = list(set(list_prod_exception).difference(set(df.intersection.explode().unique())))
+    if len(list_exception_intersect):
+        df_exception = df_prod_wells[df_prod_wells['wellName'].isin(list_exception_intersect)]
+        df_exception['intersection'], df['number'] = f'Не охвачены исследованием!!!', 0
+        df = pd.concat([df, df_exception], axis=0, sort=False).reset_index(drop=True)
+
+    df_result = pd.concat([df_result, df], axis=0, sort=False).reset_index(drop=True)
 
     return single_wells, hor_prod_wells, df_result
 
@@ -137,9 +153,10 @@ def dict_keys(list_r, contour_name):
 
 
 def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, max_distance,
-                 path_property, list_mult_coef, percent, *angle_parameters, **dict_constant):
+                 path_property, list_mult_coef, percent, list_exception, *angle_parameters, **dict_constant):
     """
     Функция для расчета скважин, включающая в себя все функции расчета отдельных типов скважин
+    :param list_exception:
     :param separation: кол-во лет, на которые распределяются исследования скважин в "слепых" зонах
     :param limit_coef: максимальный коэффициент кратного увеличения радиуса охвата, больше которого начинается выделение
     "слепых" зон и скважин в них
@@ -155,24 +172,24 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
     dict_result = dict_keys(list_mult_coef, contour_name)
+
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
     list_objects = df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode().unique()
     list_objects.sort()
 
-    for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=False,
+    for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='green', ncols=80):
-        horizon = 'АЧ0/3-1'  #######################################################################################
         logger.info(f'Current horizon: {horizon}')
         # для каждого объекта определяется свой df_horizon_input
         df_horizon_input = df_in_contour[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                      df_in_contour.workHorizon))]
+
         mean_rad = mean_radius(df_horizon_input, angle_parameters[0], angle_parameters[1],
                                angle_parameters[2], angle_parameters[3], max_distance)
         logger.info(f'Radius: {mean_rad}')
 
         for key, coeff in zip(dict_result, list_mult_coef):
-            coeff = 1  #############################################################################################
             logger.info(f'Add shapely types with coefficient = {coeff}')
             df_horizon_input = add_shapely_types(df_horizon_input, mean_rad, coeff)
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта
@@ -182,13 +199,15 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
             df_inj_wells = df_horizon_input.loc[(df_horizon_input.workMarker == INJ_MARKER)
                                                 & (df_horizon_input.wellStatus.isin(INJ_STATUS))]
 
+            list_prod_exception = list(set(list_exception).intersection(df_prod_wells.wellName.explode().unique()))
+
             logger.info(f'Key of dictionary: {key}, Mult coefficient: {coeff}')
             df_result = pd.DataFrame()
 
             if df_prod_wells.empty:
                 continue
 
-            df_result = calc_horizon(path_property, percent, mean_rad, coeff, horizon,
+            df_result = calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
                                      df_piez_wells, df_prod_wells, df_inj_wells, df_result)
             df_result['year_of_survey'] = 0
 
@@ -211,7 +230,8 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
                 df_piez_recalc = df_horizon_recalc.loc[df_horizon_recalc.wellStatus == PIEZ_STATUS]
                 df_inj_recalc = df_horizon_recalc.loc[(df_horizon_recalc.workMarker == INJ_MARKER)
                                                       & (df_horizon_recalc.wellStatus.isin(INJ_STATUS))]
-                df_result_invisible = calc_horizon(path_property, percent, mean_rad, limit_coef, horizon,
+                df_result_invisible = calc_horizon(list_prod_exception, path_property, percent, mean_rad, limit_coef,
+                                                   horizon,
                                                    df_piez_recalc, df_prod_recalc, df_inj_recalc, df_result_invisible)
                 if separation == 1:
                     df_result_invisible['year_of_survey'] = 1
@@ -231,10 +251,11 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
     return dict_result
 
 
-def calc_horizon(path_property, percent, mean_rad, coeff, horizon,
+def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
                  df_piez_wells, df_prod_wells, df_inj_wells, df_result):
     """
     Функция для расчета результирующего DataFrame по объекту
+    :param list_prod_exception:
     :param path_property: путь к файлу со свойствами
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param mean_rad: средний радиус по объекту
@@ -262,18 +283,29 @@ def calc_horizon(path_property, percent, mean_rad, coeff, horizon,
 
         # III. Single wells____________________________________________________________________________________
         if len(isolated_wells):
-            single_wells, hor_prod_wells, df_result = single_calc(isolated_wells,
+            single_wells, hor_prod_wells, df_result = single_calc(list_prod_exception,
+                                                                  isolated_wells,
                                                                   hor_prod_wells,
                                                                   df_result, percent)
 
-    df_result['mean_radius'] = mean_rad * coeff  # столбец с текущим стредним радиусом по объекту, дамножается на коэфф.
+    df_result['mean_radius'] = mean_rad * coeff  # столбец с текущим средним радиусом по объекту, домножается на коэфф.
     # коэффициент для расчета времени исследования
-    df_result['time_coef'] = df_result['workHorizon'].apply(lambda x:
-                                                            get_time_coef(path_property, list(x.split(',')),
-                                                                          'mu', 'ct', 'phi', 'k'))
+    dict_property = get_property(path_property)
+    df_result['time_coef/objects'] = df_result.apply(
+        lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield), axis=1)
+    df_result['time_coef'] = list(map(lambda x: x[0], df_result['time_coef/objects']))
+    # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
+    # df_result['ct'] = list(map(lambda x: x[2], df_result['time_coef/objects']))
+    # df_result['phi'] = list(map(lambda x: x[3], df_result['time_coef/objects']))
+    # df_result['k'] = list(map(lambda x: x[4], df_result['time_coef/objects']))
+    df_result['default_count'] = list(map(lambda x: x[5], df_result['time_coef/objects']))
+    df_result['obj_count'] = list(map(lambda x: x[6], df_result['time_coef/objects']))
+    df_result['percent_of_default'] = list(map(lambda x: 100 * x[5] / x[6], df_result['time_coef/objects']))  # процент
+    # объектов со свойствами по умолчанию
+    df_result.drop(['time_coef/objects'], axis=1, inplace=True)
     df_result['current_horizon'] = horizon  # добавления столбца объектов для понимания, по какому идет расчет
     df_result['research_time'] = (df_result['mean_radius'] * df_result['mean_radius']
-                                  * df_result['time_coef'] / 24)  # время исследования
+                                  * df_result['time_coef'] / 24)  # время исследования в сут
     df_result['oil_loss'] = df_result['oilRate'] * df_result['research_time']  # потери по нефти
     df_result['injection_loss'] = df_result['injectivity'] * df_result['research_time']  # потери по закачке
 
@@ -319,7 +351,7 @@ def separation_gdis(df_invisible):
     df_invisible.sort_values(by=['dist_from_0'], ascending=True)
     list_separation = list(set(df_invisible.wellName.explode().unique()))
     list_first_year = []
-    for i in tqdm(range(0, len(list_separation), 2), "Separation", position=0, leave=False,
+    for i in tqdm(range(0, len(list_separation), 2), "Separation", position=0, leave=True,
                   colour='green', ncols=80):
         list_first_year += [list_separation[i]]
     df_invisible.drop(['dist_from_0'], axis=1, inplace=True)

@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta
 
@@ -5,10 +6,10 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import Point, LineString
 
-from functions import get_path
+from functions import get_path, clean_work_horizon, unpack_status, exception_marker
 
 
-def upload_input_data(dict_names_column, dict_parameters):
+def upload_input_data(dict_constant, dict_names_column, dict_parameters, list_exception):
     """
     :param dict_names_column: словарь, содержащий названия, в которые переименуются столбцы считанного DataFrame
     :param dict_parameters: словарь с параметрами расчета
@@ -17,7 +18,9 @@ def upload_input_data(dict_names_column, dict_parameters):
 
     application_path = get_path()
     df_input = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']))
-    df_input, date = preparing(dict_names_column, df_input, dict_parameters['min_length_horWell'])
+    df_input, date = preparing(dict_constant, dict_names_column, df_input,
+                               dict_parameters['min_length_horWell'],
+                               dict_parameters['horizon_count'], list_exception)
 
     return df_input, date
 
@@ -44,23 +47,32 @@ def upload_gdis_data(df_input, date, dict_parameters):
     return df_input
 
 
-def preparing(dict_names_column, df_input, min_length_horWell):
+def preparing(dict_constant, dict_names_column, df_input, min_length_horWell, count_of_hor, list_exception):
     """
     Загрузка и подгтовка DataFrame из исходного файла
+    :param list_exception:
+    :param count_of_hor: кол-во объектов, заданное пользователем
     :param df_input: DataFrame, полученный из входного файла
     :param min_length_horWell: minimum length between points T1 and T3 to consider the well as horizontal, m
     :param dict_names_column: Имена столбцов для считываемого файла
     :return: Возврат DataFrame, подготовленного к работе(без пропусков данных)
     """
+    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
+
     # rename columns
     df_input.columns = dict_names_column.values()
     df_input = df_input[df_input.workHorizon.notnull()]
+    df_input = df_input[df_input.wellCluster.notnull()]
     df_input = df_input.fillna(0)
 
     df_input.wellName = df_input.wellName.astype('str')
     df_input.workHorizon = df_input.workHorizon.astype('str')
     df_input.nameDate = df_input.nameDate.astype('str')
+    df_input.wellCluster = df_input.wellCluster.astype('str')
     df_input['nameDate'] = list(map(lambda x: datetime.strptime(x, "%Y-%m-%d"), df_input.nameDate))
+
+    # cleaning work horizon
+    df_input = clean_work_horizon(df_input, count_of_hor)
 
     # create a base coordinate for each well
     df_input.loc[df_input["coordinateXT3"] == 0, 'coordinateXT3'] = df_input.coordinateXT1
@@ -88,6 +100,15 @@ def preparing(dict_names_column, df_input, min_length_horWell):
 
     df_input.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
                   axis=1, inplace=True)
+
+    # clean piez and inj wells from exception
+    if list_exception:
+        df_input['wellName'] = df_input.apply(
+            lambda x: exception_marker(list_exception, x.wellName, x.wellStatus, x.workMarker,
+                                       PIEZ_STATUS, INJ_MARKER, INJ_STATUS), axis=1)
+        df_input = df_input[df_input['wellName'] != '']
+
+    df_input['oilfield'] = list(map(lambda x: str(x).upper(), df_input['oilfield']))
 
     # add to input dataframe columns for shapely types of coordinates
 
@@ -169,3 +190,101 @@ def drop_wells_by_gdis(input_row, gdis_objects):
         return input_row
     input_row['workHorizon'] = ', '.join(str(e) for e in list(set_input_objects - set_gdis_objects))
     return input_row
+
+
+def preparing_reservoir_properties(dict_parameters, path):
+    application_path = get_path()
+    df_property = pd.read_excel(os.path.join(application_path, dict_parameters['property_file']), skiprows=[0])
+    dict_names_prop = {
+        'Месторождение': 'oilfield',
+        'Пласт OIS': 'reservoir',
+        'μн. в пл. усл., сП': 'oil_visc',
+        'μв. в пл. усл., сП': 'water_visc',
+        'm,     %': 'porosity',
+        'β, 1/атм*10-5 породы': 'rock_compr',
+        'β, 1/атм*10-5 нефть': 'oil_compr',
+        'β, 1/атм*10-5 вода': 'water_copmr',
+        'Степень Krw  (для ОФП)': 'Krw_degree',
+        'Степень для функции Krw (доп)  (для ОФП)': 'Krw_func',
+        'Степень Kro  (для ОФП)': 'Kro_degree',
+        'Степень для функции Kro (доп)  (для ОФП)': 'Kro_func',
+        'Swo (для ОФП)': 'Swo',
+        'Swk  (для ОФП)': 'Swk',
+        'Krok  (для ОФП)': 'Krok'
+    }
+
+    df_property = df_property[['Месторождение', 'Пласт OIS', 'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
+                               'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть', 'β, 1/атм*10-5 вода',
+                               'Степень Krw  (для ОФП)', 'Степень для функции Krw (доп)  (для ОФП)',
+                               'Степень Kro  (для ОФП)', 'Степень для функции Kro (доп) (для ОФП)',
+                               'Swo (для ОФП)', 'Swk  (для ОФП)', 'Krok  (для ОФП)']]
+    df_property.columns = dict_names_prop.values()
+    for i in df_property.columns:
+        df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
+        if i != 'oilfield' and i != 'reservoir':
+            df_property[i] = list(map(lambda x: float(str(x).replace(',', '.')), df_property[i]))
+    df_property = df_property.groupby(by=['oilfield', 'reservoir']).agg(lambda x: np.mean(x))
+    df_property['horizon'] = list(map(lambda x: f'{x[0]}_{x[-1]}', df_property.index))
+    df_property = df_property.reset_index(drop=True)
+    df_property.dropna()
+    df_property.fillna(0)
+    list_reservoir = list(df_property['horizon'].explode().unique())  # + ['DEFAULT_OBJ']
+    dict_reservoirs = {}
+
+    num = 0
+    for key in list_reservoir:
+        dict_properties = {}
+        dict_properties['phi'] = df_property.iloc[num]['porosity']
+        dict_properties['oil_compr'] = df_property.iloc[num]['oil_compr']
+        dict_properties['water_copmr'] = df_property.iloc[num]['water_copmr']
+        dict_properties['rock_compr'] = df_property.iloc[num]['rock_compr']
+        dict_properties['oil_visc'] = df_property.iloc[num]['oil_visc']
+        dict_properties['water_visc'] = df_property.iloc[num]['water_visc']
+        dict_properties['K_rok'] = df_property.iloc[num]['Krok']
+        dict_properties['Swo'] = df_property.iloc[num]['Swo']
+        dict_properties['Swk'] = df_property.iloc[num]['Swk']
+        dict_properties['Sno'] = 1 - dict_properties['Swk']
+        dict_properties['Krw_degree'] = df_property.iloc[num]['Krw_degree']
+        dict_properties['Krw_func'] = df_property.iloc[num]['Krw_func']
+        dict_properties['Kro_degree'] = df_property.iloc[num]['Kro_degree']
+        dict_properties['Kro_func'] = df_property.iloc[num]['Kro_func']
+
+        num += 1
+        dict_reservoirs[key] = dict_properties
+
+    dict_properties = {}
+    dict_properties['phi'] = df_property['porosity'].mean()
+    dict_properties['oil_compr'] = df_property['oil_compr'].mean()
+    dict_properties['water_copmr'] = df_property['water_copmr'].mean()
+    dict_properties['rock_compr'] = df_property['rock_compr'].mean()
+    dict_properties['oil_visc'] = df_property['oil_visc'].mean()
+    dict_properties['water_visc'] = df_property['water_visc'].mean()
+    dict_properties['K_rok'] = df_property['Krok'].mean()
+    dict_properties['Swo'] = df_property['Swo'].mean()
+    dict_properties['Swk'] = df_property['Swk'].mean()
+    dict_properties['Sno'] = 1 - dict_properties['Swk']
+    dict_properties['Krw_degree'] = df_property['Krw_degree'].mean()
+    dict_properties['Krw_func'] = df_property['Krw_func'].mean()
+    dict_properties['Kro_degree'] = df_property['Kro_degree'].mean()
+    dict_properties['Kro_func'] = df_property['Kro_func'].mean()
+    dict_reservoirs['DEFAULT_OBJ'] = dict_properties
+
+    with open(path, 'w', encoding='UTF-8') as file:
+        json_string = json.dumps(dict_reservoirs, default=lambda o: o.__dict__, ensure_ascii=False, sort_keys=True,
+                                 indent=2)
+        file.write(json_string)
+
+    pass
+
+
+def get_exception_wells(dict_parameters):
+    """
+    :param dict_parameters: словарь с параметрами расчета
+    :return: возвращает список скважин для исключения
+    """
+    application_path = get_path()
+    df_exception = pd.read_excel(os.path.join(application_path, dict_parameters['exception_file']))
+    df_exception['№ скважины'] = df_exception['№ скважины'].astype('str')
+    list_exception = list(df_exception['№ скважины'].explode().unique())
+
+    return list_exception
