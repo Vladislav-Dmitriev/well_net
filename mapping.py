@@ -25,6 +25,7 @@ def clean_pictures_folder(path):
 def visualization(list_exception, df_input_prod, percent, dict_result, **dict_constant):
     """
     Функция визуализации полученных результатов
+    :param list_exception: список исключаемых из расчета скважин
     :param percent: процент длины траектории скважины, при котором она попадает в контур
     :param df_input_prod: DataFrame продуктивных скважин из исходного файла
     :param dict_result: словарь для записи результатов

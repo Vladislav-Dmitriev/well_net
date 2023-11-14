@@ -82,7 +82,7 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
 def single_calc(list_prod_exception, isolated_wells, hor_prod_wells, df_result, percent):
     """
     Функция обарабатывает DataFrame одиночных скважин
-    :param list_prod_exception:
+    :param list_prod_exception: список исключаемых из расчета скважин
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
@@ -156,7 +156,7 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
                  path_property, list_mult_coef, percent, list_exception, *angle_parameters, **dict_constant):
     """
     Функция для расчета скважин, включающая в себя все функции расчета отдельных типов скважин
-    :param list_exception:
+    :param list_exception: список исключаемых из расчета скважин
     :param separation: кол-во лет, на которые распределяются исследования скважин в "слепых" зонах
     :param limit_coef: максимальный коэффициент кратного увеличения радиуса охвата, больше которого начинается выделение
     "слепых" зон и скважин в них
@@ -255,7 +255,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                  df_piez_wells, df_prod_wells, df_inj_wells, df_result):
     """
     Функция для расчета результирующего DataFrame по объекту
-    :param list_prod_exception:
+    :param list_prod_exception: список исключаемых из расчета скважин
     :param path_property: путь к файлу со свойствами
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param mean_rad: средний радиус по объекту
