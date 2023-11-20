@@ -34,6 +34,7 @@ def write_to_excel(dict_result, **dict_constant):
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
         'time_coef': 'Коэффициент для расчет времени исследования',
+        'k': 'Проницаемость, мД',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
         'percent_of_default': 'Процент объектов по умолчанию',

@@ -96,7 +96,8 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             Kro = K_rok * (1 - (Sw - Swo) / (1 - Swo)) ** Kro_func * (1 - (Sw - Swo) / (1 - Swo)) ** (
                 (2 + Kro_degree / Kro_degree))
             Krw = ((1 - Swo - Sno) / (1 - Swo)) ** Krw_func * ((Sw - Swo) / (1 - Swo)) ** Krw_degree
-            k += mu * (Kro / mu_oil + Krw / mu_water)
+            k += (mu_oil * mu_water /
+                  (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (Kro / mu_oil + Krw / mu_water)
 
         else:
             num_default += 1

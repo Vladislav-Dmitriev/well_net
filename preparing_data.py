@@ -18,9 +18,9 @@ def upload_input_data(dict_constant, dict_names_column, dict_parameters, list_ex
 
     application_path = get_path()
     df_input = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']))
-    df_input, date = preparing(dict_constant, dict_names_column, df_input,
-                               dict_parameters['min_length_horWell'],
-                               dict_parameters['horizon_count'], list_exception)
+    df_input, date = preparing(dict_constant, dict_names_column, df_input, dict_parameters['min_length_horWell'],
+                               dict_parameters['horizon_count'], dict_parameters['water_cut'],
+                               dict_parameters['oil_rate'], list_exception)
 
     return df_input, date
 
@@ -47,7 +47,8 @@ def upload_gdis_data(df_input, date, dict_parameters):
     return df_input
 
 
-def preparing(dict_constant, dict_names_column, df_input, min_length_horWell, count_of_hor, list_exception):
+def preparing(dict_constant, dict_names_column, df_input, min_length_horWell,
+              count_of_hor, watercut, oil_rate, list_exception):
     """
     Загрузка и подгтовка DataFrame из исходного файла
     :param list_exception:
@@ -61,10 +62,13 @@ def preparing(dict_constant, dict_names_column, df_input, min_length_horWell, co
 
     # rename columns
     df_input.columns = dict_names_column.values()
+
+    # cleaning null values
     df_input = df_input[df_input.workHorizon.notnull()]
     df_input = df_input[df_input.wellCluster.notnull()]
     df_input = df_input.fillna(0)
 
+    # transfer to string type
     df_input.wellName = df_input.wellName.astype('str')
     df_input.workHorizon = df_input.workHorizon.astype('str')
     df_input.nameDate = df_input.nameDate.astype('str')
@@ -73,6 +77,32 @@ def preparing(dict_constant, dict_names_column, df_input, min_length_horWell, co
 
     # cleaning work horizon
     df_input = clean_work_horizon(df_input, count_of_hor)
+
+    df_input = df_input[(df_input['workMarker'] != 0) & (df_input['wellStatus'] != 0)]
+
+    # cleaning workMarker
+    df_input['clean_marker'] = df_input.apply(lambda x: 0 if 'перев' in str(x.workMarker).lower() else 1, axis=1)
+    df_input = df_input[df_input['clean_marker'] != 0]
+
+    # cleaning wellStatus
+    df_input['clean_marker'] = df_input.apply(lambda x: 0 if 'конс' in str(x.wellStatus).lower() or 'лик'
+                                                             in str(x.wellStatus).lower() or 'б/д пр л'
+                                                             in str(x.wellStatus).lower() or 'ост'
+                                                             in str(x.wellStatus).lower() else 1, axis=1)
+    df_input = df_input[df_input['clean_marker'] != 0]
+
+    # filter water cut and oil rate
+    df_input['clean_marker'] = df_input.apply(lambda x: 0 if ((x.workMarker in PROD_MARKER)
+                                                              and (x.wellStatus in PROD_STATUS)
+                                                              and (x.oilRate >= oil_rate)) else 1,
+                                              axis=1)
+    df_input = df_input[df_input['clean_marker'] != 0]
+    df_input['clean_marker'] = df_input.apply(lambda x: 0 if ((x.workMarker in PROD_MARKER)
+                                                              and (x.wellStatus in PROD_STATUS)
+                                                              and (x.water_cut < watercut)) else 1,
+                                              axis=1)
+    df_input = df_input[df_input['clean_marker'] != 0]
+    df_input.drop(['clean_marker'], axis=1, inplace=True)
 
     # create a base coordinate for each well
     df_input.loc[df_input["coordinateXT3"] == 0, 'coordinateXT3'] = df_input.coordinateXT1
@@ -95,8 +125,6 @@ def preparing(dict_constant, dict_names_column, df_input, min_length_horWell, co
     df_input.loc[df_input["well type"] == "horizontal", 'coordinateX3'] = df_input.coordinateXT3
     df_input.loc[df_input["well type"] == "horizontal", 'coordinateY'] = df_input.coordinateYT1
     df_input.loc[df_input["well type"] == "horizontal", 'coordinateY3'] = df_input.coordinateYT3
-
-    df_input = df_input[(df_input['workMarker'] != 0) & (df_input['wellStatus'] != 0)]
 
     df_input.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
                   axis=1, inplace=True)
@@ -151,7 +179,7 @@ def gdis_preparing(df_gdis, input_wells, current_date, year):
 
     # HIGH: str = "результат достоверный"
     # MEDIUM: str = "результат оценочный"
-    LOW: str = "результат ненадежен"
+    LOW = ["результат ненадежен", "низкая"]
     # LOW: str = "низкая"
 
     df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
@@ -166,7 +194,7 @@ def gdis_preparing(df_gdis, input_wells, current_date, year):
 
     df_gdis['workHorizon'] = list(map(lambda x: x.replace(" ", "").split(";"), df_gdis['workHorizon']))
     df_gdis['type_of_research'] = list(map(lambda x: x.replace(" ", "").split("+"), df_gdis['type_of_research']))
-    df_gdis = df_gdis[df_gdis['quality'] != LOW]
+    df_gdis = df_gdis[~df_gdis['quality'].isin(LOW)]
     df_gdis['time_of_research'] = df_gdis['end_of_research'] - df_gdis['begin_of_research']
     df_gdis = df_gdis[df_gdis['time_of_research'] != timedelta(0)]
     df_gdis['how_long_ago'] = (current_date - df_gdis['end_of_research']).dt.days // 365  # разница между датой

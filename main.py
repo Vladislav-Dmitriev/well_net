@@ -124,7 +124,7 @@ if __name__ == '__main__':
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
     df_input_prod = df_input.loc[(df_input.workMarker == PROD_MARKER)
                                  & (df_input.wellStatus.isin(PROD_STATUS))]
-    visualization(list_exception, df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
+    visualization(df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
     # Start print in Excel
     write_to_excel(dict_result, **dict_constant)
     logger.info("End of calculation")

@@ -22,7 +22,7 @@ def clean_pictures_folder(path):
     pass
 
 
-def visualization(list_exception, df_input_prod, percent, dict_result, **dict_constant):
+def visualization(df_input_prod, percent, dict_result, **dict_constant):
     """
     Функция визуализации полученных результатов
     :param list_exception: список исключаемых из расчета скважин
@@ -46,7 +46,6 @@ def visualization(list_exception, df_input_prod, percent, dict_result, **dict_co
         if df_result.empty:
             continue
         list_objects = df_result.workHorizon.str.split(', ').explode().unique()
-        graphics = []
 
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='green', ncols=80):
             PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
@@ -61,6 +60,7 @@ def visualization(list_exception, df_input_prod, percent, dict_result, **dict_co
                     hor_prod_wells["wellName"].isin(list(set(df_result["intersection"].explode().unique())))]
             df_current_calc = df_result.loc[df_result.current_horizon == horizon]
             # division production wells on two parts
+            list_exception = list(set(df_current_calc[df_current_calc['intersection'].map(type) == str].wellName))
             contour_prod_nonexception = list(set(contour_prod_wells.wellName.explode().unique()).difference(
                 set(list_exception)))
             contour_prod_exception = list(set(contour_prod_wells.wellName.explode().unique())
@@ -146,11 +146,11 @@ def visualization(list_exception, df_input_prod, percent, dict_result, **dict_co
             # Black points is production, blue triangle is piezometric
             df_prod_nonexception = df_prod_nonexception.set_geometry(df_prod_nonexception["POINT"])
             df_prod_nonexception.plot(ax=ax, color="black", markersize=14)
+            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
+            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
             if len(contour_prod_exception):
                 df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["POINT"])
                 df_prod_exception.plot(ax=ax, color="gray", markersize=14)
-            gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
-            gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
 
             piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
             inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
@@ -159,12 +159,16 @@ def visualization(list_exception, df_input_prod, percent, dict_result, **dict_co
                                 markerfacecolor='blue', markersize=14)
             prod_point = Line2D([0], [0], marker='.', color='white', label='Добывающий фонд',
                                 markerfacecolor='black', markersize=14)
+            prod_point_exception = Line2D([0], [0], marker='.', color='white', label='Не охвачены исследованием',
+                                          markerfacecolor='gray', markersize=14)
             line_1_year = Line2D([0], [0], color='gray', linestyle="-", lw=1, label='Исследования на текущий год')
             line_2_year = Line2D([0], [0], color='gray', linestyle=":", lw=1, label='На 2 год')
             line_3_year = Line2D([0], [0], color='gray', linestyle="-.", lw=1, label='На 3 год')
 
             if polygon is None:
-                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, line_1_year, line_2_year, line_3_year])
+                plt.legend(
+                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, line_1_year, line_2_year,
+                             line_3_year])
                 plt.savefig(
                     f'output/pictures/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
@@ -172,7 +176,9 @@ def visualization(list_exception, df_input_prod, percent, dict_result, **dict_co
                     f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
 
             else:
-                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, line_1_year, line_2_year, line_3_year])
+                plt.legend(
+                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, line_1_year, line_2_year,
+                             line_3_year])
                 plt.savefig(
                     f'output/pictures/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)

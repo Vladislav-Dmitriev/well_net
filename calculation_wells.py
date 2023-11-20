@@ -79,10 +79,10 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
     return isolated_wells, hor_prod_wells, df_inj_wells, df_result
 
 
-def single_calc(list_prod_exception, isolated_wells, hor_prod_wells, df_result, percent):
+def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, percent):
     """
     Функция обарабатывает DataFrame одиночных скважин
-    :param list_prod_exception: список исключаемых из расчета скважин
+    :param list_exception: список исключаемых из расчета скважин
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
@@ -106,6 +106,7 @@ def single_calc(list_prod_exception, isolated_wells, hor_prod_wells, df_result, 
                           value=list(map(lambda x: len(x), hor_prod_wells.intersection)))
 
     # delete exception wells
+    list_prod_exception = list(set(list_exception).intersection(hor_prod_wells.wellName.explode().unique()))
     hor_prod_wells = hor_prod_wells[~hor_prod_wells['wellName'].isin(list_prod_exception)]
 
     single_wells += list(hor_prod_wells[hor_prod_wells.number == 0].wellName)
@@ -133,8 +134,14 @@ def single_calc(list_prod_exception, isolated_wells, hor_prod_wells, df_result, 
     list_exception_intersect = list(set(list_prod_exception).difference(set(df.intersection.explode().unique())))
     if len(list_exception_intersect):
         df_exception = df_prod_wells[df_prod_wells['wellName'].isin(list_exception_intersect)]
-        df_exception['intersection'], df['number'] = f'Не охвачены исследованием!!!', 0
+        df_exception.insert(loc=df_exception.shape[1], column="intersection", value=str('Не охвачены исследованием!!!'))
+        df_exception.insert(loc=df_exception.shape[1], column="number", value=0)
         df = pd.concat([df, df_exception], axis=0, sort=False).reset_index(drop=True)
+
+    # delete duplicates
+    clean_wells = []
+    clean_wells += list(set(df['wellName']).difference(set(df['intersection'].explode().unique())))
+    df = df[df.wellName.isin(clean_wells)]
 
     df_result = pd.concat([df_result, df], axis=0, sort=False).reset_index(drop=True)
 
@@ -199,15 +206,13 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
             df_inj_wells = df_horizon_input.loc[(df_horizon_input.workMarker == INJ_MARKER)
                                                 & (df_horizon_input.wellStatus.isin(INJ_STATUS))]
 
-            list_prod_exception = list(set(list_exception).intersection(df_prod_wells.wellName.explode().unique()))
-
             logger.info(f'Key of dictionary: {key}, Mult coefficient: {coeff}')
             df_result = pd.DataFrame()
 
             if df_prod_wells.empty:
                 continue
 
-            df_result = calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
+            df_result = calc_horizon(list_exception, path_property, percent, mean_rad, coeff, horizon,
                                      df_piez_wells, df_prod_wells, df_inj_wells, df_result)
             df_result['year_of_survey'] = 0
 
@@ -230,7 +235,7 @@ def calc_contour(separation, limit_coef, polygon, df_in_contour, contour_name, m
                 df_piez_recalc = df_horizon_recalc.loc[df_horizon_recalc.wellStatus == PIEZ_STATUS]
                 df_inj_recalc = df_horizon_recalc.loc[(df_horizon_recalc.workMarker == INJ_MARKER)
                                                       & (df_horizon_recalc.wellStatus.isin(INJ_STATUS))]
-                df_result_invisible = calc_horizon(list_prod_exception, path_property, percent, mean_rad, limit_coef,
+                df_result_invisible = calc_horizon(list_exception, path_property, percent, mean_rad, limit_coef,
                                                    horizon,
                                                    df_piez_recalc, df_prod_recalc, df_inj_recalc, df_result_invisible)
                 if separation == 1:
@@ -297,7 +302,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
     # df_result['ct'] = list(map(lambda x: x[2], df_result['time_coef/objects']))
     # df_result['phi'] = list(map(lambda x: x[3], df_result['time_coef/objects']))
-    # df_result['k'] = list(map(lambda x: x[4], df_result['time_coef/objects']))
+    df_result['k'] = list(map(lambda x: x[4], df_result['time_coef/objects']))
     df_result['default_count'] = list(map(lambda x: x[5], df_result['time_coef/objects']))
     df_result['obj_count'] = list(map(lambda x: x[6], df_result['time_coef/objects']))
     df_result['percent_of_default'] = list(map(lambda x: 100 * x[5] / x[6], df_result['time_coef/objects']))  # процент

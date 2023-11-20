@@ -134,7 +134,7 @@ def optimization(df_prod, df_inj_piez):
         set_visible_wells = set(df_optim.intersection.explode().unique())
         df_optim = df_optim.sort_values(by=['number'], ascending=True)
         # на каждой итерации создается набор исключений, кроме итерируемой скважины,
-        # он сравнивается с набором скважин, входящих в список перечесений выше
+        # он сравнивается с набором скважин, входящих в список пересечений выше
         for well in df_optim.wellName.values:
             set_exception = set(df_optim[df_optim.wellName != well].intersection.explode().unique())
             # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина

@@ -136,7 +136,7 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                     fontsize="xx-small", c='k')
 
         ax.set_title("A line plot on a polar axis: before edit for well " + str(wellNumberInj), va='bottom')
-        my_path = os.path.dirname(__file__).replace("\\", "/")
+        # my_path = os.path.dirname(__file__).replace("\\", "/")
         plt.show()
         # plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) +' before edit.png')'''
 
@@ -212,7 +212,7 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                     fontsize="xx-small", c='k')
         ax.set_title("A line plot on a polar axis: after edit for well " + str(wellNumberInj), va='bottom')
         plt.show()
-        #plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) + ' after edit.png')'''
+        # plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) + ' after edit.png')'''
 
         listNamesFisrtRowWells.extend(listNamesClean)
     listNamesFisrtRowWells = list(set(listNamesFisrtRowWells))
