@@ -1,14 +1,18 @@
+import geopandas as gpd
 import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
 from functions import unpack_status
+from geometry import check_intersection_area
 
 
-def write_to_excel(dict_result, **dict_constant):
+def write_to_excel(percent, df_input, dict_result, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
+    :param df_input:
+    :param percent:
     :param dict_constant: словарь со статусами скважин
     :param dict_result: словарь, по ключам которого содержатся DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
@@ -23,8 +27,10 @@ def write_to_excel(dict_result, **dict_constant):
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
         'oilRate': 'Дебит нефти (ТР), т/сут',
+        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
         'injectivity': 'Приемистость (ТР), м3/сут',
         'water_cut': 'Обводненность (ТР), % (объём)',
+        'exploitation': 'Способ эксплуатации',
         'wellType': 'Тип скважины',
         'coordinateX': 'Координата X',
         'coordinateX3': 'Координата забоя Х (по траектории)',
@@ -42,9 +48,14 @@ def write_to_excel(dict_result, **dict_constant):
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
         'injection_loss': 'Потери закачки, м3',
-        'year_of_survey': 'Год исследования'
+        'coverage_percentage': 'Процент охвата площади объекта',
+        'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'year_of_survey': 'Год исследования',
+        'wellNet': 'Статус по опорной сети'
     }
-
+    df_main = df_input.copy()
+    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY'], axis=1, inplace=True)
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -61,8 +72,24 @@ def write_to_excel(dict_result, **dict_constant):
 
         sht = new_wb.sheets(f"{name}")
         df = value[0].copy()
-        df["intersection"] = list(map(lambda x: " ".join(str(y) for y in x), df["intersection"]))
+        polygon = value[1]
+        if polygon is None:
+            df_in_contour = df_main.copy()
+        else:
+            df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
+            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option=True))
+            df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
+        df["intersection"] = list(
+            map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
         df.drop(columns=['distance', 'mean_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA'], axis=1, inplace=True)
+        df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
+
+        list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин
+        list_research = list(df['intersection'].explode().unique())  # список скважин, охваченных исследованием
+        df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]  # скважины не попали в сеть
+        df = pd.concat([df, df_not_wellnet], ignore_index=True, sort=False)
+        df['wellNet'] = df.apply(lambda x: 'Исследуемый фонд' if x.wellName in list_research else x.wellNet, axis=1)
+        df['wellNet'] = df.apply(lambda x: 'Вне опорной сети' if x.wellNet != x.wellNet else x.wellNet, axis=1)
         df.columns = dict_rename_columns.values()
         sht.range('A1').options().value = df
     df_report = get_report(dict_result, **dict_constant)
@@ -116,11 +143,11 @@ def get_report(dict_result, **dict_constant):
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]
         dict_report['mean_time'] = dict_report.get('mean_time', []) + [df['research_time'].mean()]
-        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df.loc[df.wellStatus == PIEZ_STATUS])]
+        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df.loc[df.wellStatus.isin(PIEZ_STATUS)])]
         dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(
-            df.loc[(df.workMarker == INJ_MARKER) & (df.wellStatus.isin(INJ_STATUS))])]
+            df.loc[(df.workMarker.isin(INJ_MARKER)) & (df.wellStatus.isin(INJ_STATUS))])]
         dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(
-            df.loc[(df.workMarker == PROD_MARKER) & (df.wellStatus.isin(PROD_STATUS))])]
+            df.loc[(df.workMarker.isin(PROD_MARKER)) & (df.wellStatus.isin(PROD_STATUS))])]
 
         dict_report['well_quantity0'] = dict_report.get('well_quantity0', []) + [df[df['year_of_survey'] == 0].shape[0]]
         dict_report['well_quantity1'] = (dict_report.get('well_quantity1', []) +

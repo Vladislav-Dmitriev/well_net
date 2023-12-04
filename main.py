@@ -29,16 +29,22 @@ dict_names_column = {
     "Координата забоя Х (по траектории)": 'coordinateXT3',
     "Координата забоя Y (по траектории)": 'coordinateYT3',
     'Дебит нефти (ТР), т/сут': 'oilRate',
+    'Дебит жидкости (ТР), м3/сут': 'fluidRate',
     'Приемистость (ТР), м3/сут': 'injectivity',
-    'Обводненность (ТР), % (объём)': 'water_cut'
+    'Обводненность (ТР), % (объём)': 'water_cut',
+    'Способ эксплуатации': 'exploitation'
 }
 
 # CONSTANT
-dict_constant = {'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "НАК", "В работе"],
-                 'PROD_MARKER': "НЕФ",
-                 'PIEZ_STATUS': "ПЬЕЗ",
-                 'INJ_MARKER': "НАГ",
-                 'INJ_STATUS': ["РАБ."]}
+dict_constant = {
+    'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "БЕЗД.ТЕК.ГОДА", "В бездействии текущего года", "НАК", "В работе", "Остановлена",
+                    "ОСТ."],
+    'PROD_MARKER': ["НЕФ", "НЕФТЯНАЯ", "ГАЗ", "Водозаборная", "ГАЗОВАЯ", "Газоконденсатная",
+                    "Газоконденсатные", "ГКОНД"],
+    'PIEZ_STATUS': ["ПЬЕЗ", "ПЬЕЗОМЕТР.", "Пьезометрическая"],
+    'INJ_MARKER': ["НАГ", "НАГНЕТАТЕЛЬНАЯ", "Водонагнетательная", "Поглощающая", "ПОГЛОЩАЮЩАЯ", "Газонагнетательная",
+                   "ГАЗОНАГНЕТАТЕЛЬНАЯ"],
+    'INJ_STATUS': ["РАБ.", "В работе", "Остановлена", "ОСТ."]}
 
 if __name__ == '__main__':
     # Upload parameters
@@ -122,10 +128,10 @@ if __name__ == '__main__':
 
     # MAP drawing_______________________________________________________________________________________________________
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
-    df_input_prod = df_input.loc[(df_input.workMarker == PROD_MARKER)
+    df_input_prod = df_input.loc[(df_input.workMarker.isin(PROD_MARKER))
                                  & (df_input.wellStatus.isin(PROD_STATUS))]
     visualization(df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
     # Start print in Excel
-    write_to_excel(dict_result, **dict_constant)
+    write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
     logger.info("End of calculation")
     pass

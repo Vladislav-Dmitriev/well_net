@@ -94,10 +94,10 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
 
                 # geodataframe
                 gdf_measuring_wells = gpd.GeoDataFrame(df_current_year)
-                gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells.wellStatus == PIEZ_STATUS]
-                gdf_inj = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker == INJ_MARKER)
+                gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells.wellStatus.isin(PIEZ_STATUS)]
+                gdf_inj = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker.isin(INJ_MARKER))
                                                   & (gdf_measuring_wells.wellStatus.isin(INJ_STATUS))]
-                gdf_prod = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker == PROD_MARKER)
+                gdf_prod = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker.isin(PROD_MARKER))
                                                    & (gdf_measuring_wells.wellStatus.isin(PROD_STATUS))]
                 if year == 0:
                     ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="springgreen", figsize=[20, 20])

@@ -76,6 +76,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
         if obj in dict_property.keys():
             num_obj += 1
             K_rok = dict_property[obj]['K_rok']
+            K_abs = dict_property[obj]['K_abs']
             Kro_func = dict_property[obj]['Kro_func']
             Kro_degree = dict_property[obj]['Kro_degree']
             Krw_func = dict_property[obj]['Krw_func']
@@ -96,13 +97,14 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             Kro = K_rok * (1 - (Sw - Swo) / (1 - Swo)) ** Kro_func * (1 - (Sw - Swo) / (1 - Swo)) ** (
                 (2 + Kro_degree / Kro_degree))
             Krw = ((1 - Swo - Sno) / (1 - Swo)) ** Krw_func * ((Sw - Swo) / (1 - Swo)) ** Krw_degree
-            k += (mu_oil * mu_water /
+            k += (mu_oil * K_abs * mu_water /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (Kro / mu_oil + Krw / mu_water)
 
         else:
             num_default += 1
             num_obj += 1
             K_rok = dict_property['DEFAULT_OBJ']['K_rok']
+            K_abs = dict_property['DEFAULT_OBJ']['K_abs']
             Kro_func = dict_property['DEFAULT_OBJ']['Kro_func']
             Kro_degree = dict_property['DEFAULT_OBJ']['Kro_degree']
             Krw_func = dict_property['DEFAULT_OBJ']['Krw_func']
@@ -123,7 +125,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             Kro = K_rok * (1 - (Sw - Swo) / (1 - Swo)) ** Kro_func * (1 - (Sw - Swo) / (1 - Swo)) ** (
                 (2 + Kro_degree / Kro_degree))
             Krw = ((1 - Swo - Sno) / (1 - Swo)) ** Krw_func * ((Sw - Swo) / (1 - Swo)) ** Krw_degree
-            k += (mu_oil * mu_water /
+            k += (mu_oil * K_abs * mu_water /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (Kro / mu_oil + Krw / mu_water)
 
     time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
@@ -183,9 +185,9 @@ def clean_work_horizon(df, count_of_hor):
 
 
 def exception_marker(list_exception, wellName, wellStatus, workMarker, PIEZ_STATUS, INJ_MARKER, INJ_STATUS):
-    if (wellStatus == PIEZ_STATUS) and (wellName in list_exception):
+    if (wellStatus.isin(PIEZ_STATUS)) and (wellName in list_exception):
         return ''
-    elif (wellStatus in INJ_STATUS) and (workMarker == INJ_MARKER) and (wellName in list_exception):
+    elif (wellStatus.isin(INJ_STATUS)) and (workMarker.isin(INJ_MARKER)) and (wellName in list_exception):
         return ''
     else:
         return wellName
