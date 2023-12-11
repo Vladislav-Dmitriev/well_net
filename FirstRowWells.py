@@ -21,10 +21,14 @@ def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     for i in range(df_intersectionWells.shape[0] - 1):
         well_name = df_intersectionWells.index[i]
 
-        remoteFi_Max = max(df_intersectionWells.iloc[i][["fi_t1_grad", "fi_t3_grad"]])
-        remoteFi_Min = min(df_intersectionWells.iloc[i][["fi_t1_grad", "fi_t3_grad"]])
-        nearFi_Max = df_intersectionWells.iloc[i + 1:][["fi_t1_grad", "fi_t3_grad"]].values.max()
-        nearFi_Min = df_intersectionWells.iloc[i + 1:][["fi_t1_grad", "fi_t3_grad"]].values.min()
+        remoteFi_Max = max(
+            df_intersectionWells.iloc[i][["fi_t1_grad", "fi_t3_grad"]])  # максимальный угол дальней скважины
+        remoteFi_Min = min(
+            df_intersectionWells.iloc[i][["fi_t1_grad", "fi_t3_grad"]])  # минимальный угол дальней скважины
+        nearFi_Max = df_intersectionWells.iloc[i + 1:][
+            ["fi_t1_grad", "fi_t3_grad"]].values.max()  # максимальный угол ближней скважины
+        nearFi_Min = df_intersectionWells.iloc[i + 1:][
+            ["fi_t1_grad", "fi_t3_grad"]].values.min()  # минимальный угол ближней скважины
 
         df_pilot = pd.DataFrame({"fi": pd.Series([remoteFi_Max, remoteFi_Min, nearFi_Max, nearFi_Min]),
                                  "marker": pd.Series([2, 2, 1, 1])})
@@ -59,7 +63,7 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
     #  injection well type check
     if df_WellOneArea["well type"].loc[wellNumberInj] == "vertical":
         """Выбор центральных точек для оценки первого ряда: 
-        если нагенатетльная вертикальная используется только точка T1
+        если нагнетатетльная вертикальная используется только точка T1
         горизонтальная -    Т1, середина ствола и Т3
         """
         list_startingPoints = [[df_WellOneArea.coordinateX.loc[wellNumberInj]],
@@ -77,8 +81,8 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
     listNamesFisrtRowWells = []
     for point in range(len(list_startingPoints[0])):
         df_OnePoint = df_WellOneArea
-        df_OnePoint = df_OnePoint.drop(index=[wellNumberInj])
-        #  centering
+        df_OnePoint = df_OnePoint.drop(index=[wellNumberInj])  # drop current well for calculate mean radius
+        #  centering first row wells
         X0 = list_startingPoints[0][point]
         Y0 = list_startingPoints[1][point]
         df_OnePoint["X_T1"] = df_OnePoint.coordinateX - X0
@@ -110,22 +114,22 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
         df_OnePoint["fi_t1"] = df_OnePoint["fi_t1"].where((df_OnePoint["well type"] != "horizontal") |
                                                           (df_OnePoint["fi_t1"] < df_OnePoint["fi_t3"]) |
                                                           (df_OnePoint['distance'] == 0),
-                                                          df_OnePoint["fi_t1"] + angle_horizontalT1)
+                                                          df_OnePoint["fi_t1"] + angle_horizontalT1 * np.pi / 180)
 
         df_OnePoint["fi_t1"] = df_OnePoint["fi_t1"].where((df_OnePoint["well type"] != "horizontal") |
                                                           (df_OnePoint["fi_t1"] > df_OnePoint["fi_t3"]) |
                                                           (df_OnePoint['distance'] == 0),
-                                                          df_OnePoint["fi_t1"] - angle_horizontalT1)
+                                                          df_OnePoint["fi_t1"] - angle_horizontalT1 * np.pi / 180)
 
         df_OnePoint["fi_t3"] = df_OnePoint["fi_t3"].where((df_OnePoint["well type"] != "horizontal") |
                                                           (df_OnePoint["fi_t3"] < df_OnePoint["fi_t1"]) |
                                                           (df_OnePoint['distance'] == 0),
-                                                          df_OnePoint["fi_t3"] + angle_horizontalT3)
+                                                          df_OnePoint["fi_t3"] + angle_horizontalT3 * np.pi / 180)
 
         df_OnePoint["fi_t3"] = df_OnePoint["fi_t3"].where((df_OnePoint["well type"] != "horizontal") |
                                                           (df_OnePoint["fi_t3"] > df_OnePoint["fi_t1"]) |
                                                           (df_OnePoint['distance'] == 0),
-                                                          df_OnePoint["fi_t3"] - angle_horizontalT3)
+                                                          df_OnePoint["fi_t3"] - angle_horizontalT3 * np.pi / 180)
 
         '''# график перед очисткой
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
@@ -140,6 +144,7 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
         plt.show()
         # plt.savefig(my_path + '/pictures/' + str(wellNumberInj) + "_" + str(point) +' before edit.png')'''
 
+        #  from radians to degrees
         df_OnePoint["fi_t1_grad"] = df_OnePoint["fi_t1"] * 180 / np.pi
         df_OnePoint["fi_t1_grad"] = df_OnePoint["fi_t1_grad"].where(df_OnePoint["fi_t1_grad"] >= 0,
                                                                     df_OnePoint["fi_t1_grad"] + 360)

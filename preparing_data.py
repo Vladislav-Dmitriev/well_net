@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 from shapely.geometry import Point, LineString
 
 from functions import get_path, clean_work_horizon, unpack_status, exception_marker
@@ -12,14 +13,14 @@ from functions import get_path, clean_work_horizon, unpack_status, exception_mar
 
 def upload_input_data(dict_constant, dict_names_column, dict_parameters, list_exception):
     """
-    :param list_exception:
-    :param dict_constant:
+    :param list_exception: список имен исключаемых скважин
+    :param dict_constant: словарь со статусами работы скважин
     :param dict_names_column: словарь, содержащий названия, в которые переименуются столбцы считанного DataFrame
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
-
     application_path = get_path()
+    logger.info("Data type definition")
     first_row = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=None, sep=';',
                             encoding='utf-8', nrows=1)
     # first_row = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']), header=None, nrows=1)
@@ -56,6 +57,7 @@ def upload_gdis_data(df_input, date, dict_parameters):
              на которых проводились ГДИС не более n лет назад
     """
     application_path = get_path()
+    logger.info("Upload GDIS file")
     df_gdis = pd.read_excel(os.path.join(application_path, dict_parameters['gdis_file']), skiprows=[0])
 
     # get preparing dataframes
@@ -72,18 +74,20 @@ def upload_gdis_data(df_input, date, dict_parameters):
 def preparing(dict_constant, dict_names_column, df_input, min_length_horWell,
               count_of_hor, watercut, oil_rate, fluid_rate, list_exception):
     """
-    Загрузка и подгтовка DataFrame из исходного файла
-    :param fluid_rate:
-    :param oil_rate:
-    :param dict_constant:
-    :param watercut:
-    :param list_exception:
+    Загрузка и подготовка DataFrame из исходного файла
+    :param fluid_rate: ограничение по дебиту жидкости
+    :param oil_rate: ограничение по дебиту нефти
+    :param dict_constant: словарь со статусами работы скважин
+    :param watercut: ограничение на обводненность
+    :param list_exception: список имен исключаемых скважин
     :param count_of_hor: кол-во объектов, заданное пользователем
     :param df_input: DataFrame, полученный из входного файла
     :param min_length_horWell: minimum length between points T1 and T3 to consider the well as horizontal, m
     :param dict_names_column: Имена столбцов для считываемого файла
     :return: Возврат DataFrame, подготовленного к работе(без пропусков данных)
     """
+    logger.info("Preparing NGT data")
+
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
 
     # rename columns
@@ -195,16 +199,18 @@ def preparing(dict_constant, dict_names_column, df_input, min_length_horWell,
 
 
 def prepare_geobd(df, dict_constant, count_of_hor, watercut, oil_rate, fluid_rate, list_exception):
-    '''
-    :param df:
-    :param dict_constant:
-    :param count_of_hor:
-    :param watercut:
-    :param oil_rate:
-    :param fluid_rate:
-    :param list_exception:
-    :return:
-    '''
+    """
+    Функция подготовки данных для расчета из ГеоБД
+    :param df: DataFrame из исходного файла с данными
+    :param dict_constant: словарь со статусами работы скважин
+    :param count_of_hor: ограничение на кол-во объектов работы скважины
+    :param watercut: ограничение на обводненность
+    :param oil_rate: ограничение на дебит
+    :param fluid_rate: ограничение на дебит жидкости
+    :param list_exception: список имен исключаемых скважин
+    :return: возращает подготовленный DataFrame по выгрузке из ГеоБД
+    """
+    logger.info("Preparing GeoBD data")
     df = df[df.PLAST.notnull()]
     df = df[df.KUST.notnull()]
     df = df.fillna(0)
@@ -351,6 +357,7 @@ def gdis_preparing(df_gdis, input_wells, current_date, year):
     :param year: опция расчета, задается в годах либо не учитывается
     :return: возвращает DataFrame со скважинами, на которых ГДИС проводились более n(year) лет назад
     """
+    logger.info("Preparing GDIS file")
     dict_names_gdis = {
         'Скважина': 'wellName',
         'Пласты': 'workHorizon',
@@ -380,7 +387,8 @@ def gdis_preparing(df_gdis, input_wells, current_date, year):
     df_gdis = df_gdis[~df_gdis['quality'].isin(LOW)]
     df_gdis['time_of_research'] = df_gdis['end_of_research'] - df_gdis['begin_of_research']
     df_gdis = df_gdis[df_gdis['time_of_research'] != timedelta(0)]
-    df_gdis['how_long_ago'] = (current_date - df_gdis['end_of_research']).dt.days // 365  # разница между датой
+    df_gdis['how_long_ago'] = (pd.to_datetime(current_date) - df_gdis[
+        'end_of_research']).dt.days // 365  # разница между датой
     # окончания ГДИС и датой выгрузки файла
     df_gdis = df_gdis[(df_gdis['how_long_ago'] >= 0) & (df_gdis['how_long_ago'] <= year)]  # удаление ГДИС, которые
     # начаты после даты выгрузки файла, выделение на которых проводились ГДИС не более заданного кол-ва лет назад
@@ -421,7 +429,8 @@ def preparing_reservoir_properties(dict_parameters, path):
         'Степень для функции Kro (доп)  (для ОФП)': 'Kro_func',
         'Swo (для ОФП)': 'Swo',
         'Swk  (для ОФП)': 'Swk',
-        'Krok  (для ОФП)': 'Krok',
+        'Krwk  (для ОФП)': 'K_wmax',
+        'Krok  (для ОФП)': 'K_omax',
         'Кпрон (средняя) по нефти': 'K_abs'
     }
 
@@ -429,7 +438,8 @@ def preparing_reservoir_properties(dict_parameters, path):
                                'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть', 'β, 1/атм*10-5 вода',
                                'Степень Krw  (для ОФП)', 'Степень для функции Krw (доп)  (для ОФП)',
                                'Степень Kro  (для ОФП)', 'Степень для функции Kro (доп) (для ОФП)',
-                               'Swo (для ОФП)', 'Swk  (для ОФП)', 'Krok  (для ОФП)', 'Кпрон (средняя) по нефти']]
+                               'Swo (для ОФП)', 'Swk  (для ОФП)', 'Krwk  (для ОФП)', 'Krok  (для ОФП)',
+                               'Кпрон (средняя) по нефти']]
     df_property.columns = dict_names_prop.values()
     for i in df_property.columns:
         df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
@@ -452,7 +462,8 @@ def preparing_reservoir_properties(dict_parameters, path):
         dict_properties['rock_compr'] = df_property.iloc[num]['rock_compr']
         dict_properties['oil_visc'] = df_property.iloc[num]['oil_visc']
         dict_properties['water_visc'] = df_property.iloc[num]['water_visc']
-        dict_properties['K_rok'] = df_property.iloc[num]['Krok']
+        dict_properties['K_wmax'] = df_property.iloc[num]['K_wmax']
+        dict_properties['K_omax'] = df_property.iloc[num]['K_omax']
         dict_properties['Swo'] = df_property.iloc[num]['Swo']
         dict_properties['Swk'] = df_property.iloc[num]['Swk']
         dict_properties['Sno'] = 1 - dict_properties['Swk']
@@ -472,7 +483,8 @@ def preparing_reservoir_properties(dict_parameters, path):
     dict_properties['rock_compr'] = df_property['rock_compr'].mean()
     dict_properties['oil_visc'] = df_property['oil_visc'].mean()
     dict_properties['water_visc'] = df_property['water_visc'].mean()
-    dict_properties['K_rok'] = df_property['Krok'].mean()
+    dict_properties['K_wmax'] = df_property['K_wmax'].mean()
+    dict_properties['K_omax'] = df_property['K_omax'].mean()
     dict_properties['Swo'] = df_property['Swo'].mean()
     dict_properties['Swk'] = df_property['Swk'].mean()
     dict_properties['Sno'] = 1 - dict_properties['Swk']

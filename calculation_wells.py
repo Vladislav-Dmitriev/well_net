@@ -266,8 +266,8 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                  obj_square, df_piez_wells, df_prod_wells, df_inj_wells, df_result, dict_constant):
     """
     Функция для расчета результирующего DataFrame по объекту
-    :param obj_square:
-    :param dict_constant:
+    :param obj_square: площадь объекта месторождения по краевым скважинам
+    :param dict_constant: словарь со статусами работы скважин
     :param list_prod_exception: список исключаемых из расчета скважин
     :param path_property: путь к файлу со свойствами
     :param percent: процент длины траектории скважины для включения в зону охвата
@@ -275,7 +275,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     :param coeff: коэффициент кратного увеличения радиуса
     :param horizon: объект, по которому идет расчет
     :param df_piez_wells: пьезометры по текущему объекту
-    :param df_prod_wells: добывающие скавжины по текущему объекту
+    :param df_prod_wells: добывающие скважины по текущему объекту
     :param df_inj_wells: нагнетательные скважины по текущему объекту
     :param df_result: пустой DataFrame, в который записывается результат расчета
     :return: результирующий DataFrame по объекту

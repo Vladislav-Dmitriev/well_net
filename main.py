@@ -47,6 +47,7 @@ dict_constant = {
     'INJ_STATUS': ["РАБ.", "В работе", "Остановлена", "ОСТ."]}
 
 if __name__ == '__main__':
+
     # Upload parameters
     dict_parameters = upload_parameters('conf_files/parameters.yml')
 
@@ -134,4 +135,5 @@ if __name__ == '__main__':
     # Start print in Excel
     write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
     logger.info("End of calculation")
+
     pass
