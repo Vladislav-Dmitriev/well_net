@@ -211,10 +211,13 @@ def prepare_geobd(df, dict_constant, count_of_hor, watercut, oil_rate, fluid_rat
     :return: возращает подготовленный DataFrame по выгрузке из ГеоБД
     """
     logger.info("Preparing GeoBD data")
+    df = df.fillna(0)
     df = df[df.PLAST.notnull()]
     df = df[df.KUST.notnull()]
-    df = df.fillna(0)
     df = df[df['KUST'] != 0]
+    df.NSKV = df.NSKV.astype('str')
+    df.PLAST = df.PLAST.astype('str')
+    df.STATUS_DATE = df.STATUS_DATE.astype('str')
 
     # cleaning wellStatus
     df['clean_marker'] = df.apply(lambda x: 1 if 'раб' in str(x.SOST).lower() or 'безд'
@@ -510,6 +513,7 @@ def get_exception_wells(dict_parameters):
     """
     application_path = get_path()
     df_exception = pd.read_excel(os.path.join(application_path, dict_parameters['exception_file']), header=None)
-    list_exception = list(df_exception.iloc[:, 0].explode().unique())
+    df_exception[0] = df_exception[0].astype(str)
+    list_exception = list(df_exception[0].explode().unique())
 
     return list_exception

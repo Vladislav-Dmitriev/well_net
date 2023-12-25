@@ -148,7 +148,7 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
 
     df_result = pd.concat([df_result, df], axis=0, sort=False).reset_index(drop=True)
 
-    return single_wells, hor_prod_wells, df_result
+    return clean_wells, hor_prod_wells, df_result
 
 
 def dict_keys(list_r, contour_name):
@@ -280,6 +280,9 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     :param df_result: пустой DataFrame, в который записывается результат расчета
     :return: результирующий DataFrame по объекту
     """
+    inj_count = df_inj_wells.shape[0]
+    prod_count = df_prod_wells.shape[0]
+
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
     logger.info(f'Calculation for {horizon}')
     # I. Piezometric wells_____________________________________________________________________________________
@@ -328,9 +331,9 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     # процент скважин в опорной сети из скважин на объекте по каждому типу
     df_result['percent_prod_wells'] = 0
     if df_prod_wells.shape[0] != 0:
-        df_result['percent_prod_wells'] = df_result.loc[(df_result.workMarker.isin(PROD_MARKER))
-                                                        & (df_result.wellStatus.isin(PROD_STATUS))].shape[0] / \
-                                          df_prod_wells.shape[0]
+        df_result['percent_prod_wells'] = (df_result.loc[(df_result.workMarker.isin(PROD_MARKER))
+                                                         & (df_result.wellStatus.isin(PROD_STATUS))].shape[0]) / \
+                                          prod_count
     # df_result['percent_piez_wells'] = 0
     # if df_piez_wells.shape[0] != 0:
     #     df_result['percent_piez_wells'] = df_result.loc[df_result.wellStatus.isin(PIEZ_STATUS)].shape[0] / \
@@ -339,7 +342,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     if df_inj_wells.shape[0] != 0:
         df_result['percent_inj_wells'] = df_result.loc[(df_result.workMarker.isin(INJ_MARKER))
                                                        & (df_result.wellStatus.isin(INJ_STATUS))].shape[0] / \
-                                         df_inj_wells.shape[0]
+                                         inj_count
 
     return df_result
 

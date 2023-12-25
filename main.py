@@ -38,13 +38,13 @@ dict_names_column = {
 # CONSTANT
 dict_constant = {
     'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "БЕЗД.ТЕК.ГОДА", "В бездействии текущего года", "НАК", "В работе", "Остановлена",
-                    "ОСТ."],
-    'PROD_MARKER': ["НЕФ", "НЕФТЯНАЯ", "ГАЗ", "Водозаборная", "ГАЗОВАЯ", "Газоконденсатная",
+                    "ОСТ.", "Остановлен"],
+    'PROD_MARKER': ["НЕФ", "НЕФТЯНАЯ", "ГАЗ", "ВОДОЗАБОРНАЯ", "Водозаборная", "ГАЗОВАЯ", "Газоконденсатная",
                     "Газоконденсатные", "ГКОНД"],
-    'PIEZ_STATUS': ["ПЬЕЗ", "ПЬЕЗОМЕТР.", "Пьезометрическая"],
+    'PIEZ_STATUS': ["ПЬЕЗ", "ПЬЕЗОМЕТР.", "Пьезометрическая", "Пьезометрический"],
     'INJ_MARKER': ["НАГ", "НАГНЕТАТЕЛЬНАЯ", "Водонагнетательная", "Поглощающая", "ПОГЛОЩАЮЩАЯ", "Газонагнетательная",
                    "ГАЗОНАГНЕТАТЕЛЬНАЯ"],
-    'INJ_STATUS': ["РАБ.", "В работе", "Остановлена", "ОСТ."]}
+    'INJ_STATUS': ["РАБ.", "В работе"]}
 
 if __name__ == '__main__':
 
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     # Upload exception list wells
     list_exception = []
     if dict_parameters['exception_file'] is not None:
-        list_exception += list(get_exception_wells(dict_parameters))
+        list_exception += get_exception_wells(dict_parameters)
 
     # Upload files and initial data preparation_________________________________________________________________________
     df_input, date = upload_input_data(dict_constant, dict_names_column, dict_parameters, list_exception)

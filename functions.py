@@ -58,8 +58,8 @@ def get_property(path):
     return reservoir_properties
 
 
-def wc_func(x, const, S_o_init, S_w_init, Corey_w, Corey_o):
-    return -0.7 + (1 / (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w))
+def wc_func(x, water_cut, const, S_o_init, S_w_init, Corey_w, Corey_o):
+    return -water_cut + (1 / (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w))
 
 
 def wc_func_derivative(x, const, S_o_init, S_w_init, Corey_w, Corey_o):
@@ -84,40 +84,38 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
     num_default = 0
     mu, ct, phi, k = 0, 0, 0, 0
     for obj in list_obj:
-        obj = f'{oilfield}_{obj}'
-        if obj in dict_property.keys():
+        oilfield_obj = f'{oilfield}_{obj}'
+        if oilfield_obj in dict_property.keys():
             # расчет свойств объектов, которые есть в PVT таблице
             num_obj += 1
-            K_omax = dict_property[obj]['K_omax']
-            K_wmax = dict_property[obj]['K_wmax']
-            K_abs = dict_property[obj]['K_abs']
-            Kro_func = dict_property[obj]['Kro_func']
-            Kro_degree = dict_property[obj]['Kro_degree']
-            Krw_func = dict_property[obj]['Krw_func']
-            Krw_degree = dict_property[obj]['Krw_degree']
-            Sno = dict_property[obj]['Sno']
-            Swo = dict_property[obj]['Swo']
-            Swk = dict_property[obj]['Swk']
-            mu_oil = dict_property[obj]['oil_visc']
-            mu_water = dict_property[obj]['water_visc']
-            oil_compr = dict_property[obj]['oil_compr'] / (1.03323 * 10 ** 5)
-            water_compr = dict_property[obj]['water_copmr'] / (1.03323 * 10 ** 5)
-            rock_compr = dict_property[obj]['rock_compr'] / (1.03323 * 10 ** 5)
+            K_omax = dict_property[oilfield_obj]['K_omax']
+            K_wmax = dict_property[oilfield_obj]['K_wmax']
+            K_abs = dict_property[oilfield_obj]['K_abs']
+            Kro_func = dict_property[oilfield_obj]['Kro_func']
+            Kro_degree = dict_property[oilfield_obj]['Kro_degree']
+            Krw_func = dict_property[oilfield_obj]['Krw_func']
+            Krw_degree = dict_property[oilfield_obj]['Krw_degree']
+            Sno = dict_property[oilfield_obj]['Sno']
+            Swo = dict_property[oilfield_obj]['Swo']
+            Swk = dict_property[oilfield_obj]['Swk']
+            mu_oil = dict_property[oilfield_obj]['oil_visc']
+            mu_water = dict_property[oilfield_obj]['water_visc']
+            oil_compr = dict_property[oilfield_obj]['oil_compr'] / (1.03323 * 10 ** 5)
+            water_compr = dict_property[oilfield_obj]['water_copmr'] / (1.03323 * 10 ** 5)
+            rock_compr = dict_property[oilfield_obj]['rock_compr'] / (1.03323 * 10 ** 5)
             coef = mu_water * K_omax / (mu_oil * K_wmax * np.power(1 - Swo - Sno, Kro_func - Krw_func))
-            # Sw = root(lambda x: wc_func(x, coef, Sno, Swo, Krw_func, Kro_func), 0.5, method='hybr')
-            Sw = fsolve(lambda x: wc_func(x, coef, Sno, Swo, Krw_func, Kro_func), 0.6, xtol=10E-9)[0]
-            # Sw = newton(lambda x: wc_func(x, coef, Sno, Swo), 0.5,
-            #             fprime=lambda x: wc_func_derivative(x, coef, Sno, Swo))
-            # Sw = Swo + water_cut * (Swk - Swo)
+
+            if water_cut == 1:
+                Sw = Swk
+            elif water_cut == 0:
+                Sw = Swo
+            else:
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.6)[0]
+
             mu += (mu_oil * mu_water /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
-            phi += dict_property[obj]['phi'] / 100
-            # Kro = K_rok * (1 - (Sw - Swo) / (1 - Swo)) ** Kro_func * (1 - (Sw - Swo) / (1 - Swo)) ** (
-            #     (2 + Kro_degree / Kro_degree))
-            # Krw = ((1 - Swo - Sno) / (1 - Swo)) ** Krw_func * ((Sw - Swo) / (1 - Swo)) ** Krw_degree
-            # k += (mu_oil * K_abs * mu_water /
-            #       (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (Kro / mu_oil + Krw / mu_water)
+            phi += dict_property[oilfield_obj]['phi'] / 100
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_degree) / np.power(1 - Swo - Sno, Kro_degree))
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_degree) / np.power(1 - Swo - Sno, Krw_degree))
             k += (mu_oil * mu_water /
@@ -143,26 +141,29 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             water_compr = dict_property['DEFAULT_OBJ']['water_copmr'] / (1.03323 * 10 ** 5)
             rock_compr = dict_property['DEFAULT_OBJ']['rock_compr'] / (1.03323 * 10 ** 5)
             coef = mu_water * K_omax / (mu_water * K_wmax * (1 - Swo - Sno))
-            # Sw = root(lambda x: wc_func(x, coef, Sno, Swo, Krw_func, Kro_func), 0.5, method='hybr')
-            Sw = fsolve(lambda x: wc_func(x, coef, Sno, Swo, Krw_func, Kro_func), 0.5)
-            # Sw = newton(lambda x: wc_func(x, coef, Sno, Swo), 0.5,
-            #             fprime=lambda x: wc_func_derivative(x, coef, Sno, Swo))
-            # Sw = Swo + water_cut * (Swk - Swo)
+
+            if water_cut == 1:
+                Sw = Swk
+            elif water_cut == 0:
+                Sw = Swo
+            else:
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.6)[0]
+
             mu += (mu_oil * mu_water /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
             phi += dict_property['DEFAULT_OBJ']['phi'] / 100
-            # Kro = K_omax * (1 - (Sw - Swo) / (1 - Swo)) ** Kro_func * (1 - (Sw - Swo) / (1 - Swo)) ** (
-            #     (2 + Kro_degree / Kro_degree))
-            # Krw = K_wmax * ((1 - Swo - Sno) / (1 - Swo)) ** Krw_func * ((Sw - Swo) / (1 - Swo)) ** Krw_degree
-            # k += (mu_oil * K_abs * mu_water /
-            #       (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (Kro / mu_oil + Krw / mu_water)
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_func) / np.power(1 - Swo - Sno, Kro_func))
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_func) / np.power(1 - Swo - Sno, Krw_func))
             k += (mu_oil * mu_water /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
-    time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
+    # time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
+    mu = mu / num_obj
+    ct = ct / num_obj
+    phi = phi / num_obj
+    k = k / num_obj
+    time_coef = 462.2824 * (mu * ct * phi / k)
 
     return [time_coef, mu, ct, phi, k, num_default, num_obj]
 
@@ -219,9 +220,9 @@ def clean_work_horizon(df, count_of_hor):
 
 
 def exception_marker(list_exception, wellName, wellStatus, workMarker, PIEZ_STATUS, INJ_MARKER, INJ_STATUS):
-    if (wellStatus in PIEZ_STATUS) and (wellName in list_exception):
+    if (wellStatus in PIEZ_STATUS) and (str(wellName) in list_exception):
         return ''
-    elif (wellStatus in INJ_STATUS) and (workMarker in INJ_MARKER) and (wellName in list_exception):
+    elif (wellStatus in INJ_STATUS) and (workMarker in INJ_MARKER) and (str(wellName) in list_exception):
         return ''
     else:
         return wellName
