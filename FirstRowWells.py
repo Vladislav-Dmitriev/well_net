@@ -229,9 +229,10 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
     df_in_contour.set_index("wellName", inplace=True, drop=False)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="distance", value=0)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="mean_dist", value=0)
+    df_in_contour.insert(loc=df_in_contour.shape[1], column="min_dist", value=0)
     df_in_contour = gpd.GeoDataFrame(df_in_contour, geometry="GEOMETRY")
     wells = df_in_contour.wellName.unique()
-    for well in tqdm(wells, "calculation mean radius", position=0, leave=True, colour='green', ncols=80):
+    for well in tqdm(wells, "calculation research radius", position=0, leave=True, colour='white'):
         # Обновляем столбец distance
         df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
                                              df_in_contour.GEOMETRY))
@@ -244,10 +245,17 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
         # в новом DataFrame оставляем скважины первого окружения
         df_first_row = df_in_contour[df_in_contour["wellName"].isin(first_row_list)]
         # считаем среднее значение по столбцу distance
-        df_in_contour.loc[well, 'mean_dist'] = df_first_row["distance"].mean()
+        if df_first_row["distance"].min() is not np.nan:
+            df_in_contour.loc[well, 'min_dist'] = df_first_row["distance"].min()  # расстояние до ближайшей скважины
+        else:
+            df_in_contour.loc[well, 'min_dist'] = max_distance
+        if df_first_row["distance"].mean() is not np.nan:
+            df_in_contour.loc[well, 'min_dist'] = df_first_row["distance"].mean()  # расстояние до ближайшей скважины
+        else:
+            df_in_contour.loc[well, 'mean_dist'] = max_distance
+    # среднее среднего от расстояния (или среднее расстояние между скважинами на объект)
     mean_rad = df_in_contour["mean_dist"].mean()
-    if mean_rad is np.nan:
-        mean_rad = max_distance
-
     df_in_contour.drop(columns=['distance', 'mean_dist'], inplace=True)
-    return mean_rad
+    df_in_contour = df_in_contour.reset_index(drop=True)
+
+    return mean_rad, df_in_contour

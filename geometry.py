@@ -1,4 +1,5 @@
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from shapely.geometry import LineString, Point, Polygon
 
@@ -98,11 +99,11 @@ def intersect_number(df_prod, df_inj_piez, percent):
 
     df_inj_piez["intersection"] = list(map(lambda x: check_intersection_area(x, df_prod, percent, True),
                                            df_inj_piez.AREA))
-    df_inj_piez["number"] = list(map(lambda x: len(x), df_inj_piez.intersection))
+    df_inj_piez["number"] = df_inj_piez['intersection'].apply(lambda x: np.size(x))
     df_inj_piez = df_inj_piez[df_inj_piez.number > 0]
     df_prod["intersection"] = list(map(lambda x: check_intersection_point(x, df_inj_piez, percent, True),
                                        df_prod.GEOMETRY))
-    df_prod["number"] = list(map(lambda x: len(x), df_prod.intersection))
+    df_prod["number"] = df_prod['intersection'].apply(lambda x: np.size(x))
     return df_prod, df_inj_piez
 
 
@@ -118,25 +119,25 @@ def optimization(df_prod, df_inj_piez):
     """
     list_inj_piez_wells = []
     # выделяем пьезометры/нагнетательные из добывающих, у которых только 1 пересечение
-    list_inj_piez_wells += list(df_prod[df_prod.number == 1].intersection.explode().unique())
+    list_inj_piez_wells += list(df_prod[df_prod['number'] == 1]['intersection'].explode().unique())
     list_prod_wells = df_inj_piez[
-        df_inj_piez.wellName.isin(list_inj_piez_wells)].intersection.explode().unique()
-    # создаем dataframe оптимизации, исключая скважины с одним пересечением
-    df_optim = df_inj_piez[~df_inj_piez.wellName.isin(list_inj_piez_wells)]
+        df_inj_piez['wellName'].isin(list_inj_piez_wells)]['intersection'].explode().unique()
+    # создаем dataframe оптимизации, исключая скважины с одним пересечением с добывающей
+    df_optim = df_inj_piez[~df_inj_piez['wellName'].isin(list_inj_piez_wells)]
     df_optim.intersection = list(
-        map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim.intersection))
-    df_optim.number = list(map(lambda x: len(x), df_optim.intersection))
+        map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim['intersection']))
+    df_optim.number = list(map(lambda x: len(x), df_optim['intersection']))
     # отсеиваются одиночные скважины, не имеющие пересечений
-    df_optim = df_optim[df_optim.number > 0]
+    df_optim = df_optim[df_optim['number'] > 0]
     # в df_optim остались скважины с ненулевыми пересечениями
     if not df_optim.empty:
         #  создаем сет уникальных значений столбца с пересечениями и сортируем dataframe по кол-ву пересечений
-        set_visible_wells = set(df_optim.intersection.explode().unique())
+        set_visible_wells = set(df_optim['intersection'].explode().unique())
         df_optim = df_optim.sort_values(by=['number'], ascending=True)
         # на каждой итерации создается набор исключений, кроме итерируемой скважины,
         # он сравнивается с набором скважин, входящих в список пересечений выше
         for well in df_optim.wellName.values:
-            set_exception = set(df_optim[df_optim.wellName != well].intersection.explode().unique())
+            set_exception = set(df_optim[df_optim['wellName'] != well]['intersection'].explode().unique())
             # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина
             # и добавляется к списку нагн./пьез.
             if set_exception == set_visible_wells:
@@ -146,12 +147,12 @@ def optimization(df_prod, df_inj_piez):
     return list_inj_piez_wells
 
 
-def add_shapely_types(df_input, mean_radius, coeff):
+def add_shapely_types(df_input, mean_rad, coeff):
     """
     Добавление в DataFrame столбца с площадью охвата скважин, в зависимости от среднего радиуса охвата по контуру
     :param coeff: коэффициент домножения радиуса
     :param df_input: DataFrame, полученный из исходного файла
-    :param mean_radius: средний радиус окружения для итерируемого объекта
+    :param mean_rad: средний радиус окружения для итерируемого объекта
     :return: Возвращается DataFrame с добавленными столбцами геометрии и площади влияния каждой скважины
     """
     if 'AREA' not in df_input:
@@ -159,11 +160,11 @@ def add_shapely_types(df_input, mean_radius, coeff):
 
     df_input["AREA"] = df_input["AREA"].where(
         df_input["well type"] != "vertical", list(map(lambda x, y: get_polygon_well(
-            mean_radius * coeff, "vertical", x, y), df_input.coordinateX, df_input.coordinateY)))
+            mean_rad * coeff, "vertical", x, y), df_input.coordinateX, df_input.coordinateY)))
     df_input["AREA"] = df_input["AREA"].where(df_input["well type"] != "horizontal",
                                               list(map(lambda x, y, x1, y1:
                                                        get_polygon_well(
-                                                           mean_radius * coeff, "horizontal", x, y, x1, y1),
+                                                           mean_rad * coeff, "horizontal", x, y, x1, y1),
                                                        df_input.coordinateX,
                                                        df_input.coordinateY,
                                                        df_input.coordinateX3,

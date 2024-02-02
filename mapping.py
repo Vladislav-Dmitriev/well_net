@@ -7,7 +7,6 @@ from loguru import logger
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 
-from functions import unpack_status
 from geometry import check_intersection_area
 
 
@@ -22,14 +21,12 @@ def clean_pictures_folder(path):
     pass
 
 
-def visualization(df_input_prod, percent, dict_result, **dict_constant):
+def visualization(df_input_prod, percent, dict_result):
     """
     Функция визуализации полученных результатов
-    :param list_exception: список исключаемых из расчета скважин
     :param percent: процент длины траектории скважины, при котором она попадает в контур
     :param df_input_prod: DataFrame продуктивных скважин из исходного файла
     :param dict_result: словарь для записи результатов
-    :param dict_constant: Словарь с характером работы и состоянием скважины
     :return: Сохраняет график, построенный по итерируемому объекту, в указанную директорию
     """
     # удаление старых графиков
@@ -47,8 +44,7 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
             continue
         list_objects = df_result.workHorizon.str.split(', ').explode().unique()
 
-        for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='green', ncols=80):
-            PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
+        for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='white'):
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                          df_input_prod.workHorizon))]
@@ -56,11 +52,15 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                 contour_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
             except TypeError:
+                # из всего загруженного добывающего фонда отбираются скважины из столбца пересечений df_result, а также
+                # идет отбор по текущему объекту
                 contour_prod_wells = hor_prod_wells[
-                    hor_prod_wells["wellName"].isin(list(set(df_result["intersection"].explode().unique())))]
+                    hor_prod_wells["wellName"].isin(list(
+                        set(df_result[df_result['current_horizon'] == horizon]["intersection"].explode().unique())))]
             df_current_calc = df_result.loc[df_result.current_horizon == horizon]
             # division production wells on two parts
-            list_exception = list(set(df_current_calc[df_current_calc['intersection'].map(type) == str].wellName))
+            list_exception = list(set(
+                df_current_calc[df_current_calc['intersection'].map(str) == 'Не охвачены исследованием!!!'].wellName))
             contour_prod_nonexception = list(set(contour_prod_wells.wellName.explode().unique()).difference(
                 set(list_exception)))
             contour_prod_exception = list(set(contour_prod_wells.wellName.explode().unique())
@@ -94,11 +94,9 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
 
                 # geodataframe
                 gdf_measuring_wells = gpd.GeoDataFrame(df_current_year)
-                gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells.wellStatus.isin(PIEZ_STATUS)]
-                gdf_inj = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker.isin(INJ_MARKER))
-                                                  & (gdf_measuring_wells.wellStatus.isin(INJ_STATUS))]
-                gdf_prod = gdf_measuring_wells.loc[(gdf_measuring_wells.workMarker.isin(PROD_MARKER))
-                                                   & (gdf_measuring_wells.wellStatus.isin(PROD_STATUS))]
+                gdf_piez = gdf_measuring_wells.loc[gdf_measuring_wells['fond'] == 'ПЬЕЗ']
+                gdf_inj = gdf_measuring_wells.loc[gdf_measuring_wells['fond'] == 'НАГ']
+                gdf_prod = gdf_measuring_wells.loc[gdf_measuring_wells['fond'] == 'ДОБ']
                 if year == 0:
                     ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="springgreen", figsize=[20, 20])
                 else:
@@ -108,9 +106,13 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
                                                            color=colors_piez[year])
 
                 # production well areas drawing
-                gpd.GeoSeries(gdf_prod["AREA"]).plot(ax=ax, color="lightsalmon")
-                gpd.GeoSeries(gdf_prod["AREA"]).boundary.plot(ax=ax, ls=type_lines[year],
-                                                              color=colors_prod[year])
+                gpd.GeoSeries(gdf_prod[~(gdf_prod['wellName'].isin(list_exception))]["AREA"]).plot(ax=ax,
+                                                                                                   color="lightsalmon")
+                gpd.GeoSeries(gdf_prod[~(gdf_prod['wellName'].isin(list_exception))]["AREA"]).boundary.plot(ax=ax, ls=
+                type_lines[year],
+                                                                                                            color=
+                                                                                                            colors_prod[
+                                                                                                                year])
 
                 # Injection well areas drawing
                 gpd.GeoSeries(gdf_inj["AREA"]).plot(ax=ax, color="azure")
@@ -151,6 +153,8 @@ def visualization(df_input_prod, percent, dict_result, **dict_constant):
             if len(contour_prod_exception):
                 df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["POINT"])
                 df_prod_exception.plot(ax=ax, color="gray", markersize=14)
+                df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["GEOMETRY"])
+                df_prod_exception.plot(ax=ax, color="gray", markersize=14, marker="^")
 
             piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
             inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')

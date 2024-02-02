@@ -26,40 +26,48 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
         'oilfield': 'Месторождение',
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
-        'oilRate': 'Дебит нефти (ТР), т/сут',
-        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
-        'injectivity': 'Приемистость (ТР), м3/сут',
-        'water_cut': 'Обводненность (ТР), % (объём)',
-        'exploitation': 'Способ эксплуатации',
-        'wellType': 'Тип скважины',
         'coordinateX': 'Координата X',
         'coordinateX3': 'Координата забоя Х (по траектории)',
         'coordinateY': 'Координата Y',
         'coordinateY3': 'Координата забоя Y (по траектории)',
+        'oilRate': 'Дебит нефти (ТР), т/сут',
+        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
+        'gasRate': 'Дебит природного газа, тыс.м3/сут',
+        'injectivity': 'Приемистость (ТР), м3/сут',
+        'injectivity_day': 'Приемистость (по суточным), м3/сут',
+        'water_cut': 'Обводненность (ТР), % (объём)',
+        'exploitation': 'Способ эксплуатации',
+        'condRate': 'Дебит конденсата газа, т/сут',
+        'well type': 'Тип скважины',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
         'time_coef': 'Коэффициент для расчет времени исследования',
         'k': 'Проницаемость, мД',
+        'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
+        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
-        'percent_of_default': 'Процент объектов по умолчанию',
+        'percent_of_default': 'Процент объектов со свойствами по умолчанию',
         'current_horizon': 'Объект расчета',
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
+        'gas_loss': 'Потери газа',
         'injection_loss': 'Потери закачки, м3',
         'coverage_percentage': 'Процент охвата площади объекта',
         'percent_prod_wells': 'Доля добывающих в опорной сети',
         'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'percent_piez_wells': 'Доля пьезометров в опорной сети',
         'year_of_survey': 'Год исследования',
         'wellNet': 'Статус по опорной сети'
     }
     df_main = df_input.copy()
-    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY'], axis=1, inplace=True)
+    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'fond', 'gasStatus'], axis=1, inplace=True)
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
-    for key, value in tqdm(dict_result.items(), "Write to excel file"):
+    for key, value in tqdm(dict_result.items(), "Write to excel file", position=0, leave=True,
+                           colour='white', ncols=80):
         name = str(key).replace("/", " ")
 
         if f"{name}" in new_wb.sheets:
@@ -81,7 +89,8 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
             df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['distance', 'mean_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA'], axis=1, inplace=True)
+        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA', 'fond', 'gasStatus'], axis=1,
+                inplace=True)
         df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
 
         list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин
@@ -101,6 +110,7 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
     new_wb.save("output/out_file_geometry.xlsx")
     # End print
     app1.kill()
+    # os.startfile(str(get_path() + 'output/out_file_geometry.xlsx'))
     pass
 
 
@@ -132,10 +142,11 @@ def get_report(dict_result, **dict_constant):
                          'injection_loss2': 'Потери закачки 3 год, м3',
                          'percent_of_default': 'Процент объектов по умолчанию'}
 
-    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
+    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
     dict_report = {}
 
-    for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True, ncols=80):
+    for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
+                           colour='white', ncols=80):
         df = value[0]
         if df.empty:
             continue
@@ -143,11 +154,12 @@ def get_report(dict_result, **dict_constant):
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]
         dict_report['mean_time'] = dict_report.get('mean_time', []) + [df['research_time'].mean()]
-        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df.loc[df.wellStatus.isin(PIEZ_STATUS)])]
+        dict_report['piez_count'] = dict_report.get('piez_count', []) + [
+            len(df.loc[df.wellStatus.str.contains(PIEZ_STATUS)])]
         dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(
-            df.loc[(df.workMarker.isin(INJ_MARKER)) & (df.wellStatus.isin(INJ_STATUS))])]
+            df.loc[(df.workMarker.str.contains(INJ_MARKER)) & (df.wellStatus.str.contains(INJ_STATUS))])]
         dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(
-            df.loc[(df.workMarker.isin(PROD_MARKER)) & (df.wellStatus.isin(PROD_STATUS))])]
+            df.loc[(df.workMarker.str.contains(PROD_MARKER)) & (df.wellStatus.str.contains(PROD_STATUS))])]
 
         dict_report['well_quantity0'] = dict_report.get('well_quantity0', []) + [df[df['year_of_survey'] == 0].shape[0]]
         dict_report['well_quantity1'] = (dict_report.get('well_quantity1', []) +
@@ -156,11 +168,11 @@ def get_report(dict_result, **dict_constant):
                                          [df[df['year_of_survey'] == 2].shape[0]])
 
         dict_report['research_wells0'] = (dict_report.get('research_wells0', []) +
-                                          [len(set(df[df['year_of_survey'] == 0].intersection.explode().unique()))])
+                                          [len(set(df[df['year_of_survey'] == 0]['intersection'].explode().unique()))])
         dict_report['research_wells1'] = dict_report.get('research_wells1', []) + [
-            len(set(df[df['year_of_survey'] == 1].intersection.explode().unique()))]
+            len(set(df[df['year_of_survey'] == 1]['intersection'].explode().unique()))]
         dict_report['research_wells2'] = dict_report.get('research_wells2', []) + [
-            len(set(df[df['year_of_survey'] == 2].intersection.explode().unique()))]
+            len(set(df[df['year_of_survey'] == 2]['intersection'].explode().unique()))]
 
         dict_report['oil_loss0'] = dict_report.get('oil_loss0', []) + [df[df['year_of_survey'] == 0].oil_loss.sum()]
         dict_report['oil_loss1'] = dict_report.get('oil_loss1', []) + [df[df['year_of_survey'] == 1].oil_loss.sum()]

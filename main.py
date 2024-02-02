@@ -6,62 +6,29 @@ import pandas as pd
 from loguru import logger
 
 from calculation_wells import calc_contour
+from dictionaries import dict_constant
 from functions import unpack_status, upload_parameters, get_path
 from geometry import check_intersection_area, load_contour
 from mapping import visualization
-from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties, get_exception_wells
+from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
 from print_in_excel import write_to_excel
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
-
-# input data column names
-dict_names_column = {
-    '№ скважины': 'wellName',
-    'Дата': 'nameDate',
-    'Характер работы': 'workMarker',
-    "Состояние": 'wellStatus',
-    'Месторождение': 'oilfield',
-    'Объекты работы': 'workHorizon',
-    'Куст': 'wellCluster',
-    "Координата X": 'coordinateXT1',
-    "Координата Y": 'coordinateYT1',
-    "Координата забоя Х (по траектории)": 'coordinateXT3',
-    "Координата забоя Y (по траектории)": 'coordinateYT3',
-    'Дебит нефти (ТР), т/сут': 'oilRate',
-    'Дебит жидкости (ТР), м3/сут': 'fluidRate',
-    'Приемистость (ТР), м3/сут': 'injectivity',
-    'Обводненность (ТР), % (объём)': 'water_cut',
-    'Способ эксплуатации': 'exploitation'
-}
-
-# CONSTANT
-dict_constant = {
-    'PROD_STATUS': ["РАБ.", "Б/Д ТГ", "БЕЗД.ТЕК.ГОДА", "В бездействии текущего года", "НАК", "В работе", "Остановлена",
-                    "ОСТ.", "Остановлен"],
-    'PROD_MARKER': ["НЕФ", "НЕФТЯНАЯ", "ГАЗ", "ВОДОЗАБОРНАЯ", "Водозаборная", "ГАЗОВАЯ", "Газоконденсатная",
-                    "Газоконденсатные", "ГКОНД"],
-    'PIEZ_STATUS': ["ПЬЕЗ", "ПЬЕЗОМЕТР.", "Пьезометрическая", "Пьезометрический"],
-    'INJ_MARKER': ["НАГ", "НАГНЕТАТЕЛЬНАЯ", "Водонагнетательная", "Поглощающая", "ПОГЛОЩАЮЩАЯ", "Газонагнетательная",
-                   "ГАЗОНАГНЕТАТЕЛЬНАЯ"],
-    'INJ_STATUS': ["РАБ.", "В работе"]}
 
 if __name__ == '__main__':
 
     # Upload parameters
     dict_parameters = upload_parameters('conf_files/parameters.yml')
 
-    # Upload exception list wells
-    list_exception = []
-    if dict_parameters['exception_file'] is not None:
-        list_exception += get_exception_wells(dict_parameters)
-
     # Upload files and initial data preparation_________________________________________________________________________
-    df_input, date = upload_input_data(dict_constant, dict_names_column, dict_parameters, list_exception)
+    df_input, date, list_exception = upload_input_data(dict_constant, dict_parameters)
     # df_input = df_input.iloc[200:600, :]
 
     # Upload files and GDIS data preparation____________________________________________________________________________
-    if (dict_parameters['gdis_option'] is not None) and (dict_parameters['gdis_file'] is not None):
+    if (dict_parameters['gdis_option'] is not None) and (
+            pd.to_datetime(dict_parameters['gdis_option'], format='%d.%m.%Y') < date) and (
+            dict_parameters['gdis_file'] is not None):
         df_input = upload_gdis_data(df_input, date, dict_parameters)
 
     # add logs to file
@@ -102,13 +69,8 @@ if __name__ == '__main__':
             df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
             if df_in_contour.empty:
                 continue
-            dict_result.update(calc_contour(dict_parameters['separation_by_years'],
-                                            dict_parameters['limit_radius_coef'], polygon, df_in_contour,
-                                            contour_name, dict_parameters['max_distance'], path_property,
-                                            dict_parameters['mult_coef'], dict_parameters['percent'], list_exception,
-                                            dict_parameters['verticalWellAngle'],
-                                            dict_parameters['MaxOverlapPercent'], dict_parameters['angle_horizontalT1'],
-                                            dict_parameters['angle_horizontalT3'], **dict_constant))
+            dict_result.update(calc_contour(polygon, df_in_contour, contour_name, path_property,
+                                            list_exception, dict_parameters, **dict_constant))
             well_out_contour = well_out_contour.difference(wells_in_contour)
 
     else:
@@ -120,18 +82,13 @@ if __name__ == '__main__':
     if not df_out_contour.empty:
         contour_name = 'out_contour'
         # расчет для скважин вне контура
-        dict_result.update(calc_contour(dict_parameters['separation_by_years'], dict_parameters['limit_radius_coef'],
-                                        polygon, df_out_contour, contour_name, dict_parameters['max_distance'],
-                                        path_property, dict_parameters['mult_coef'], dict_parameters['percent'],
-                                        list_exception, dict_parameters['verticalWellAngle'],
-                                        dict_parameters['MaxOverlapPercent'], dict_parameters['angle_horizontalT1'],
-                                        dict_parameters['angle_horizontalT3'], **dict_constant))
+        dict_result.update(calc_contour(polygon, df_out_contour, contour_name, path_property,
+                                        list_exception, dict_parameters, **dict_constant))
 
     # MAP drawing_______________________________________________________________________________________________________
-    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS = unpack_status(dict_constant)
-    df_input_prod = df_input.loc[(df_input.workMarker.isin(PROD_MARKER))
-                                 & (df_input.wellStatus.isin(PROD_STATUS))]
-    visualization(df_input_prod, dict_parameters['percent'], dict_result, **dict_constant)
+    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
+    df_input_prod = df_input.loc[df_input['fond'] == 'ДОБ']
+    visualization(df_input_prod, dict_parameters['percent'], dict_result)
     # Start print in Excel
     write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
     logger.info("End of calculation")
