@@ -233,6 +233,7 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
     :param fluid_rate: ограничение по дебиту жидкости
+    :param oil_rate: ограничение по дебиту нефти
     :param dict_constant: словарь со статусами работы скважин
     :param watercut: ограничение на обводненность
     :param list_exception: список имен исключаемых скважин

@@ -177,6 +177,8 @@ def calc_contour(polygon, df_in_contour, contour_name, path_property, list_excep
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
+
+    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
