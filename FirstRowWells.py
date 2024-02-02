@@ -246,13 +246,11 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
         df_first_row = df_in_contour[df_in_contour["wellName"].isin(first_row_list)]
         # считаем среднее значение по столбцу distance
         if df_first_row["distance"].min() is not np.nan:
+            df_in_contour.loc[well, 'mean_dist'] = df_first_row["distance"].mean()  # среднее расстояние первого ряда
             df_in_contour.loc[well, 'min_dist'] = df_first_row["distance"].min()  # расстояние до ближайшей скважины
         else:
-            df_in_contour.loc[well, 'min_dist'] = max_distance
-        if df_first_row["distance"].mean() is not np.nan:
-            df_in_contour.loc[well, 'min_dist'] = df_first_row["distance"].mean()  # расстояние до ближайшей скважины
-        else:
             df_in_contour.loc[well, 'mean_dist'] = max_distance
+            df_in_contour.loc[well, 'min_dist'] = max_distance
     # среднее среднего от расстояния (или среднее расстояние между скважинами на объект)
     mean_rad = df_in_contour["mean_dist"].mean()
     df_in_contour.drop(columns=['distance', 'mean_dist'], inplace=True)

@@ -111,7 +111,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
@@ -149,7 +149,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
