@@ -14,7 +14,7 @@ def unpack_status(dict_constant):
     :return: возвращает статусы и характер работы скважин как отдельные переменные типа string
     """
     return dict_constant.get("PROD_STATUS"), dict_constant.get("PROD_MARKER"), dict_constant.get("PIEZ_STATUS"), \
-        dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS")
+        dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS"), dict_constant.get("DELETE_STATUS")
 
 
 def get_time_research(path, df_result, horizon):
@@ -68,10 +68,11 @@ def wc_func_derivative(x, const, S_o_init, S_w_init, Corey_w, Corey_o):
             (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w) ** 2)
 
 
-def get_time_coef(dict_property, objects, Wc, oilfield):
+def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     """
     Рассчет коэффициента для формулы по вычислению времени исследования скважины
     При умножении этого коэффицента на радиус охвата, получаем время исследования
+    :param gas_status:
     :param oilfield: название месторождения
     :param Wc: обводненность
     :param objects: название пласта
@@ -79,30 +80,30 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
     :return: возвращает коэффициент для расчета времени исследования
     """
     water_cut = Wc / 100
-    list_obj = list(str(objects).split(','))
-    num_obj = 0
-    num_default = 0
-    mu, ct, phi, k = 0, 0, 0, 0
+    list_obj = list(str(objects).split(', '))
+    mu, ct, phi, k, gas_viscocity, pressure, num_default, num_obj = 0, 0, 0, 0, 0, 0, 0, 0
+
     for obj in list_obj:
-        oilfield_obj = f'{oilfield}_{obj}'
-        if oilfield_obj in dict_property.keys():
-            # расчет свойств объектов, которые есть в PVT таблице
+        if obj in dict_property[oilfield].keys():
             num_obj += 1
-            K_omax = dict_property[oilfield_obj]['K_omax']
-            K_wmax = dict_property[oilfield_obj]['K_wmax']
-            K_abs = dict_property[oilfield_obj]['K_abs']
-            Kro_func = dict_property[oilfield_obj]['Kro_func']
-            Kro_degree = dict_property[oilfield_obj]['Kro_degree']
-            Krw_func = dict_property[oilfield_obj]['Krw_func']
-            Krw_degree = dict_property[oilfield_obj]['Krw_degree']
-            Sno = dict_property[oilfield_obj]['Sno']
-            Swo = dict_property[oilfield_obj]['Swo']
-            Swk = dict_property[oilfield_obj]['Swk']
-            mu_oil = dict_property[oilfield_obj]['oil_visc']
-            mu_water = dict_property[oilfield_obj]['water_visc']
-            oil_compr = dict_property[oilfield_obj]['oil_compr'] / (1.03323 * 10 ** 5)
-            water_compr = dict_property[oilfield_obj]['water_copmr'] / (1.03323 * 10 ** 5)
-            rock_compr = dict_property[oilfield_obj]['rock_compr'] / (1.03323 * 10 ** 5)
+            # расчет свойств объектов, которые есть в PVT таблице
+            K_omax = dict_property[oilfield][obj]['K_omax']
+            K_wmax = dict_property[oilfield][obj]['K_wmax']
+            K_abs = dict_property[oilfield][obj]['K_abs']
+            Kro_func = dict_property[oilfield][obj]['Kro_func']
+            Kro_degree = dict_property[oilfield][obj]['Kro_degree']
+            Krw_func = dict_property[oilfield][obj]['Krw_func']
+            Krw_degree = dict_property[oilfield][obj]['Krw_degree']
+            Sno = dict_property[oilfield][obj]['Sno']
+            Swo = dict_property[oilfield][obj]['Swo']
+            Swk = dict_property[oilfield][obj]['Swk']
+            mu_oil = dict_property[oilfield][obj]['oil_visc']
+            mu_water = dict_property[oilfield][obj]['water_visc']
+            oil_compr = dict_property[oilfield][obj]['oil_compr'] / (1.03323 * 10 ** 5)
+            water_compr = dict_property[oilfield][obj]['water_copmr'] / (1.03323 * 10 ** 5)
+            rock_compr = dict_property[oilfield][obj]['rock_compr'] / (1.03323 * 10 ** 5)
+            gas_viscocity += dict_property[oilfield][obj]['gas_visc']
+            pressure += dict_property[oilfield][obj]['pressure']
             coef = mu_water * K_omax / (mu_oil * K_wmax * np.power(1 - Swo - Sno, Kro_func - Krw_func))
 
             if water_cut == 1:
@@ -110,36 +111,37 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.6)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
-            mu += (mu_oil * mu_water /
+            mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
-            phi += dict_property[oilfield_obj]['phi'] / 100
+            phi += dict_property[oilfield][obj]['porosity'] / 100
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_degree) / np.power(1 - Swo - Sno, Kro_degree))
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_degree) / np.power(1 - Swo - Sno, Krw_degree))
-            k += (mu_oil * mu_water /
+            k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
         else:
             # расчет свойств объекта по умолчанию
             num_default += 1
-            num_obj += 1
-            K_wmax = dict_property['DEFAULT_OBJ']['K_wmax']
-            K_omax = dict_property['DEFAULT_OBJ']['K_omax']
-            K_abs = dict_property['DEFAULT_OBJ']['K_abs']
-            Kro_func = dict_property['DEFAULT_OBJ']['Kro_func']
-            Kro_degree = dict_property['DEFAULT_OBJ']['Kro_degree']
-            Krw_func = dict_property['DEFAULT_OBJ']['Krw_func']
-            Krw_degree = dict_property['DEFAULT_OBJ']['Krw_degree']
-            Sno = dict_property['DEFAULT_OBJ']['Sno']
-            Swo = dict_property['DEFAULT_OBJ']['Swo']
-            Swk = dict_property['DEFAULT_OBJ']['Swk']
-            mu_oil = dict_property['DEFAULT_OBJ']['oil_visc']
-            mu_water = dict_property['DEFAULT_OBJ']['water_visc']
-            oil_compr = dict_property['DEFAULT_OBJ']['oil_compr'] / (1.03323 * 10 ** 5)
-            water_compr = dict_property['DEFAULT_OBJ']['water_copmr'] / (1.03323 * 10 ** 5)
-            rock_compr = dict_property['DEFAULT_OBJ']['rock_compr'] / (1.03323 * 10 ** 5)
+            K_wmax = dict_property[oilfield]['DEFAULT_OBJ']['K_wmax']
+            K_omax = dict_property[oilfield]['DEFAULT_OBJ']['K_omax']
+            K_abs = dict_property[oilfield]['DEFAULT_OBJ']['K_abs']
+            Kro_func = dict_property[oilfield]['DEFAULT_OBJ']['Kro_func']
+            Kro_degree = dict_property[oilfield]['DEFAULT_OBJ']['Kro_degree']
+            Krw_func = dict_property[oilfield]['DEFAULT_OBJ']['Krw_func']
+            Krw_degree = dict_property[oilfield]['DEFAULT_OBJ']['Krw_degree']
+            Sno = dict_property[oilfield]['DEFAULT_OBJ']['Sno']
+            Swo = dict_property[oilfield]['DEFAULT_OBJ']['Swo']
+            Swk = dict_property[oilfield]['DEFAULT_OBJ']['Swk']
+            mu_oil = dict_property[oilfield]['DEFAULT_OBJ']['oil_visc']
+            mu_water = dict_property[oilfield]['DEFAULT_OBJ']['water_visc']
+            oil_compr = dict_property[oilfield]['DEFAULT_OBJ']['oil_compr'] / (1.03323 * 10 ** 5)
+            water_compr = dict_property[oilfield]['DEFAULT_OBJ']['water_copmr'] / (1.03323 * 10 ** 5)
+            rock_compr = dict_property[oilfield]['DEFAULT_OBJ']['rock_compr'] / (1.03323 * 10 ** 5)
+            gas_viscocity += dict_property[oilfield]['DEFAULT_OBJ']['gas_visc']
+            pressure += dict_property[oilfield]['DEFAULT_OBJ']['pressure']
             coef = mu_water * K_omax / (mu_water * K_wmax * (1 - Swo - Sno))
 
             if water_cut == 1:
@@ -147,29 +149,35 @@ def get_time_coef(dict_property, objects, Wc, oilfield):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.6)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
-            mu += (mu_oil * mu_water /
+            mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
-            phi += dict_property['DEFAULT_OBJ']['phi'] / 100
+            phi += dict_property[oilfield]['DEFAULT_OBJ']['porosity'] / 100
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_func) / np.power(1 - Swo - Sno, Kro_func))
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_func) / np.power(1 - Swo - Sno, Krw_func))
-            k += (mu_oil * mu_water /
+            k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
     # time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
-    mu = mu / num_obj
-    ct = ct / num_obj
-    phi = phi / num_obj
-    k = k / num_obj
-    time_coef = 462.2824 * (mu * ct * phi / k)
+    mu = mu / (num_obj + num_default)
+    ct = ct / (num_obj + num_default)
+    phi = phi / (num_obj + num_default)
+    k = k / (num_obj + num_default)
+    gas_viscocity = gas_viscocity / (num_obj + num_default)
+    pressure = pressure / (num_obj + num_default)
+    if 'газ' in str(gas_status).lower():
+        time_coef = phi * gas_viscocity * (10 ** (-3)) / (4 * k * pressure * (10 ** (-10)) * 3600 * 24)
+    else:
+        time_coef = 462.2824 * (mu * ct * phi / k) / 94  # сутки
 
-    return [time_coef, mu, ct, phi, k, num_default, num_obj]
+    return [time_coef, mu, ct, phi, k, gas_viscocity, pressure, num_default, len(list_obj)]
 
 
 def upload_parameters(path):
     """
+    Функция загрузки заданных пользователем параметров
     :param path: путь к файлу с параметрами расчета
     :return: возваращает словарь с параметрами расчета
     """
@@ -182,7 +190,7 @@ def upload_parameters(path):
 
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
     year = None if year == "нет" else year
-    dict_parameters['gdis_option'] = year
+    dict_parameters['gdis_option'] = str(year)
 
     separation = dict_parameters['separation_by_years']
     separation = None if separation == "нет" else separation
@@ -208,6 +216,13 @@ def get_path():
 
 
 def clean_work_horizon(df, count_of_hor):
+    """
+    Удаляет из DataFrame скважины с числом объектов работы больше заданного пользователем
+
+    :param df: база данных
+    :param count_of_hor: максимальное кол-во объектов работы скважины, задается пользователем
+    :return: DataFrame со скважинами, число объектов работы которых не превышает заданного пользователем кол-ва
+    """
     if (count_of_hor != 0) and (count_of_hor > 0):
         df['horizon_count'] = df['workHorizon'].apply(lambda x: len(set(x.replace(" ", "").split(","))))
         df = df[df['horizon_count'] <= count_of_hor]
@@ -219,10 +234,17 @@ def clean_work_horizon(df, count_of_hor):
         raise TypeError(f'Wrong parameter {count_of_hor}. Expected values: 0, 1, 2...')
 
 
-def exception_marker(list_exception, wellName, wellStatus, workMarker, PIEZ_STATUS, INJ_MARKER, INJ_STATUS):
-    if (wellStatus in PIEZ_STATUS) and (str(wellName) in list_exception):
+def exception_marker(list_exception, wellName, fond):
+    """
+    Функция очистки пьезометрических и нагнетательных скважин из списка исключений
+    :param list_exception: список исключений
+    :param wellName: имя скважины
+    :param fond: фонд, к которому относится скважина
+    :return: либо имя скважины, либо пустую строку ''
+    """
+    if (str(wellName) in list_exception) and (str(fond) == 'ПЬЕЗ'):
         return ''
-    elif (wellStatus in INJ_STATUS) and (workMarker in INJ_MARKER) and (str(wellName) in list_exception):
+    elif (str(wellName) in list_exception) and (str(fond) == 'НАГ'):
         return ''
     else:
         return wellName
