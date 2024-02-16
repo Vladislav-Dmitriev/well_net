@@ -233,7 +233,6 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
     :param fluid_rate: ограничение по дебиту жидкости
-    :param oil_rate: ограничение по дебиту нефти
     :param dict_constant: словарь со статусами работы скважин
     :param watercut: ограничение на обводненность
     :param list_exception: список имен исключаемых скважин
@@ -241,7 +240,6 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     :param df_input: DataFrame, полученный из входного файла
     :return: Возврат DataFrame, подготовленного к расчету
     """
-    logger.info("Preparing NGT data")
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
 

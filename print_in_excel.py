@@ -7,6 +7,52 @@ from functions import unpack_status
 from geometry import check_intersection_area
 
 
+def write_cluster_mesh(dict_result):
+    dict_rename = {
+        'wellName': '№ скважины',
+        'nameDate': 'Дата',
+        'workMarker': 'Характер работы',
+        'wellStatus': 'Состояние',
+        'oilfield': 'Месторождение',
+        'workHorizon': 'Объекты работы',
+        'wellCluster': 'Куст',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
+        'fond': 'Фонд',
+        'gasStatus': 'Тип скважины',
+        'min_dist': 'Минимальное расстояние первого ряда',
+        'current_horizon': 'Объект расчета',
+    }
+    app1 = xw.App(visible=False)
+    new_wb = xw.Book()
+
+    for key, value in dict_result.items():
+        name = str(key).replace("/", " ")
+
+        if f"{name}" in new_wb.sheets:
+            xw.Sheet[f"{name}"].delete()
+
+        if value.empty:
+            continue
+        else:
+            new_wb.sheets.add(f"{name}")
+
+        sht = new_wb.sheets(f"{name}")
+
+        df = value
+        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA'], axis=1, inplace=True)
+        df.columns = dict_rename.values()
+
+        sht.range('A1').options().value = pd.DataFrame(df)
+
+    new_wb.save("output/out_file_mesh.xlsx")
+    # End print
+    app1.kill()
+    pass
+
+
 def write_to_excel(percent, df_input, dict_result, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь

@@ -190,3 +190,57 @@ def visualization(df_input_prod, percent, dict_result):
                     f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
 
     pass
+
+
+def mesh_visualization(df_input, dict_mesh):
+    logger.info("Clean pictures folder")
+    clean_pictures_folder('output/mesh/')
+
+    for key in dict_mesh.keys():
+        mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
+        contour_name = list(key.replace(' = ', ', ').split(', '))[0]
+        df_result = dict_mesh[key]
+        if df_result.empty:
+            continue
+        list_objects = df_input.workHorizon.str.split(', ').explode().unique()  # все объекты месторождения
+        for obj in tqdm(list_objects, "Meshing for objects", position=0, leave=True, colour='white'):
+            df_result_obj = df_result[df_result['current_horizon'] == obj]
+            # mean_radius = df_result_obj.iloc[0]['mean_radius']
+            list_fonds = df_result_obj.fond.explode().unique()  # все фонды скважин, в результирующем DataFrame
+            for fond in tqdm(list_fonds, "Meshing for fonds", position=0, leave=True, colour='white'):
+                df_result_fond = df_result_obj[df_result_obj['fond'] == fond]
+                if df_result_fond.empty:
+                    continue
+                gdf_result_fond = gpd.GeoDataFrame(df_result_fond)
+                list_target = list(set(gdf_result_fond.wellName.explode()))
+                gdf_current_research = gpd.GeoDataFrame(df_input[list(map(lambda x:
+                                                                          len(set(x.replace(" ", "").split(",")) &
+                                                                              set([obj])) > 0, df_input.workHorizon))])
+                gdf_current_research = gdf_current_research[gdf_current_research['fond'] == fond]
+
+                ax = gpd.GeoSeries(gdf_result_fond.AREA).plot(color="springgreen", figsize=[20, 20])
+                gpd.GeoSeries(gdf_result_fond.AREA).boundary.plot(ax=ax, color='green')
+
+                for x, y, label in zip(gdf_current_research.coordinateX.values,
+                                       gdf_current_research.coordinateY.values,
+                                       gdf_current_research.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy",
+                                fontsize=6)
+
+                for x, y, label in zip(gdf_result_fond.coordinateX.values,
+                                       gdf_result_fond.coordinateY.values,
+                                       gdf_result_fond.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
+
+                gdf_current_research = gdf_current_research.set_geometry('POINT')
+                gdf_current_research.plot(ax=ax, color='black', markersize=14, marker='^')
+                gdf_current_research = gdf_current_research.set_geometry('GEOMETRY')
+                gdf_current_research.plot(ax=ax, color='black', markersize=14, marker='^')
+                gdf_result_fond = gdf_result_fond.set_geometry('POINT')
+                gdf_result_fond.plot(ax=ax, color="blue", markersize=14, marker='^')
+
+                plt.savefig(
+                    f'output/mesh/MESH {obj.replace('/', '_')}, {contour_name}, fond = {fond}, k = {mult_coef}.png',
+                    dpi=200)
+                plt.title(
+                    f'Объект: {obj.replace('/', '_')}, {contour_name}, (fond = {fond}, k = {mult_coef})')

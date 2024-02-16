@@ -173,6 +173,16 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
+def add_shapely_circle(df_input, mean_rad, coeff):
+    if 'AREA' not in df_input:
+        df_input.insert(loc=df_input.shape[1], column="AREA", value=0)
+
+    df_input["AREA"] = list(map(lambda x, y: get_polygon_well(
+        mean_rad * coeff, "vertical", x, y), df_input.coordinateX, df_input.coordinateY))
+
+    return df_input
+
+
 def load_contour(contour_path):
     """
     Загрузка файла с координатами контура и построение многоугольника

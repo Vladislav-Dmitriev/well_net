@@ -316,7 +316,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     # коэффициент для расчета времени исследования
     dict_property = get_property(path_property)
     df_result['time_coef/objects'] = df_result.apply(
-        lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.fond), axis=1)
+        lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.gasStatus), axis=1)
     df_result['time_coef'] = list(map(lambda x: x[0], df_result['time_coef/objects']))
     # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
     # df_result['ct'] = list(map(lambda x: x[2], df_result['time_coef/objects']))
@@ -334,17 +334,17 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist']
                                   * df_result['time_coef'])  # время исследования в сут через min расстояние
 
-    # filter and delete wells which don't fit the parameters limit research time
-    df_result = df_result.loc[
-        ~((df_result['well type'] == 'vertical') & (df_result['research_time'] > max_time_research))]
-    df_result = df_result.loc[
-        ~((df_result['well type'] == 'horizontal') & (df_result['research_time'] > 2 * max_time_research))]
-    df_result['research_time'] = df_result.apply(
-        lambda x: min_time_research if (x['well type'] == 'vertical' and x['research_time'] < min_time_research) else x[
-            'research_time'], axis=1)
-    df_result['research_time'] = df_result.apply(lambda x: 2 * min_time_research if (
-            x['well type'] == 'horizontal' and x['research_time'] < 2 * min_time_research) else x['research_time'],
-                                                 axis=1)
+    # # filter and delete wells, which don't fit the parameters limit research time
+    # df_result = df_result.loc[
+    #     ~((df_result['well type'] == 'vertical') & (df_result['research_time'] > max_time_research))]
+    # df_result = df_result.loc[
+    #     ~((df_result['well type'] == 'horizontal') & (df_result['research_time'] > 2 * max_time_research))]
+    # df_result['research_time'] = df_result.apply(
+    #     lambda x: min_time_research if (x['well type'] == 'vertical' and x['research_time'] < min_time_research) else x[
+    #         'research_time'], axis=1)
+    # df_result['research_time'] = df_result.apply(lambda x: 2 * min_time_research if (
+    #         x['well type'] == 'horizontal' and x['research_time'] < 2 * min_time_research) else x['research_time'],
+    #                                              axis=1)
 
     df_result['oil_loss'] = 0
     df_result['gas_loss'] = 0
@@ -355,8 +355,6 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['gas_loss'] = df_result.apply(lambda x: (x.injectivity_day * x.research_time) if (
             str(x.gasStatus) == 'газонагнетательная') else x.gasRate * x.research_time, axis=1)  # потери по газу
     df_result['injection_loss'] = df_result['injectivity'] * df_result['research_time']  # потери по закачке воды
-    # df_result['coverage_percentage'] = 0
-    # if obj_square != 0:
     df_result['coverage_percentage'] = unary_union(list(df_result['AREA'].explode())).area / obj_square
     # процент скважин в опорной сети из скважин на объекте по каждому типу
     df_result['percent_prod_wells'] = 0

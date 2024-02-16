@@ -72,7 +72,8 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     """
     Рассчет коэффициента для формулы по вычислению времени исследования скважины
     При умножении этого коэффицента на радиус охвата, получаем время исследования
-    :param gas_status:
+    :param gas_status: тип скважины для выбора формулы расчета времени КВД (нефтяная, газовая, газоконденсатная,
+     водонагнетательная, газонагнетательная, поглощающая, пьезометрическая)
     :param oilfield: название месторождения
     :param Wc: обводненность
     :param objects: название пласта
@@ -111,7 +112,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
@@ -149,7 +150,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
@@ -168,9 +169,9 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     gas_viscocity = gas_viscocity / (num_obj + num_default)
     pressure = pressure / (num_obj + num_default)
     if 'газ' in str(gas_status).lower():
-        time_coef = phi * gas_viscocity * (10 ** (-3)) / (4 * k * pressure * (10 ** (-10)) * 3600 * 24)
+        time_coef = phi * gas_viscocity * 10.2 / (4 * k * pressure * 3600 * 24 * 10 ** (-6))
     else:
-        time_coef = 462.2824 * (mu * ct * phi / k) / 94  # сутки
+        time_coef = 462.2824 * (mu * ct * phi / k) / 24  # сутки
 
     return [time_coef, mu, ct, phi, k, gas_viscocity, pressure, num_default, len(list_obj)]
 
