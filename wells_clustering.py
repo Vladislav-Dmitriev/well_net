@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 from scipy.cluster.hierarchy import fcluster, average
-from shapely.geometry import Point, LineString
+from shapely.geometry import LineString
 from tqdm import tqdm
 
 from FirstRowWells import mean_radius
-from geometry import add_shapely_types
+from geometry import add_shapely_types, check_intersection_area
 
 
 def dict_mesh_keys(list_coef, contour_name):
@@ -36,6 +36,7 @@ def calc_regular_mesh(df, dict_parameters, contour_name):
     dict_result = dict_mesh_keys(dict_parameters['mult_coef'], contour_name)
     for horizon in tqdm(list_horizon, "Calculation regular mesh", position=0, leave=True,
                         colour='white', ncols=80):
+        # horizon = 'НП4'
         df_horizon_input = df[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0, df.workHorizon))]
         mean_rad, df_horizon_input = mean_radius(df_horizon_input, dict_parameters['verticalWellAngle'],
@@ -45,7 +46,7 @@ def calc_regular_mesh(df, dict_parameters, contour_name):
         df_horizon_input['current_horizon'] = horizon
         for key, coeff in zip(dict_result, dict_parameters['mult_coef']):
             logger.info(f'Add shapely types with coefficient = {coeff}')
-            df_result = fond_mesh(df_horizon_input, mean_rad, coeff)
+            df_result = fond_mesh(df_horizon_input, dict_parameters, mean_rad, coeff)
             df_result = add_shapely_types(df_result, mean_rad, coeff)
             df_result = df_result[['wellName', 'nameDate', 'workMarker', 'wellStatus',
                                    'oilfield', 'workHorizon', 'wellCluster', 'coordinateX',
@@ -56,9 +57,10 @@ def calc_regular_mesh(df, dict_parameters, contour_name):
     return dict_result
 
 
-def fond_mesh(df_horizon, mean_rad, coeff):
+def fond_mesh(df_horizon, dict_parameters, mean_rad, coeff):
     """
     Построение регулярной сети по выбранному фонду
+    :param dict_parameters:
     :param df_horizon: DataFrame скважин, выделенных на определенный объект работы
     :param mean_rad: средний радиус по текущему объекту
     :param coeff: коэффициент кратного увеличения радиуса
@@ -87,19 +89,77 @@ def fond_mesh(df_horizon, mean_rad, coeff):
         #  формируем список кластеров, которые есть в текущем фонде
         list_cluster = list(set(df_fond['cluster'].explode().unique()))
         # mapping_cluster(df_fond, 'НП2-3')
-        list_centroid_well = []
-        #  проход по всем кластерам фонда с целью посчитать координаты центроида кластера
-        for cluster in list_cluster:
-            df_current_cluster = df_separation[df_separation['cluster'] == cluster]
-            centroid_point = Point(pd.DataFrame(df_current_cluster['GEOMETRY'].to_list(),
-                                                columns=['X', 'Y'])['X'].sum() / df_current_cluster.shape[0],
-                                   pd.DataFrame(df_current_cluster['GEOMETRY'].to_list(),
-                                                columns=['X', 'Y'])['Y'].sum() / df_current_cluster.shape[0])
-            df_fond['dist'] = df_fond.apply(lambda x: x['GEOMETRY'].distance(centroid_point), axis=1)
-            df_fond = df_fond.sort_values(by=['dist'], axis=0, ascending=True)
-            list_centroid_well += [df_fond['wellName'].iloc[0]]
 
-        df_result = pd.concat([df_result, df_fond[df_fond['wellName'].isin(list_centroid_well)]],
+        list_check_well = []
+        if df_fond.shape[0] > 1:
+            df_fond['intersection'] = list(
+                map(lambda x, y: check_intersection_area(x, df_fond[df_fond.wellName != y],
+                                                         dict_parameters['percent'], True),
+                    df_fond.AREA, df_fond.wellName))
+            df_fond['number'] = df_fond['intersection'].apply(lambda x: np.size(x))
+            df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=False)
+            list_optim = list(df_fond['wellName'].explode())
+            while len(list_optim) != 0:
+                list_check_well += [list_optim[0]]
+                list_exception = [list_optim[0]] + list(
+                    df_fond[df_fond['wellName'] == list_optim[0]][
+                        'intersection'].explode().unique())
+                list_optim = [x for x in list_optim if x not in list_exception]
+        else:
+            list_check_well += [df_fond['wellName'].iloc[0]]
+        #  проход по всем кластерам фонда с целью посчитать координаты центроида кластера
+        # for cluster in list_cluster:
+        #     df_current_cluster = df_fond[df_fond['cluster'] == cluster]
+        #
+        #     # ----------OPTIMIZATION------------
+        #
+        #     if df_current_cluster.shape[0] > 1:
+        #         df_current_cluster['intersection'] = list(
+        #             map(lambda x, y: check_intersection_area(x, df_current_cluster[df_current_cluster.wellName != y],
+        #                                                      dict_parameters['percent'], True),
+        #                 df_current_cluster.AREA, df_current_cluster.wellName))
+        #         df_current_cluster['number'] = df_current_cluster['intersection'].apply(lambda x: np.size(x))
+        #         df_current_cluster = df_current_cluster.sort_values(by=['number'], axis=0, ascending=False)
+        #         list_optim = list(df_current_cluster['wellName'].explode())
+        #         while len(list_optim) != 0:
+        #             list_check_well += [list_optim[0]]
+        #             list_exception = [list_optim[0]] + list(
+        #                 df_current_cluster[df_current_cluster['wellName'] == list_optim[0]][
+        #                     'intersection'].explode().unique())
+        #             list_optim = [x for x in list_optim if x not in list_exception]
+        #     else:
+        #         list_check_well += [df_current_cluster['wellName'].iloc[0]]
+
+        # ----------OPTIMIZATION------------
+        # df_minor = df_fond[~df_fond['wellName'].isin(list_check_well)]
+        # df_basic = df_fond[df_fond['wellName'].isin(list_check_well)]
+        # if not df_minor.empty:
+        #     df_minor['intersection'] = list(
+        #         map(lambda x: check_intersection_point(x, df_basic, dict_parameters['percent'], True),
+        #             df_minor.GEOMETRY))
+        #     df_minor = df_minor[df_minor['intersection'].map(lambda x: np.size(x) == 0)]
+        #     df_minor['intersection'] = list(
+        #         map(lambda x, y: check_intersection_area(x, df_minor[df_minor.wellName != y],
+        #                                                  dict_parameters['percent'], True),
+        #             df_minor.AREA, df_minor.wellName))
+        #     df_minor['number'] = df_minor['intersection'].apply(lambda x: np.size(x))
+        #     df_minor = df_minor.sort_values(by=['number'], axis=0, ascending=False)
+        #     list_optim = list(df_minor['wellName'].explode())
+        #     list_check_wells = []
+        #     while len(list_optim) != 0:
+        #         list_check_wells += [list_optim[0]]
+        #         list_exception = [list_optim[0]] + list(
+        #             df_minor[df_minor['wellName'] == list_optim[0]]['intersection'].explode().unique())
+        #         list_optim = [x for x in list_optim if x not in list_exception]
+        #     df_basic['intersection'] = list(
+        #         map(lambda x: check_intersection_point(x, df_minor[df_minor['wellName'].isin(list_check_wells)],
+        #                                                dict_parameters['percent'], True),
+        #             df_basic.GEOMETRY))
+        #     list_exception_basic = list(
+        #         df_basic[df_basic['intersection'].map(lambda x: np.size(x) > 0)].wellName.explode().unique())
+        #     list_centroid_well = [x for x in list_centroid_well if x not in list_exception_basic]
+        #     list_centroid_well += list_check_wells
+        df_result = pd.concat([df_result, df_fond[df_fond['wellName'].isin(list_check_well)]],
                               axis=0, sort=False).reset_index(drop=True)
 
     return df_result
@@ -149,6 +209,7 @@ def separate_wells(df_input, count_of_segments):
 def clustering_well(df_test, mean_rad, coeff, array_dist):
     """
 
+    :param array_dist:
     :param coeff: коэффициент кратного увеличения радиуса исследования
     :param mean_rad: средний радиус исследования по объекту
     :param df_test: DataFrame, в котором необходимо провести дробление ГС
@@ -156,7 +217,7 @@ def clustering_well(df_test, mean_rad, coeff, array_dist):
     """
     logger.info(f'Try search clusters with radius {mean_rad}')
     try:
-        list_clusters = fcluster(average(array_dist), t=coeff * mean_rad * 0.8, criterion='distance').tolist()
+        list_clusters = fcluster(average(array_dist), t=coeff * mean_rad, criterion='distance').tolist()
         df_test['cluster'] = pd.Series(list_clusters).values
     except ValueError:
         df_test['cluster'] = 1

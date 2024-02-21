@@ -12,7 +12,7 @@ from geometry import check_intersection_area, load_contour
 from mapping import mesh_visualization
 from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
 from print_in_excel import write_cluster_mesh
-from wells_clustering import calc_regular_mesh
+from regular_mesh_by_holes import calc_mesh_by_holes
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -55,6 +55,7 @@ if __name__ == '__main__':
     well_out_contour = set(df_input.wellName.values)
     dict_result = {}
     dict_mesh = {}
+    dict_mesh_hole = {}
     list_wells_in_contour = []
 
     if contours_content:
@@ -84,8 +85,9 @@ if __name__ == '__main__':
     if not df_out_contour.empty:
         contour_name = 'out_contour'
         # расчет для скважин вне контура
-        dict_mesh.update(calc_regular_mesh(df_out_contour, dict_parameters, contour_name))
-        mesh_visualization(df_out_contour, dict_mesh)
+        dict_mesh_hole.update(calc_mesh_by_holes(df_out_contour, dict_parameters, contour_name))
+        # dict_mesh.update(calc_regular_mesh(df_out_contour, dict_parameters, contour_name))
+        mesh_visualization(df_out_contour, dict_mesh_hole)
         # dict_result.update(calc_contour(polygon, df_out_contour, contour_name, path_property,
         #                                 list_exception, dict_parameters, **dict_constant))
 

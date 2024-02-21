@@ -238,6 +238,8 @@ def mesh_visualization(df_input, dict_mesh):
                 gdf_current_research.plot(ax=ax, color='black', markersize=14, marker='^')
                 gdf_result_fond = gdf_result_fond.set_geometry('POINT')
                 gdf_result_fond.plot(ax=ax, color="blue", markersize=14, marker='^')
+                gdf_result_fond = gdf_result_fond.set_geometry('GEOMETRY')
+                gdf_result_fond.plot(ax=ax, color='blue', markersize=14, marker='^')
 
                 plt.savefig(
                     f'output/mesh/MESH {obj.replace('/', '_')}, {contour_name}, fond = {fond}, k = {mult_coef}.png',
