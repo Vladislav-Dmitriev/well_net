@@ -53,7 +53,7 @@ def visualization(df_input_prod, percent, dict_result):
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
             except TypeError:
                 # из всего загруженного добывающего фонда отбираются скважины из столбца пересечений df_result, а также
-                # идет отбор по текущему объекту
+                # идет отбор по текущему объекту расчета
                 contour_prod_wells = hor_prod_wells[
                     hor_prod_wells["wellName"].isin(list(
                         set(df_result[df_result['current_horizon'] == horizon]["intersection"].explode().unique())))]
@@ -196,7 +196,7 @@ def mesh_visualization(df_input, dict_mesh):
     logger.info("Clean pictures folder")
     clean_pictures_folder('output/mesh/')
 
-    for key in dict_mesh.keys():
+    for key, value in dict_mesh.items():
         mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
         contour_name = list(key.replace(' = ', ', ').split(', '))[0]
         df_result = dict_mesh[key]
@@ -212,7 +212,6 @@ def mesh_visualization(df_input, dict_mesh):
                 if df_result_fond.empty:
                     continue
                 gdf_result_fond = gpd.GeoDataFrame(df_result_fond)
-                list_target = list(set(gdf_result_fond.wellName.explode()))
                 gdf_current_research = gpd.GeoDataFrame(df_input[list(map(lambda x:
                                                                           len(set(x.replace(" ", "").split(",")) &
                                                                               set([obj])) > 0, df_input.workHorizon))])

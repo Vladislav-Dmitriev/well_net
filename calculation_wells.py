@@ -9,6 +9,15 @@ from functions import unpack_status, get_time_coef, get_property
 from geometry import intersect_number, optimization, check_intersection_area, add_shapely_types
 
 
+# def calculation(df_input, marker):
+#     if marker == 'optimize':
+#         return calc_contour()
+#     elif marker == 'regular':
+#         return calc_regular_mesh()
+#     else:
+#         raise NameError(f'Wrong marker name: {marker}')
+
+
 def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent):
     """
     Функция обрабатывает DataFrame из пьезометров, подающийся на вход
@@ -178,7 +187,6 @@ def calc_contour(polygon, df_in_contour, contour_name, path_property, list_excep
     """
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
 
-    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,

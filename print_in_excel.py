@@ -20,11 +20,24 @@ def write_cluster_mesh(dict_result):
         'coordinateX3': 'Координата забоя Х (по траектории)',
         'coordinateY': 'Координата Y',
         'coordinateY3': 'Координата забоя Y (по траектории)',
+        'oilRate': 'Дебит нефти, т/сут',
+        'fluidRate': 'Дебит жидкости, м3/сут',
+        'gasRate': 'Дебит газа, тыс.м3/сут',
+        'injectivity': 'Приемистость, м3/сут',
+        'injectivity_day': 'Приемистость (по суточным), м3/сут',
+        'water_cut': 'Обводненность (ТР), % (объём)',
+        'exploitation': 'Способ эксплуатации',
+        'condRate': 'Дебит конденсата газа, т/сут',
+        'well type': 'Тип ствола',
         'fond': 'Фонд',
         'gasStatus': 'Тип скважины',
-        'min_dist': 'Минимальное расстояние первого ряда',
+        'min_dist': 'Минимальное расстояние первого ряда, м',
         'current_horizon': 'Объект расчета',
+        # 'count_basic_wells': 'Кол-во опорных скважин',
+        # 'count_of_search': 'Кол-во исследуемых скважин',
+        # 'specific_area': 'Удельная площадь на 1 опорную скважину, м^2'
     }
+
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -42,7 +55,7 @@ def write_cluster_mesh(dict_result):
         sht = new_wb.sheets(f"{name}")
 
         df = value
-        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA'], axis=1, inplace=True)
+        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'intersection', 'number'], axis=1, inplace=True)
         df.columns = dict_rename.values()
 
         sht.range('A1').options().value = pd.DataFrame(df)

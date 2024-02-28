@@ -21,7 +21,7 @@ def get_polygon_well(R_well, type_well, *coordinates):
         well_polygon = LineString([t1, t3]).buffer(R_well, join_style=1)
         return well_polygon
     else:
-        raise NameError(f"Wrong well type: {type_well}. Allowed values: vertical or horizontal")
+        raise NameError(f'Wrong well type: {type_well}. Allowed values: vertical or horizontal')
 
 
 def check_intersection_area(area, df_points, percent, calc_option=True):
