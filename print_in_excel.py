@@ -7,14 +7,111 @@ from functions import unpack_status
 from geometry import check_intersection_area
 
 
+def write_cluster_mesh(df_input, dict_result, percent):
+    """
+    Запись результатов расчета регулярной сетки в Excel
+    :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
+    :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
+    :return: функция сохраняет файл в указанную директорию
+    """
+    dict_rename = {
+        'wellName': '№ скважины',
+        'nameDate': 'Дата',
+        'workMarker': 'Характер работы',
+        'wellStatus': 'Состояние',
+        'oilfield': 'Месторождение',
+        'workHorizon': 'Объекты работы',
+        'wellCluster': 'Куст',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
+        'oilRate': 'Дебит нефти (ТР), т/сут',
+        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
+        'gasRate': 'Дебит природного газа, тыс.м3/сут',
+        'injectivity': 'Приемистость (ТР), м3/сут',
+        'injectivity_day': 'Приемистость (по суточным), м3/сут',
+        'water_cut': 'Обводненность (ТР), % (объём)',
+        'exploitation': 'Способ эксплуатации',
+        'condRate': 'Дебит конденсата газа, т/сут',
+        'well type': 'Тип скважины',
+        'fond': 'Фонд скважины',
+        'intersection': 'Пересечения со скважинами',
+        'number': 'Кол-во пересечений',
+        'mean_radius': 'Средний радиус по объекту, м',
+        'time_coef': 'Коэффициент для расчет времени исследования',
+        'k': 'Проницаемость, мД',
+        'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
+        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
+        'default_count': 'Объектов по умолчанию',
+        'obj_count': 'Объектов всего',
+        'percent_of_default': 'Процент объектов со свойствами по умолчанию',
+        'current_horizon': 'Объект расчета',
+        'research_time': 'Время исследования, сут',
+        'oil_loss': 'Потери нефти, т',
+        'gas_loss': 'Потери газа',
+        'injection_loss': 'Потери закачки, м3',
+        'coverage_percentage': 'Процент охвата площади объекта',
+        'percent_piez_wells': 'Доля пьезометров в опорной сети',
+        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'year_of_survey': 'Год исследования',
+        'wellNet': 'Статус по опорной сети'
+    }
+
+    app1 = xw.App(visible=False)
+    new_wb = xw.Book()
+
+    for key, value in dict_result.items():
+        name = str(key).replace("/", " ")
+
+        if f"{name}" in new_wb.sheets:
+            xw.Sheet[f"{name}"].delete()
+
+        if value[0].empty:
+            continue
+        else:
+            new_wb.sheets.add(f"{name}")
+
+        sht = new_wb.sheets(f"{name}")
+
+        df = value[0]
+        polygon = value[1]
+        if polygon is None:
+            df_in_contour = df_input.copy()
+        else:
+            df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
+            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option=True))
+            df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
+        df_in_contour.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
+        df["intersection"] = list(
+            map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
+        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'mean_oilrate', 'gasStatus', 'min_dist'],
+                axis=1, inplace=True)
+        df['wellNet'] = 'Выбрана в опорную сеть'
+        list_wellnet = list(df['wellName'].explode().unique())
+        df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]
+        list_research = df_not_wellnet['wellName'].explode().unique()
+        df = pd.concat([df, df_not_wellnet], ignore_index=True, sort=False)
+        df['wellNet'] = df.apply(lambda x: 'Исследуемый фонд' if x.wellName in list_research else x.wellNet, axis=1)
+        df.columns = dict_rename.values()
+
+        sht.range('A1').options().value = pd.DataFrame(df)
+
+    new_wb.save("output/out_file_mesh.xlsx")
+    # End print
+    app1.kill()
+    pass
+
+
 def write_to_excel(percent, df_input, dict_result, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
-    :param df_input:
-    :param percent:
+    :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
+    :param percent: процент длины ГС для включения в зону охвата для сценария с опорной сеткой
     :param dict_constant: словарь со статусами скважин
-    :param dict_result: словарь, по ключам которого содержатся DataFrame для каждого контура
+    :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
     """
     # result dict rename columns in russian
@@ -39,6 +136,7 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
         'exploitation': 'Способ эксплуатации',
         'condRate': 'Дебит конденсата газа, т/сут',
         'well type': 'Тип скважины',
+        'fond': 'Фонд скважины',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
@@ -62,7 +160,7 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
         'wellNet': 'Статус по опорной сети'
     }
     df_main = df_input.copy()
-    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'fond', 'gasStatus'], axis=1, inplace=True)
+    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -89,7 +187,8 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
             df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA', 'fond', 'gasStatus'], axis=1,
+        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA', 'gasStatus', 'mean_oilrate'],
+                axis=1,
                 inplace=True)
         df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
 
@@ -119,7 +218,7 @@ def get_report(dict_result, **dict_constant):
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
     :param dict_result: словарь с результатами расчетов по всем объектам
     :param dict_constant: словарь со статусами скважин
-    :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом домножения радиуса
+    :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом увеличения радиуса
     """
     dict_names_report = {'contour_k': 'Сценарий',
                          'obj_count': 'Кол-во объектов',

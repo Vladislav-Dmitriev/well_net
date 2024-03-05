@@ -233,7 +233,6 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
     :param fluid_rate: ограничение по дебиту жидкости
-    :param oil_rate: ограничение по дебиту нефти
     :param dict_constant: словарь со статусами работы скважин
     :param watercut: ограничение на обводненность
     :param list_exception: список имен исключаемых скважин
@@ -241,7 +240,6 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     :param df_input: DataFrame, полученный из входного файла
     :return: Возврат DataFrame, подготовленного к расчету
     """
-    logger.info("Preparing NGT data")
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
 
@@ -459,8 +457,6 @@ def preparing_reservoir_properties(dict_parameters, path):
                        'water_visc', 'gas_visc', 'K_wmax', 'K_omax', 'Swo', 'Swk', 'Sno',
                        'Krw_degree', 'Krw_func', 'Kro_degree', 'Kro_func', 'K_abs']
     list_oilfield = list(df_property['oilfield'].explode().unique())
-
-    dict_properties = dict.fromkeys(list_properties)
     # запись свойств в словарь по данным из файла в виде месторождение/объект/свойства
     dict_PVT = {}
     for oil_res in list_oilfield_res:

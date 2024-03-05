@@ -53,7 +53,7 @@ def visualization(df_input_prod, percent, dict_result):
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
             except TypeError:
                 # из всего загруженного добывающего фонда отбираются скважины из столбца пересечений df_result, а также
-                # идет отбор по текущему объекту
+                # идет отбор по текущему объекту расчета
                 contour_prod_wells = hor_prod_wells[
                     hor_prod_wells["wellName"].isin(list(
                         set(df_result[df_result['current_horizon'] == horizon]["intersection"].explode().unique())))]
@@ -190,3 +190,113 @@ def visualization(df_input_prod, percent, dict_result):
                     f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
 
     pass
+
+
+def mesh_visualization(df_input, dict_mesh):
+    logger.info("Clean pictures folder")
+    clean_pictures_folder('output/mesh/')
+
+    for key, value in dict_mesh.items():
+        mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
+        contour_name = list(key.replace(' = ', ', ').split(', '))[0]
+        df_result = value[0]
+        if df_result.empty:
+            continue
+        list_objects = df_input.workHorizon.str.split(', ').explode().unique()  # все объекты месторождения
+        # list_objects = ['БС12']
+        for obj in tqdm(list_objects, "Meshing for objects", position=0, leave=True, colour='white'):
+            df_result_obj = df_result[df_result['current_horizon'] == obj]
+            gdf_result_obj = gpd.GeoDataFrame(df_result_obj)
+            gdf_piez = gdf_result_obj[df_result_obj['fond'] == 'ПЬЕЗ']
+            gdf_inj = gdf_result_obj[df_result_obj['fond'] == 'НАГ']
+            gdf_prod = gdf_result_obj[df_result_obj['fond'] == 'ДОБ']
+            gdf_research = gpd.GeoDataFrame(df_input[list(map(lambda x: len(set(x.replace(" ", "").split(",")) &
+                                                                            set([obj])) > 0, df_input.workHorizon))])
+            gdf_research = gdf_research[~gdf_research['wellName'].isin(gdf_result_obj['wellName'].explode().unique())]
+            gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
+
+            ax = gpd.GeoSeries(gdf_piez.AREA).plot(color="springgreen", figsize=[20, 20])
+            gpd.GeoSeries(gdf_piez.AREA).boundary.plot(ax=ax, color="green")
+
+            gpd.GeoSeries(gdf_inj.AREA).plot(ax=ax, color="azure")
+            gpd.GeoSeries(gdf_inj.AREA).boundary.plot(ax=ax, color="lightseagreen")
+
+            gpd.GeoSeries(gdf_prod.AREA).plot(ax=ax, color="lightsalmon")
+            gpd.GeoSeries(gdf_prod.AREA).boundary.plot(ax=ax, color="orangered")
+
+            # добавление названий скважин на картинках
+            for x, y, label in zip(gdf_research.coordinateX.values,
+                                   gdf_research.coordinateY.values,
+                                   gdf_research.wellName):
+                ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy",
+                            fontsize=6)
+
+            for x, y, label in zip(gdf_result_obj.coordinateX.values,
+                                   gdf_result_obj.coordinateY.values,
+                                   gdf_result_obj.wellName):
+                ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
+
+            # построение траекторий скважин
+            gdf_research = gdf_research.set_geometry('POINT')
+            gdf_research.plot(ax=ax, color='black', markersize=14)
+            gdf_research = gdf_research.set_geometry('GEOMETRY')
+            gdf_research.plot(ax=ax, color='black', markersize=14)
+            gdf_result_obj = gdf_result_obj.set_geometry('POINT')
+            gdf_result_obj.plot(ax=ax, color="blue", markersize=14, marker='^')
+            gdf_result_obj = gdf_result_obj.set_geometry('GEOMETRY')
+            gdf_result_obj.plot(ax=ax, color='blue', markersize=14, marker='^')
+
+            piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
+            inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
+            prod = mpatches.Patch(color='black', fc='lightsalmon', label='Добыващие(с исследованием)')
+            piez_point = Line2D([0], [0], marker='^', color='white', label='Скважины регулярной сети',
+                                markerfacecolor='blue', markersize=14)
+            prod_point = Line2D([0], [0], marker='.', color='white', label='Скважины, охваченные исследованиями',
+                                markerfacecolor='black', markersize=14)
+
+            plt.legend(handles=[piez, inj, prod, piez_point, prod_point])
+            plt.savefig(
+                f'output/mesh/MESH {obj.replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
+                dpi=200)
+            plt.title(
+                f'Объект: {obj.replace('/', '_')}, {contour_name}, (k = {mult_coef})')
+
+            # list_fonds = df_result_obj.fond.explode().unique()  # все фонды скважин, в результирующем DataFrame
+            # for fond in tqdm(list_fonds, "Meshing for fonds", position=0, leave=True, colour='white'):
+            #     df_result_fond = df_result_obj[df_result_obj['fond'] == fond]
+            #     if df_result_fond.empty:
+            #         continue
+            #     gdf_result_fond = gpd.GeoDataFrame(df_result_fond)
+            #     gdf_current_research = gpd.GeoDataFrame(df_input[list(map(lambda x:
+            #                                                               len(set(x.replace(" ", "").split(",")) &
+            #                                                                   set([obj])) > 0, df_input.workHorizon))])
+            #     gdf_current_research = gdf_current_research[gdf_current_research['fond'] == fond]
+            #
+            #     ax = gpd.GeoSeries(gdf_result_fond.AREA).plot(color="springgreen", figsize=[20, 20])
+            #     gpd.GeoSeries(gdf_result_fond.AREA).boundary.plot(ax=ax, color='green')
+            #
+            #     for x, y, label in zip(gdf_current_research.coordinateX.values,
+            #                            gdf_current_research.coordinateY.values,
+            #                            gdf_current_research.wellName):
+            #         ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy",
+            #                     fontsize=6)
+            #
+            #     for x, y, label in zip(gdf_result_fond.coordinateX.values,
+            #                            gdf_result_fond.coordinateY.values,
+            #                            gdf_result_fond.wellName):
+            #         ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
+            #
+            #     gdf_current_research = gdf_current_research.set_geometry('POINT')
+            #     gdf_current_research.plot(ax=ax, color='black', markersize=14, marker='^')
+            #     gdf_current_research = gdf_current_research.set_geometry('GEOMETRY')
+            #     gdf_current_research.plot(ax=ax, color='black', markersize=14, marker='^')
+            #     gdf_result_fond = gdf_result_fond.set_geometry('POINT')
+            #     gdf_result_fond.plot(ax=ax, color="blue", markersize=14, marker='^')
+            #     gdf_result_fond = gdf_result_fond.set_geometry('GEOMETRY')
+            #     gdf_result_fond.plot(ax=ax, color='blue', markersize=14, marker='^')
+            #
+            #     plt.savefig(
+            #         f'output/mesh/MESH {obj.replace('/', '_')}, {contour_name}, fond = {fond}, k = {mult_coef}.png',
+            #         dpi=200)
+            #     plt.title(
+            #         f'Объект: {obj.replace('/', '_')}, {contour_name}, (fond = {fond}, k = {mult_coef})')

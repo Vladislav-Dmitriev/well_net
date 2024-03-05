@@ -1,8 +1,10 @@
 import json
+import math
 import os
 import sys
 
 import numpy as np
+import pandas as pd
 import yaml
 from scipy.optimize import fsolve
 
@@ -72,7 +74,8 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     """
     Рассчет коэффициента для формулы по вычислению времени исследования скважины
     При умножении этого коэффицента на радиус охвата, получаем время исследования
-    :param gas_status:
+    :param gas_status: тип скважины для выбора формулы расчета времени КВД (нефтяная, газовая, газоконденсатная,
+     водонагнетательная, газонагнетательная, поглощающая, пьезометрическая)
     :param oilfield: название месторождения
     :param Wc: обводненность
     :param objects: название пласта
@@ -111,14 +114,18 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
             phi += dict_property[oilfield][obj]['porosity'] / 100
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_degree) / np.power(1 - Swo - Sno, Kro_degree))
+            if math.isnan(K_o):
+                K_o = 0
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_degree) / np.power(1 - Swo - Sno, Krw_degree))
+            if math.isnan(K_w):
+                K_w = 0
             k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
@@ -149,14 +156,18 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             elif water_cut == 0:
                 Sw = Swo
             else:
-                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), 0.5)[0]
+                Sw = fsolve(lambda x: wc_func(x, water_cut, coef, Sno, Swo, Krw_func, Kro_func), np.array(0.5))[0]
 
             mu += ((mu_oil + mu_water) /
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
             phi += dict_property[oilfield]['DEFAULT_OBJ']['porosity'] / 100
             K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_func) / np.power(1 - Swo - Sno, Kro_func))
+            if math.isnan(K_o):
+                K_o = 0
             K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_func) / np.power(1 - Swo - Sno, Krw_func))
+            if math.isnan(K_w):
+                K_w = 0
             k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
@@ -168,11 +179,22 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     gas_viscocity = gas_viscocity / (num_obj + num_default)
     pressure = pressure / (num_obj + num_default)
     if 'газ' in str(gas_status).lower():
-        time_coef = phi * gas_viscocity * (10 ** (-3)) / (4 * k * pressure * (10 ** (-10)) * 3600 * 24)
+        time_coef = phi * gas_viscocity * 10.2 / (4 * k * pressure * 3600 * 24 * 10 ** (-6))
     else:
-        time_coef = 462.2824 * (mu * ct * phi / k) / 94  # сутки
+        time_coef = 462.2824 * (mu * ct * phi / k) / 24  # сутки
 
     return [time_coef, mu, ct, phi, k, gas_viscocity, pressure, num_default, len(list_obj)]
+
+
+def dict_keys(list_r, contour_name):
+    """
+    :param list_r: список коэффициентов для умножения радиуса
+    :param contour_name: имя контура
+    :return: словарь с ключами из коэффициентов и имени текущего контура
+    """
+    list_keys = [f'{contour_name}, k = {x}' for x in list_r]
+    dict_result = dict.fromkeys(list_keys, [pd.DataFrame(), None])
+    return dict_result
 
 
 def upload_parameters(path):
@@ -199,6 +221,10 @@ def upload_parameters(path):
     exception = dict_parameters['exception_file']
     exception = None if exception == "нет" else exception
     dict_parameters['exception_file'] = exception
+
+    list_order = dict_parameters['list_order_fond']
+    list_order = (list_order.upper()).split(', ')
+    dict_parameters['list_order_fond'] = list_order
 
     return dict_parameters
 
