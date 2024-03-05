@@ -24,7 +24,7 @@ def get_polygon_well(R_well, type_well, *coordinates):
         raise NameError(f'Wrong well type: {type_well}. Allowed values: vertical or horizontal')
 
 
-def check_intersection_area(area, df_points, percent, calc_option=True):
+def check_intersection_area(area, df_points, percent, calc_option):
     """
     Проверка входят ли скважины из df_point в зону другой скважины area
     :param percent: процент попадания скважины в зону охвата area
@@ -53,7 +53,7 @@ def check_intersection_area(area, df_points, percent, calc_option=True):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
-def check_intersection_point(point, df_areas, percent, calc_option=True):
+def check_intersection_point(point, df_areas, percent, calc_option):
     """
     Функция позволяет узнать, перечесение со сколькими зонами имеет определенная скважина
     :param calc_option: флаг переключения сценария охвата скважин
@@ -118,14 +118,19 @@ def optimization(df_prod, df_inj_piez):
     :return: Возвращает обновленный список нагнетательных/пьезометров
     """
     list_inj_piez_wells = []
-    # выделяем пьезометры/нагнетательные из добывающих, у которых только 1 пересечение
+    # выделяем из столбца пересечений DataFrame продуктивных скважин строки, где добывающие охвачены только 1
+    # пьезометром, и включаем эти пьезометры в список
     list_inj_piez_wells += list(df_prod[df_prod['number'] == 1]['intersection'].explode().unique())
+    # по выделенному списку пьезометров из DataFrame пьезометрических скважин выделяем добывающие, которые охвачены ими
     list_prod_wells = df_inj_piez[
         df_inj_piez['wellName'].isin(list_inj_piez_wells)]['intersection'].explode().unique()
-    # создаем dataframe оптимизации, исключая скважины с одним пересечением с добывающей
+    # создаем dataframe оптимизации из DataFrame пьезометров, исключая те пьезометры, которые единственные охватывают
+    # одну из добывающих скважин, их в любом случае включаем в опорную сеть
     df_optim = df_inj_piez[~df_inj_piez['wellName'].isin(list_inj_piez_wells)]
+    # из столбца пересечений DataFrame оптимизации удаляются все добывающие, которые охвачены только 1 пьезометром
     df_optim.intersection = list(
         map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim['intersection']))
+    # добавление столбца с кол-вом пересечений
     df_optim.number = list(map(lambda x: len(x), df_optim['intersection']))
     # отсеиваются одиночные скважины, не имеющие пересечений
     df_optim = df_optim[df_optim['number'] > 0]

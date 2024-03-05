@@ -5,14 +5,13 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from calculation_wells import calc_contour
+from calculation_wells import calculation
 from dictionaries import dict_constant
 from functions import upload_parameters, get_path
 from geometry import check_intersection_area, load_contour
-from mapping import mesh_visualization
+from mapping import mesh_visualization, visualization
 from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
-from print_in_excel import write_cluster_mesh
-from wells_clustering import calc_regular_mesh
+from print_in_excel import write_cluster_mesh, write_to_excel
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -54,8 +53,6 @@ if __name__ == '__main__':
 
     well_out_contour = set(df_input.wellName.values)
     dict_result = {}
-    dict_mesh = {}
-    dict_mesh_hole = {}
     list_wells_in_contour = []
 
     if contours_content:
@@ -72,8 +69,8 @@ if __name__ == '__main__':
             if df_in_contour.empty:
                 continue
 
-            dict_result.update(calc_contour(polygon, df_in_contour, contour_name, path_property,
-                                            list_exception, dict_parameters, **dict_constant))
+            dict_result.update(calculation(polygon, df_in_contour, contour_name, path_property,
+                                           list_exception, dict_parameters))
             well_out_contour = well_out_contour.difference(wells_in_contour)
 
     else:
@@ -85,19 +82,20 @@ if __name__ == '__main__':
     if not df_out_contour.empty:
         contour_name = 'out_contour'
         # расчет для скважин вне контура
-        # dict_mesh_hole.update(calc_mesh_by_holes(df_out_contour, dict_parameters, contour_name))
-        dict_mesh.update(calc_regular_mesh(df_out_contour, dict_parameters, contour_name))
-        # dict_result.update(calc_contour(polygon, df_out_contour, contour_name, path_property,
-        #                                 list_exception, dict_parameters, **dict_constant))
+        dict_result.update(calculation(polygon, df_out_contour, contour_name, path_property,
+                                       list_exception, dict_parameters))
 
-    # # MAP drawing_____________________________________________________________________________________________________
-    mesh_visualization(df_out_contour, dict_mesh)
-    # PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
-    # df_input_prod = df_input.loc[df_input['fond'] == 'ДОБ']
-    # visualization(df_input_prod, dict_parameters['percent'], dict_result)
-    # # Start print in Excel
-    # write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
-    write_cluster_mesh(dict_mesh)
+    # MAP drawing_____________________________________________________________________________________________________
+    if dict_parameters['calculation_scenario'] == 'optimize':
+        df_input_prod = df_input.loc[df_input['fond'] == 'ДОБ']
+        visualization(df_input_prod, dict_parameters['percent'], dict_result)
+        # Start print in Excel
+        write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
+    else:
+        mesh_visualization(df_out_contour, dict_result)
+        # Start print in Excel
+        write_cluster_mesh(df_input, dict_result, dict_parameters['percent'])
+
     logger.info("End of calculation")
 
     pass

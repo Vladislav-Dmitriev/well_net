@@ -457,8 +457,6 @@ def preparing_reservoir_properties(dict_parameters, path):
                        'water_visc', 'gas_visc', 'K_wmax', 'K_omax', 'Swo', 'Swk', 'Sno',
                        'Krw_degree', 'Krw_func', 'Kro_degree', 'Kro_func', 'K_abs']
     list_oilfield = list(df_property['oilfield'].explode().unique())
-
-    dict_properties = dict.fromkeys(list_properties)
     # запись свойств в словарь по данным из файла в виде месторождение/объект/свойства
     dict_PVT = {}
     for oil_res in list_oilfield_res:
