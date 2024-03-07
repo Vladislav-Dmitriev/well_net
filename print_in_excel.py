@@ -3,7 +3,7 @@ import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
-from functions import unpack_status
+from auxiliary_functions import unpack_status
 from geometry import check_intersection_area
 
 
@@ -42,7 +42,7 @@ def write_cluster_mesh(df_input, dict_result, percent):
         'time_coef': 'Коэффициент для расчет времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
-        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
+        'pressure': 'Начальное пластовое давление (карты изобар), атм',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
         'percent_of_default': 'Процент объектов со свойствами по умолчанию',
@@ -62,7 +62,8 @@ def write_cluster_mesh(df_input, dict_result, percent):
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
-    for key, value in dict_result.items():
+    for key, value in tqdm(dict_result.items(), "Write to excel file", position=0, leave=True,
+                           colour='white', ncols=80):
         name = str(key).replace("/", " ")
 
         if f"{name}" in new_wb.sheets:
@@ -86,8 +87,9 @@ def write_cluster_mesh(df_input, dict_result, percent):
         df_in_contour.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'mean_oilrate', 'gasStatus', 'min_dist'],
-                axis=1, inplace=True)
+        df.drop(
+            columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'mean_oilrate', 'limit_oilrate', 'gasStatus', 'min_dist'],
+            axis=1, inplace=True)
         df['wellNet'] = 'Выбрана в опорную сеть'
         list_wellnet = list(df['wellName'].explode().unique())
         df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]
@@ -143,7 +145,7 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
         'time_coef': 'Коэффициент для расчет времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
-        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
+        'pressure': 'Начальное пластовое давление (карты изобар), атм',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
         'percent_of_default': 'Процент объектов со свойствами по умолчанию',
@@ -187,9 +189,8 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
             df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA', 'gasStatus', 'mean_oilrate'],
-                axis=1,
-                inplace=True)
+        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA',
+                         'gasStatus', 'mean_oilrate', 'limit_oilrate'], axis=1, inplace=True)
         df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
 
         list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин

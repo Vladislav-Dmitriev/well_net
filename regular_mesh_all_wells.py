@@ -5,7 +5,7 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 
 from FirstRowWells import mean_radius
-from functions import dict_keys
+from auxiliary_functions import dict_keys
 from geometry import add_shapely_types, check_intersection_area
 
 

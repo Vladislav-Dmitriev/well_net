@@ -5,9 +5,9 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 
 from FirstRowWells import mean_radius
-from functions import get_time_coef, get_property, dict_keys
+from auxiliary_functions import get_time_coef, get_property, dict_keys
 from geometry import intersect_number, optimization, check_intersection_area, add_shapely_types
-from wells_clustering import calc_regular_mesh
+from regular_mesh_intersections import calc_regular_mesh
 
 
 def calculation(polygon, df_in_contour, contour_name, path_property, list_exception, dict_parameters):
@@ -24,7 +24,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
-    # list_objects = ['БС12']
+    # list_objects = ['НП4']
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
@@ -50,7 +50,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
             obj_square.buffer(mean_rad)).area  # площадь охватывающая все скважины объекта, попавшие на расчет
 
         for key, coeff in zip(dict_result, dict_parameters['mult_coef']):
-            # coeff = 2.5
+            # coeff = 1
             logger.info(f'Add shapely types with coefficient = {coeff}')
             df_horizon = add_shapely_types(df_horizon, mean_rad, coeff)
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта
@@ -80,6 +80,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                     f'Wrong marker name: {dict_parameters['calculation_scenario']}. Check parameters.yml file')
 
             df_result['mean_oilrate'] = mean_oilrate
+            df_result['limit_oilrate'] = dict_parameters['limit_oilrate']
             logger.info(f'Write to result dictionary by key {key}')
             dict_result[key] = [pd.concat([dict_result[key][0], df_result],
                                           axis=0, sort=False).reset_index(drop=True), polygon]
@@ -343,11 +344,11 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     # df_result['phi'] = list(map(lambda x: x[3], df_result['time_coef/objects']))
     df_result['k'] = list(map(lambda x: x[4], df_result['time_coef/objects']))  # проницаемость
     df_result['gas_visc'] = list(map(lambda x: x[5], df_result['time_coef/objects']))  # вязкость газа в пл. условиях
-    df_result['pressure'] = list(map(lambda x: x[6], df_result['time_coef/objects']))  # пл. давление кгс/см2
+    df_result['pressure'] = list(map(lambda x: x[6], df_result['time_coef/objects']))  # пл. давление атм
     df_result['default_count'] = list(map(lambda x: x[7], df_result['time_coef/objects']))  # кол-во объектов
     # со свойствами по умолчанию
     df_result['obj_count'] = list(map(lambda x: x[8], df_result['time_coef/objects']))
-    df_result['percent_of_default'] = list(map(lambda x: 100 * x[5] / x[6], df_result['time_coef/objects']))  # процент
+    df_result['percent_of_default'] = list(map(lambda x: 100 * x[7] / x[8], df_result['time_coef/objects']))  # процент
     # объектов со свойствами по умолчанию
     df_result.drop(['time_coef/objects'], axis=1, inplace=True)
     df_result['current_horizon'] = horizon  # добавления столбца объектов для понимания, по какому идет расчет

@@ -4,7 +4,7 @@ from shapely.ops import cascaded_union
 from shapely.ops import unary_union
 from tqdm import tqdm
 
-from functions import get_property, get_time_coef
+from auxiliary_functions import get_property, get_time_coef
 from geometry import check_intersection_area
 
 
@@ -70,24 +70,10 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
 
         df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
 
-        if current_area == 0:
-            list_polygons = list(df_current_result['AREA'].explode())
-            current_area = cascaded_union(list_polygons)
-        else:
-            list_polygons = list_polygons + list(df_current_result['AREA'].explode())
-            current_area = cascaded_union(list_polygons)
+        # функция проверки процента скважин в опорной сети от текущего фонда
 
-        # ax = gpd.GeoSeries(current_area).plot(color="springgreen", figsize=[20, 20])
-        # gpd.GeoSeries(current_area).boundary.plot(ax=ax, color='green')
-        # df_current_result = df_current_result.set_geometry('GEOMETRY')
-        # df_current_result.plot(ax=ax, color='black', markersize=14, marker='^')
-        # for x, y, label in zip(df_current_result.coordinateX.values,
-        #                        df_current_result.coordinateY.values,
-        #                        df_current_result.wellName):
-        #     ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy",
-        #                 fontsize=6)
-        # plt.savefig(f'output/MESH_test_{fond}.png', dpi=200)
-        # plt.clf()
+        list_polygons = list_polygons + list(df_current_result['AREA'].explode())
+        current_area = cascaded_union(list_polygons)
 
         df_current_result[
             'mean_radius'] = mean_rad * coeff  # столбец с текущим средним радиусом по объекту, домножается на коэфф.
@@ -110,7 +96,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
         # со свойствами по умолчанию
         df_current_result['obj_count'] = list(map(lambda x: x[8], df_current_result['time_coef/objects']))
         df_current_result['percent_of_default'] = list(
-            map(lambda x: 100 * x[5] / x[6], df_current_result['time_coef/objects']))  # процент
+            map(lambda x: 100 * x[7] / x[8], df_current_result['time_coef/objects']))  # процент
         # объектов со свойствами по умолчанию
         df_current_result.drop(['time_coef/objects'], axis=1, inplace=True)
         df_current_result[

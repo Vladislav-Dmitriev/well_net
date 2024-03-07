@@ -5,9 +5,9 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
+from auxiliary_functions import upload_parameters, get_path
 from calculation_wells import calculation
 from dictionaries import dict_constant
-from functions import upload_parameters, get_path
 from geometry import check_intersection_area, load_contour
 from mapping import mesh_visualization, visualization
 from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
@@ -92,7 +92,7 @@ if __name__ == '__main__':
         # Start print in Excel
         write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
     else:
-        mesh_visualization(df_out_contour, dict_result)
+        mesh_visualization(df_input, dict_result, dict_parameters['percent'])
         # Start print in Excel
         write_cluster_mesh(df_input, dict_result, dict_parameters['percent'])
 

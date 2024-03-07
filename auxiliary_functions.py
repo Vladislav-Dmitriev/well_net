@@ -171,15 +171,14 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
-    # time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
     mu = mu / (num_obj + num_default)
     ct = ct / (num_obj + num_default)
     phi = phi / (num_obj + num_default)
     k = k / (num_obj + num_default)
     gas_viscocity = gas_viscocity / (num_obj + num_default)
-    pressure = pressure / (num_obj + num_default)
+    pressure = (pressure / (num_obj + num_default)) / 1.033
     if 'газ' in str(gas_status).lower():
-        time_coef = phi * gas_viscocity * 10.2 / (4 * k * pressure * 3600 * 24 * 10 ** (-6))
+        time_coef = phi * gas_viscocity / (4 * k * pressure * 3600 * 24 * 10 ** (-7))
     else:
         time_coef = 462.2824 * (mu * ct * phi / k) / 24  # сутки
 

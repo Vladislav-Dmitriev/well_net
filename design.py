@@ -8,7 +8,7 @@ matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
-from functions import get_path
+from auxiliary_functions import get_path
 # from main import func_main
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *

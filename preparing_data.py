@@ -8,8 +8,8 @@ import pandas as pd
 from loguru import logger
 from shapely.geometry import Point, LineString
 
+from auxiliary_functions import get_path, clean_work_horizon, unpack_status, exception_marker
 from dictionaries import dict_geobd_columns, dict_names_column
-from functions import get_path, clean_work_horizon, unpack_status, exception_marker
 
 
 def upload_input_data(dict_constant, dict_parameters):
