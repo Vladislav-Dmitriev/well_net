@@ -232,14 +232,21 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
 def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon, mean_rad, coeff, key,
                  obj_square, path_property, list_exception, dict_parameters):
     """
-    Функция для расчета скважин, включающая в себя все функции расчета отдельных типов скважин
+    Функция расчета оптимальной опорной сетки, включающая в себя все функции обработки отдельных типов скважин
+    :param obj_square: площадь объекта по крайним скважинам с отступом на средний радиус исследования
+    :param key: результирующего ключ словаря
+    :param coeff: коэффиуиент кратного увеличения радиуса
+    :param mean_rad: средний радиус первого ряда окружения по объекту
+    :param horizon: текущий объект расчета
+    :param df_result: результирующий DataFrame
+    :param df_inj_wells: DataFrame нагнетательных скважин
+    :param df_piez_wells: DataFrame пьезометрических скважин
+    :param df_prod_wells: DataFrame добывающих скважин
     :param dict_parameters: словарь с параметрами (коэффициенты на радиус, углы перекрытия и тд)
     :param list_exception: список исключаемых из расчета скважин
     "слепых" зон и скважин в них
     :param path_property: путь к файлу с параметрами
-    :param df_in_contour: DataFrame, полученные из исходного файла со свкажинами
     средним радиусом в этом случае для построения области взаимодействия будет заданное максимальное расстояние
-    :param contour_name: Название файла с координатами текущего контура без расширения файла
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
 
@@ -293,8 +300,9 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                  df_result):
     """
     Функция для расчета результирующего DataFrame по объекту
+    :param max_time_research: ограничение максимального времени исследования ННС
+    :param min_time_research: ограничение минимального времени исследования ННС
     :param obj_square: площадь объекта месторождения по краевым скважинам
-    :param dict_constant: словарь со статусами работы скважин
     :param list_prod_exception: список исключаемых из расчета скважин
     :param path_property: путь к файлу со свойствами
     :param percent: процент длины траектории скважины для включения в зону охвата

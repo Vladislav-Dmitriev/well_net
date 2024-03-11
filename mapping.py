@@ -23,10 +23,10 @@ def clean_pictures_folder(path):
 
 def visualization(df_input_prod, percent, dict_result):
     """
-    Функция визуализации полученных результатов
+    Визуализация полученных результатов сценария с оптимальным охватом исследованиями добывающего фонда
     :param percent: процент длины траектории скважины, при котором она попадает в контур
     :param df_input_prod: DataFrame продуктивных скважин из исходного файла
-    :param dict_result: словарь для записи результатов
+    :param dict_result: словарь с результатами расчета
     :return: Сохраняет график, построенный по итерируемому объекту, в указанную директорию
     """
     # удаление старых графиков
@@ -199,6 +199,13 @@ def visualization(df_input_prod, percent, dict_result):
 
 
 def mesh_visualization(df_input, dict_mesh, percent):
+    """
+    Визуализация результатов, полученных в ходе сценария с построением ОС для каждого фонда по отдельности
+    :param df_input: DataFrame с исходными данными
+    :param dict_mesh: словарь с результатами расчета
+    :param percent: процент длины траектории скважины, при котором она попадает в контур
+    :return: Сохраняет график, построенный по итерируемому объекту, в указанную директорию
+    """
     logger.info("Clean pictures folder")
     clean_pictures_folder('output/mesh/')
 

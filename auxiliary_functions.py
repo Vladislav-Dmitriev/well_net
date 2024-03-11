@@ -61,10 +61,31 @@ def get_property(path):
 
 
 def wc_func(x, water_cut, const, S_o_init, S_w_init, Corey_w, Corey_o):
+    """
+    Функция зависимости обводненности от водонасыщенности
+    :param x: начальное приближение для поиска корня уравнения
+    :param water_cut: обводненность
+    :param const: коэффициент перед функцией (начальная водонасыщенность, остаточная нефтенасыщенность, вязкости, проницаемости)
+    :param S_o_init: остаточная нефтенасыщенность
+    :param S_w_init: начальная водонасыщенность
+    :param Corey_w: степень Кори для воды
+    :param Corey_o: степень Кори для нефти
+    :return: возвращает значение функции обводненности
+    """
     return -water_cut + (1 / (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w))
 
 
 def wc_func_derivative(x, const, S_o_init, S_w_init, Corey_w, Corey_o):
+    """
+    Производная функции зависимости обводненности от водонасыщенности
+    :param x: начальное приближение для поиска корня уравнения
+    :param const: коэффициент перед функцией (начальная водонасыщенность, остаточная нефтенасыщенность, вязкости, проницаемости)
+    :param S_o_init: остаточная нефтенасыщенность
+    :param S_w_init: начальная водонасыщенность
+    :param Corey_w: степень Кори для воды
+    :param Corey_o: степень Кори для нефти
+    :return: возвращает значение производной функции обводненности
+    """
     return (Corey_o * const * (1 - x - S_o_init) ** (Corey_o - Corey_w) * (x - S_w_init) ** (- Corey_w)
             - Corey_w * const * (1 - x - S_o_init) ** Corey_o * (x - S_w_init) ** (- Corey_w - 1) /
             (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w) ** 2)

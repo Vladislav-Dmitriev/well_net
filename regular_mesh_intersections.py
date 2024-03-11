@@ -71,6 +71,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
         df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
 
         # функция проверки процента скважин в опорной сети от текущего фонда
+        # count_wellnet =
 
         list_polygons = list_polygons + list(df_current_result['AREA'].explode())
         current_area = cascaded_union(list_polygons)

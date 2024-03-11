@@ -9,7 +9,7 @@ from auxiliary_functions import dict_keys
 from geometry import add_shapely_types, check_intersection_area
 
 
-def calc_mesh_by_holes(df_input, dict_parameters, contour_name):
+def calc_steady_mesh(df_input, dict_parameters, contour_name):
     """
     Расчет регулярной сетки для каждого объекта/радиуса исследования/фонда
     :param df_input: DataFrame исходных данных по скважинам
@@ -35,13 +35,13 @@ def calc_mesh_by_holes(df_input, dict_parameters, contour_name):
         for key, coeff in zip(dict_holes_result, dict_parameters['mult_coef']):
             logger.info(f'Calculate by key {key} with coefficient {coeff}')
             df_horizon = add_shapely_types(df_horizon, mean_rad, coeff)
-            df_result = holes_calc_fond(df_horizon, dict_parameters, mean_rad, coeff)
+            df_result = steady_calc_fond(df_horizon, dict_parameters, mean_rad, coeff)
             dict_holes_result[key] = pd.concat([dict_holes_result[key], df_result], axis=0, sort=False).reset_index(
                 drop=True)
     return dict_holes_result
 
 
-def holes_calc_fond(df_horizon, dict_parameters, mean_rad, coeff):
+def steady_calc_fond(df_horizon, dict_parameters, mean_rad, coeff):
     """
     Расчет регулярной сети по обекту месторождения
     :param df_horizon: DataFrame скважин, выделенный из исходных данных на текущий объект работы
