@@ -1,7 +1,7 @@
 import geopandas as gpd
 import pandas as pd
 from loguru import logger
-from shapely.ops import unary_union
+from shapely.ops import unary_union, cascaded_union
 from tqdm import tqdm
 
 from FirstRowWells import mean_radius
@@ -24,7 +24,6 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
-    # list_objects = ['НП4']
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
@@ -32,28 +31,32 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
         df_horizon = df_in_contour[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                      df_in_contour.workHorizon))]
+        df_proj_wells = df_horizon[df_horizon['fond'] == 'ПРОЕКТ']
         # вычисление среднего дебита продуктивных скважин по текущему объекту расчета
         if df_horizon[df_horizon['fond'] == 'ДОБ'].shape[0] == 0:
             mean_oilrate = 0
         else:
-            mean_oilrate = df_horizon[df_horizon['fond'] == 'ДОБ']['oilRate'].mean() * dict_parameters[
-                'percent_oilrate'] / 100
+            mean_oilrate = (df_horizon[df_horizon['fond'] == 'ДОБ']['oilRate'].mean()
+                            * dict_parameters['percent_oilrate'] / 100)
         # расчет среднего и минимального радиуса первого окружения по объекту
-        mean_rad, df_horizon = mean_radius(df_horizon, dict_parameters['verticalWellAngle'],
+        mean_rad, df_horizon = mean_radius(df_horizon[df_horizon['fond'] != 'ПРОЕКТ'],
+                                           dict_parameters['verticalWellAngle'],
                                            dict_parameters['MaxOverlapPercent'],
                                            dict_parameters['angle_horizontalT1'],
-                                           dict_parameters['angle_horizontalT3'], dict_parameters['max_distance'])
+                                           dict_parameters['angle_horizontalT3'],
+                                           dict_parameters['max_distance'])
         logger.info(f'Research radius for horizon {horizon} calculated')
-        # площадь многоугольника построенного по крайним скважинам, попавшим на расчет
-        obj_square = unary_union(list(df_horizon['GEOMETRY'].explode())).convex_hull
-        obj_square = (
-            obj_square.buffer(mean_rad)).area  # площадь охватывающая все скважины объекта, попавшие на расчет
 
         for key, coeff in zip(dict_result, dict_parameters['mult_coef']):
-            # coeff = 1
+            # площадь многоугольника построенного по крайним скважинам, попавшим на расчет
+            obj_square = unary_union(list(df_horizon[df_horizon['fond'] != 'ПРОЕКТ']['GEOMETRY'].explode())).convex_hull
+            obj_square = obj_square.buffer(
+                mean_rad * coeff).area  # площадь охватывающая все скважины объекта, попавшие на расчет
+
             logger.info(f'Add shapely types with coefficient = {coeff}')
             df_horizon = add_shapely_types(df_horizon, mean_rad, coeff)
-            # выделение продуктивных, нагнетательных и исследуемых скважин для объекта
+            # выделение продуктивных, нагнетательных и исследуемых скважин для объекта, дебит нефти которых не превышает
+            # среднего дебита нефти по объекту
             df_prod_wells = df_horizon.loc[(df_horizon['fond'] == 'ДОБ') &
                                            (df_horizon['oilRate'] <= mean_oilrate)]
             if dict_parameters['limit_oilrate'] != 0:
@@ -67,13 +70,13 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                 logger.info(f'Selected first scenario')
                 if df_prod_wells.empty:  # если DataFrame с добывающими скважинами пустой, то вычисления по объекту нет
                     continue
-                df_result = calc_contour(df_prod_wells, df_piez_wells, df_inj_wells,
+                df_result = calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                                          df_result, horizon, mean_rad, coeff, key, obj_square,
                                          path_property, list_exception, dict_parameters)
             elif dict_parameters['calculation_scenario'] == 'regular':
                 logger.info(f'Selected second scenario')
-                df_result = calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
-                                              path_property, dict_parameters, obj_square, mean_rad, coeff)
+                df_result = calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result,
+                                              horizon, path_property, dict_parameters, obj_square, mean_rad, coeff)
 
             else:
                 raise NameError(
@@ -87,9 +90,10 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     return dict_result
 
 
-def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent):
+def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обрабатывает DataFrame из пьезометров, подающийся на вход
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param df_piez_wells: DataFrame из пьезометров, выделенный из входного файла
     :param hor_prod_wells: DataFrame из добывающих скважин
@@ -103,12 +107,12 @@ def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent):
     if not df_piez_wells.empty:
 
         # check_intersection
-        hor_prod_wells, df_piez_wells = intersect_number(hor_prod_wells, df_piez_wells, percent)
+        hor_prod_wells, df_piez_wells = intersect_number(hor_prod_wells, df_piez_wells, percent, calc_option)
 
         # !!!OPTIMIZATION!!!
         list_piez_wells = optimization(hor_prod_wells, df_piez_wells)
 
-        # final list of piezometers to result_df
+        # final list of piezometers to df_result
         df_result = pd.concat([df_result, df_piez_wells[df_piez_wells.wellName.isin(list_piez_wells)]],
                               axis=0, sort=False).reset_index(drop=True)
 
@@ -120,9 +124,10 @@ def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent):
     return isolated_wells, df_piez_wells, hor_prod_wells, df_result
 
 
-def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
+def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame нагнетательных скважин
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
@@ -139,7 +144,7 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
     if not df_inj_wells.empty:
 
         # check_intersection
-        hor_prod_wells, df_inj_wells = intersect_number(hor_prod_wells, df_inj_wells, percent)
+        hor_prod_wells, df_inj_wells = intersect_number(hor_prod_wells, df_inj_wells, percent, calc_option)
 
         # !!!OPTIMIZATION!!!
         list_inj_wells = optimization(hor_prod_wells, df_inj_wells)
@@ -158,9 +163,10 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent):
     return isolated_wells, hor_prod_wells, df_inj_wells, df_result
 
 
-def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, percent):
+def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame одиночных скважин
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param list_exception: список исключаемых из расчета скважин
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
@@ -179,7 +185,7 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
     hor_prod_wells.insert(loc=hor_prod_wells.shape[1], column="intersection",
                           value=list(map(lambda x, y:
                                          check_intersection_area(x, hor_prod_wells[hor_prod_wells.wellName != y],
-                                                                 percent, True),
+                                                                 percent, calc_option),
                                          hor_prod_wells.AREA, hor_prod_wells.wellName)))
     hor_prod_wells.insert(loc=hor_prod_wells.shape[1], column="number",
                           value=list(map(lambda x: len(x), hor_prod_wells['intersection'])))
@@ -229,7 +235,7 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
     return clean_wells, hor_prod_wells, df_result
 
 
-def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon, mean_rad, coeff, key,
+def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, horizon, mean_rad, coeff, key,
                  obj_square, path_property, list_exception, dict_parameters):
     """
     Функция расчета оптимальной опорной сетки, включающая в себя все функции обработки отдельных типов скважин
@@ -242,6 +248,7 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
     :param df_inj_wells: DataFrame нагнетательных скважин
     :param df_piez_wells: DataFrame пьезометрических скважин
     :param df_prod_wells: DataFrame добывающих скважин
+    :param df_proj_wells: DataFrame проектных скважин
     :param dict_parameters: словарь с параметрами (коэффициенты на радиус, углы перекрытия и тд)
     :param list_exception: список исключаемых из расчета скважин
     "слепых" зон и скважин в них
@@ -252,8 +259,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
 
     df_result = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad, coeff,
                              horizon, obj_square, dict_parameters['min_research_time'],
-                             dict_parameters['max_research_time'], df_piez_wells, df_prod_wells,
-                             df_inj_wells, df_result)
+                             dict_parameters['max_research_time'], dict_parameters['calc_option'], df_piez_wells,
+                             df_prod_wells, df_inj_wells, df_result.copy())
     df_result['year_of_survey'] = 0  # для скважин первой итерации расчета год исследования ставится текущий
 
     if (coeff > dict_parameters['limit_radius_coef']) and (dict_parameters['separation_by_years'] is not None):
@@ -265,7 +272,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
 
         list_invisible_wells = get_invisible_wells(df_result.copy(), df_prod_intersection,
                                                    dict_parameters['percent'], mean_rad, dict_parameters[
-                                                       'limit_radius_coef'])  # список скважин в слепой зоне
+                                                       'limit_radius_coef'],
+                                                   dict_parameters['calc_option'])  # список скважин в слепой зоне
         if not list_invisible_wells:
             logger.info(f'Write to result dictionary by key {key}, there are not invisible wells')
             return df_result
@@ -278,8 +286,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
         df_inj_recalc = add_shapely_types(df_inj_wells, mean_rad, dict_parameters['limit_radius_coef'])
         df_result_invisible = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad,
                                            coeff, horizon, obj_square, dict_parameters['min_research_time'],
-                                           dict_parameters['max_research_time'], df_piez_recalc, df_prod_recalc,
-                                           df_inj_recalc, df_result_invisible)
+                                           dict_parameters['max_research_time'], dict_parameters['calc_option'],
+                                           df_piez_recalc, df_prod_recalc, df_inj_recalc, df_result_invisible)
         if dict_parameters['separation_by_years'] == 1:
             df_result_invisible['year_of_survey'] = 1
             df_result = pd.concat([df_result, df_result_invisible],
@@ -292,14 +300,24 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
         else:
             pass
 
+    # поиск охвата проектного фонда скважинами из ОС
+    if not df_proj_wells.empty:
+        list_proj_research = list(check_intersection_area(cascaded_union(list(df_result['AREA'].explode())),
+                                                          df_proj_wells, dict_parameters['percent'],
+                                                          dict_parameters['calc_option']))
+        df_proj_wells = df_proj_wells[df_proj_wells['wellName'].isin(list_proj_research)]
+        df_proj_wells['current_horizon'] = horizon
+        df_result = pd.concat([df_result, df_proj_wells], axis=0, sort=False).reset_index(drop=True)
+
     return df_result
 
 
 def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
-                 obj_square, min_time_research, max_time_research, df_piez_wells, df_prod_wells, df_inj_wells,
-                 df_result):
+                 obj_square, min_time_research, max_time_research, calc_option, df_piez_wells,
+                 df_prod_wells, df_inj_wells, df_result):
     """
     Функция для расчета результирующего DataFrame по объекту
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param max_time_research: ограничение максимального времени исследования ННС
     :param min_time_research: ограничение минимального времени исследования ННС
     :param obj_square: площадь объекта месторождения по краевым скважинам
@@ -324,21 +342,24 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
 
     isolated_wells, df_piez_wells, hor_prod_wells, df_result = piez_calc(df_piez_wells,
                                                                          df_prod_wells.copy(),
-                                                                         df_result, percent)
+                                                                         df_result, percent,
+                                                                         calc_option)
 
     # II. Injection wells______________________________________________________________________________________
     if len(isolated_wells):
         isolated_wells, hor_prod_wells, df_inj_wells, df_result = inj_calc(isolated_wells,
                                                                            hor_prod_wells,
                                                                            df_inj_wells,
-                                                                           df_result, percent)
+                                                                           df_result, percent,
+                                                                           calc_option)
 
         # III. Single wells____________________________________________________________________________________
         if len(isolated_wells):
             single_wells, hor_prod_wells, df_result = single_calc(list_prod_exception,
                                                                   isolated_wells,
                                                                   hor_prod_wells,
-                                                                  df_result, percent)
+                                                                  df_result, percent,
+                                                                  calc_option)
 
     df_result['mean_radius'] = mean_rad * coeff  # столбец с текущим средним радиусом по объекту, домножается на коэфф.
     df_result['min_dist'] = df_result['min_dist'] * coeff
@@ -347,6 +368,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['time_coef/objects'] = df_result.apply(
         lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.gasStatus), axis=1)
     df_result['time_coef'] = list(map(lambda x: x[0], df_result['time_coef/objects']))
+    # рассчитанные средние свойства по скважинам
     # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
     # df_result['ct'] = list(map(lambda x: x[2], df_result['time_coef/objects']))
     # df_result['phi'] = list(map(lambda x: x[3], df_result['time_coef/objects']))
@@ -399,9 +421,10 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     return df_result
 
 
-def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff):
+def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff, calc_option):
     """
     Функция получения скважин в слепой зоне при k > 1.5 (k*R)
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param coeff: коэффициент домножения радиуса
     :param df_recalc: копия результирующего DataFrame для выделения скважин в слепой зоне
     :param df_prod: DataFrame добывающих скважин
@@ -414,7 +437,7 @@ def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff):
     df_recalc['intersection'] = 0
     df_recalc['AREA'] = 0
     df_recalc = add_shapely_types(df_recalc, radius, coeff)
-    df_recalc['intersection'] = list(map(lambda x: check_intersection_area(x, df_prod, percent, True),
+    df_recalc['intersection'] = list(map(lambda x: check_intersection_area(x, df_prod, percent, calc_option),
                                          df_recalc.AREA))
     intersect_kR, intersect_R = (set(df_recalc['intersection_kR'].explode().unique()),
                                  set(df_recalc['intersection'].explode().unique()))

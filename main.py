@@ -1,4 +1,5 @@
 import os
+import time
 import warnings
 
 import geopandas as gpd
@@ -11,7 +12,7 @@ from dictionaries import dict_constant
 from geometry import check_intersection_area, load_contour
 from mapping import mesh_visualization, visualization
 from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
-from print_in_excel import write_cluster_mesh, write_to_excel
+from print_in_excel import write_optim_mesh, write_regular_mesh
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -87,15 +88,18 @@ if __name__ == '__main__':
 
     # MAP drawing_____________________________________________________________________________________________________
     if dict_parameters['calculation_scenario'] == 'optimize':
-        df_input_prod = df_input.loc[df_input['fond'] == 'ДОБ']
+        df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
         visualization(df_input_prod, dict_parameters['percent'], dict_result)
         # Start print in Excel
-        write_to_excel(dict_parameters['percent'], df_input, dict_result, **dict_constant)
+        write_optim_mesh(df_input, dict_result, dict_parameters['percent'],
+                         dict_parameters['calc_option'], **dict_constant)
     else:
         mesh_visualization(df_input, dict_result, dict_parameters['percent'])
         # Start print in Excel
-        write_cluster_mesh(df_input, dict_result, dict_parameters['percent'])
+        write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
 
     logger.info("End of calculation")
+
+    time.sleep(10)
 
     pass

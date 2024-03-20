@@ -9,7 +9,7 @@ from loguru import logger
 from shapely.geometry import Point, LineString
 
 from auxiliary_functions import get_path, clean_work_horizon, unpack_status, exception_marker
-from dictionaries import dict_geobd_columns, dict_names_column
+from dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
 def upload_input_data(dict_constant, dict_parameters):
@@ -22,6 +22,10 @@ def upload_input_data(dict_constant, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
+    # Upload project wells
+    df_project = pd.DataFrame()
+    if dict_parameters['project_fond_file'] is not None:
+        df_project = preparing_project_wells(dict_parameters)
 
     # Upload exception list wells
     list_exception = []
@@ -40,9 +44,9 @@ def upload_input_data(dict_constant, dict_parameters):
         first_row = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=None, sep=';',
                                 encoding='cp1251', nrows=1)
         use_encoding = 'cp1251'
-    # first_row = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']), header=None, nrows=1)
+
     if first_row.loc[0][0] == '№ скважины':
-        # base = 'NGT'
+
         logger.info("Preparing NGT data")
 
         df = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=0, sep=';',
@@ -51,9 +55,10 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input, date = preparing(dict_constant, df_input,
                                    dict_parameters['horizon_count'], dict_parameters['water_cut'],
                                    dict_parameters['fluid_rate'], list_exception)
+        # добавление DataFrame проектных скважин
+        df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
 
     elif first_row.loc[0][0] == 'NSKV':
-        # base = 'GeoBD'
 
         logger.info("Preparing GeoBD data")
 
@@ -62,9 +67,12 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
         df_input, date = preparing(dict_constant, df_input, dict_parameters['horizon_count'],
                                    dict_parameters['water_cut'], dict_parameters['fluid_rate'], list_exception)
+        # добавление DataFrame проектных скважин
+        df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
     else:
         print('Формат загруженного файла не подходит для модуля')
         sys.exit()
+
     return df_input, date, list_exception
 
 
@@ -107,7 +115,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input['well type'] = ''
     for well in list_well_names:
         objs = list(
-            df_input[df_input['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов месторождения
+            df_input[df_input['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов текущей скважины
         if len(set(df_input[df_input['UWI'] == well].NSKV)) > 1:  # если в столбце имен скважин уникальных больше 1,
             # но у них одинаковая кодировка, то это горизонтальная скважина
             df_input.loc[df_input['UWI'] == well, 'well type'] = 'horizontal'
@@ -148,6 +156,72 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input['injectivity_day'] = df_input['injectivity_day'] * 1000
 
     return df_input
+
+
+def preparing_project_wells(dict_parameters):
+    """
+    Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
+    :param dict_parameters: словарь с параметрами расчета
+    :return: подготовленный DataFrame с проектными скважинами
+    """
+    logger.info('Preparing project wells')
+    application_path = get_path()
+    df_project = pd.read_excel(os.path.join(application_path, dict_parameters['project_fond_file']),
+                               header=0, skiprows=[1], decimal='.')
+    df_project['NSKV'] = df_project['NSKV'].str.strip()
+    df_project['PLAST'] = df_project['PLAST'].str.strip()
+    df_project['UWI'] = df_project['NSKV'].str.replace('T3', '')
+
+    df_project['X3'] = 0
+    df_project['Y3'] = 0
+
+    list_well_names = list(df_project['UWI'].explode().unique())  # список уникальных названий скважин
+    df_project = df_project.sort_values(by=['NSKV'], ascending=True)
+    df_project.reset_index(drop=True)
+    df_project['well type'] = ''
+    for well in list_well_names:
+        objs = list(
+            df_project[df_project['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов скважины
+
+        if len(set(df_project[df_project['UWI'] == well].NSKV)) > 1:  # если в столбце имен скважин уникальных больше 1,
+            # но у них одинаковая кодировка, то это горизонтальная скважина
+            df_project.loc[df_project['UWI'] == well, 'well type'] = 'horizontal'
+
+        else:
+            df_project.loc[df_project['UWI'] == well, 'well type'] = 'vertical'
+
+        coord_x = list(df_project[df_project['UWI'] == well].X.explode().unique())
+        coord_y = list(df_project[df_project['UWI'] == well].Y.explode().unique())
+        df_project.loc[df_project['UWI'] == well, 'X'] = coord_x[0]
+        df_project.loc[df_project['UWI'] == well, 'X3'] = coord_x[-1]
+        df_project.loc[df_project['UWI'] == well, 'Y'] = coord_y[0]
+        df_project.loc[df_project['UWI'] == well, 'Y3'] = coord_y[-1]
+        # запись всех объектов работы текущей скважины в одну ячейку через запятую
+        df_project.loc[df_project['UWI'] == well, 'PLAST'] = df_project.apply(lambda x: ', '.join(objs), axis=1)
+
+    df_project = df_project.drop_duplicates(subset=['UWI'])
+    df_project.drop(columns=['UWI'], axis=1, inplace=True)
+    df_project = df_project[['NSKV', 'X', 'X3', 'Y', 'Y3', 'PLAST', 'well type']]
+    df_project.columns = dict_project_columns.values()
+
+    # add to input dataframe columns for shapely types of coordinates
+
+    df_project.insert(loc=df_project.shape[1], column="POINT",
+                      value=list(map(lambda x, y: Point(x, y), df_project.coordinateX, df_project.coordinateY)))
+
+    df_project.insert(loc=df_project.shape[1], column="POINT3",
+                      value=list(map(lambda x, y: Point(x, y), df_project.coordinateX3, df_project.coordinateY3)))
+    df_project.insert(loc=df_project.shape[1], column="GEOMETRY", value=0)
+    df_project["GEOMETRY"] = df_project["GEOMETRY"].where(df_project["well type"] != "vertical",
+                                                          list(map(lambda x: x, df_project.POINT)))
+    df_project["GEOMETRY"] = df_project["GEOMETRY"].where(df_project["well type"] != "horizontal",
+                                                          list(map(lambda x, y: LineString(
+                                                              tuple(x.coords) + tuple(y.coords)),
+                                                                   df_project.POINT, df_project.POINT3)))
+
+    df_project['fond'] = 'ПРОЕКТ'
+
+    return df_project
 
 
 def preprocessing_NGT(df_input, min_length_horWell):

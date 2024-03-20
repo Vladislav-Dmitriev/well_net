@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 from shapely.ops import cascaded_union
@@ -8,10 +10,11 @@ from auxiliary_functions import get_property, get_time_coef
 from geometry import check_intersection_area
 
 
-def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, horizon,
+def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, horizon,
                       path_property, dict_parameters, obj_square, mean_rad, coeff):
     """
     Расчет регулярной сетки скважин
+    :param df_proj_wells: DataFrame проектных скважин
     :param df_prod_wells: DataFrame добывающих скважин на текущий объект расчета
     :param df_piez_wells: DataFrame пьезометрических скважин на текущий объект расчета
     :param df_inj_wells: DataFrame нагнетательных скважин на текущий объект расчета
@@ -19,7 +22,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
     :param horizon: текущий объект расчета
     :param path_property: путь к файлу с PVT свойствами
     :param dict_parameters: словарь с параметрами расчета
-    :param obj_square: площадь текущего объекта расчетп по крайним скважиам
+    :param obj_square: площадь текущего объекта расчета по крайним скважиам
     :param mean_rad: средний радиус исследования по текущему объекта
     :param coeff: коэффициент кратного увеличения радиуса исследования
     :return: результирующий DataFrame с опорными скважинами
@@ -28,26 +31,28 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
     prod_count = df_prod_wells.shape[0]
     piez_count = df_piez_wells.shape[0]
     dict_fonds = {}
-    dict_fonds['ПЬЕЗ'] = df_piez_wells
-    dict_fonds['НАГ'] = df_inj_wells
-    dict_fonds['ДОБ'] = df_prod_wells
+    dict_fonds['ПЬЕЗ'] = [df_piez_wells, dict_parameters['percent_piez']]
+    dict_fonds['НАГ'] = [df_inj_wells, dict_parameters['percent_inj']]
+    dict_fonds['ДОБ'] = [df_prod_wells, dict_parameters['percent_prod']]
     # площадь охваченная после выбора опорных скважин
     current_area = 0
     list_polygons = []
     # проходимся по каждому фонду (добывающий, нагнетательный, пьезометрический)
     for fond in tqdm(dict_parameters['list_order_fond'], "Regular mesh for fond", position=0, leave=True,
                      colour='white', ncols=80):
-        # выделение DataFrame на фонд (добывающий, нагнетательный, пьезометрический)
-        df_fond = dict_fonds[fond]
+        # выделение DataFrame на фонд (добывающий, нагнетательный, пьезометрический) и процента скважин в ОС от фонда
+        df_fond = dict_fonds[fond][0]
+        wellnet_percent = dict_fonds[fond][1]
+
         if df_fond.empty:
             continue
         # условие на очистку DataFrame, если до текущей итерации уже были отобраны опорные скважины из другого фонда
         # и охватили какую-то площадь
 
         if current_area != 0:
-            df_fond = df_fond[~df_fond['wellName'].isin(check_intersection_area(current_area, df_fond,
-                                                                                dict_parameters['percent'],
-                                                                                dict_parameters['calc_option']))]
+            df_fond = df_fond[~df_fond['wellName'].isin(list(check_intersection_area(current_area, df_fond,
+                                                                                     dict_parameters['percent'],
+                                                                                     dict_parameters['calc_option'])))]
 
         list_check_well = []
         if df_fond.shape[0] > 0:
@@ -56,10 +61,15 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
                                                          dict_parameters['percent'],
                                                          dict_parameters['calc_option']),
                     df_fond.AREA, df_fond.wellName))
+
             df_fond['number'] = df_fond['intersection'].apply(lambda x: np.size(x))
             df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=False)
             list_optim = list(df_fond['wellName'].explode())
             while len(list_optim) != 0:
+                if (len(df_fond['intersection'].explode().unique()) == 1) and (
+                        math.isnan(df_fond['intersection'].explode().unique()[0])):
+                    list_check_well = list_optim.copy()
+                    break
                 list_check_well += [list_optim[0]]
                 list_exception = [list_optim[0]] + list(
                     df_fond[df_fond['wellName'] == list_optim[0]][
@@ -71,8 +81,21 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
         df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
 
         # функция проверки процента скважин в опорной сети от текущего фонда
-        # count_wellnet =
+        count_target = math.ceil(wellnet_percent / 100 * df_fond.shape[0])
+        if df_current_result.shape[0] > count_target:
+            df_current_result = df_current_result.sort_values(by=['number'], axis=0, ascending=False)
+            list_out_wellnet = df_current_result[
+                               -(df_current_result.shape[0] - count_target):].wellName.explode().unique()
+            df_current_result.loc[
+                df_current_result['wellName'].isin(list_out_wellnet), 'intersection'] = 'Исключена из ОС'
+        # добавить недостающие скважины в ОС
+        elif df_current_result.shape[0] < count_target:
+            df_fond = df_fond[~df_fond['wellName'].isin(list(df_current_result['wellName'].explode().unique()))]
+            df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=True)
+            df_fond = df_fond[:(count_target - df_current_result.shape[0])]
+            df_current_result = pd.concat([df_current_result, df_fond], axis=0, sort=False).reset_index(drop=True)
 
+        # увеличение площади многоугольника по мере итерации по фондам
         list_polygons = list_polygons + list(df_current_result['AREA'].explode())
         current_area = cascaded_union(list_polygons)
 
@@ -84,6 +107,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
         df_current_result['time_coef/objects'] = df_current_result.apply(
             lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.gasStatus), axis=1)
         df_current_result['time_coef'] = list(map(lambda x: x[0], df_current_result['time_coef/objects']))
+        # рассчитанные средние свойства по скважинам
         # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
         # df_result['ct'] = list(map(lambda x: x[2], df_result['time_coef/objects']))
         # df_result['phi'] = list(map(lambda x: x[3], df_result['time_coef/objects']))
@@ -116,22 +140,32 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_result, hor
         df_current_result['injection_loss'] = df_current_result['injectivity'] * df_current_result[
             'research_time']  # потери по закачке воды
         df_current_result['coverage_percentage'] = unary_union(
-            list(df_current_result['AREA'].explode())).area / obj_square
+            list(df_current_result['AREA'].explode())).area / obj_square * 100
         # процент скважин в опорной сети из скважин на объекте по каждому типу
         df_current_result['percent_piez_wells'] = 0
         if df_piez_wells.shape[0] != 0:
-            df_current_result['percent_piez_wells'] = df_current_result[df_current_result['fond'] == 'ПЬЕЗ'].shape[
+            df_current_result['percent_piez_wells'] = 100 * \
+                                                      df_current_result[df_current_result['fond'] == 'ПЬЕЗ'].shape[
                                                           0] / piez_count
         df_current_result['percent_inj_wells'] = 0
         if df_inj_wells.shape[0] != 0:
-            df_current_result['percent_inj_wells'] = df_current_result[df_current_result['fond'] == 'НАГ'].shape[
-                                                         0] / inj_count
+            df_current_result['percent_inj_wells'] = 100 * df_current_result[df_current_result['fond'] == 'НАГ'].shape[
+                0] / inj_count
         df_current_result['percent_prod_wells'] = 0
         if df_prod_wells.shape[0] != 0:
-            df_current_result['percent_prod_wells'] = df_current_result[df_current_result['fond'] == 'ДОБ'].shape[
-                                                          0] / prod_count
+            df_current_result['percent_prod_wells'] = 100 * df_current_result[df_current_result['fond'] == 'ДОБ'].shape[
+                0] / prod_count
         df_current_result['year_of_survey'] = 0
 
         df_result = pd.concat([df_result, df_current_result], axis=0, sort=False).reset_index(drop=True)
+
+    # поиск охвата проектного фонда скважинами из ОС
+    if not df_proj_wells.empty:
+        list_proj_research = list(check_intersection_area(cascaded_union(list(df_result['AREA'].explode())),
+                                                          df_proj_wells, dict_parameters['percent'],
+                                                          dict_parameters['calc_option']))
+        df_proj_wells = df_proj_wells[df_proj_wells['wellName'].isin(list_proj_research)]
+        df_proj_wells['current_horizon'] = horizon
+        df_result = pd.concat([df_result, df_proj_wells], axis=0, sort=False).reset_index(drop=True)
 
     return df_result

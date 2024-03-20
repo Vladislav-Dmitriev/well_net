@@ -45,6 +45,17 @@ dict_geobd_columns = {
     'well type': 'well type'
 }
 
+# input project data column values
+dict_project_columns = {
+    'NSKV': 'wellName',
+    'X': 'coordinateX',
+    'X3': 'coordinateX3',
+    'Y': 'coordinateY',
+    'Y3': 'coordinateY3',
+    'PLAST': 'workHorizon',
+    'well type': 'well type'
+}
+
 # CONSTANT
 dict_constant = {
     'PROD_STATUS': "раб|нак|ост",

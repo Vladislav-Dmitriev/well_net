@@ -5,6 +5,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from loguru import logger
 from matplotlib.lines import Line2D
+from shapely.ops import cascaded_union
 from tqdm import tqdm
 
 from geometry import check_intersection_area
@@ -42,15 +43,24 @@ def visualization(df_input_prod, percent, dict_result):
         df_result = value[0]
         if df_result.empty:
             continue
-        list_objects = df_result.workHorizon.str.split(', ').explode().unique()
-
+        list_objects = df_result.current_horizon.explode().unique()
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='white'):
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                          df_input_prod.workHorizon))]
+
+            df_current_calc = df_result.loc[(df_result.current_horizon == horizon) & (df_result.fond != 'ПРОЕКТ')]
+            # выделение DataFrame проектных скважин, тк охваченные исслед-ми проектные скважины содержатся в df_result
+            df_research_project = df_result.loc[(df_result.current_horizon == horizon) & (df_result.fond == 'ПРОЕКТ')]
+            df_nonresearch_proj = hor_prod_wells[(hor_prod_wells['fond'] == 'ПРОЕКТ') & (
+                ~hor_prod_wells['wellName'].isin(list(df_research_project['wellName'].explode().unique())))]
+
             try:
                 contour_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
+                df_nonresearch_proj = contour_prod_wells[(contour_prod_wells['fond'] == 'ПРОЕКТ') & (
+                    ~contour_prod_wells['wellName'].isin(list(df_research_project['wellName'].explode().unique())))]
+
             except TypeError:
                 # из всего загруженного добывающего фонда отбираются скважины из столбца пересечений df_result, а также
                 # идет отбор по текущему объекту расчета
@@ -58,7 +68,6 @@ def visualization(df_input_prod, percent, dict_result):
                     hor_prod_wells["wellName"].isin(list(
                         set(df_result[df_result['current_horizon'] == horizon]["intersection"].explode().unique())))]
 
-            df_current_calc = df_result.loc[df_result.current_horizon == horizon]
             contour_prod_wells = contour_prod_wells.loc[
                 contour_prod_wells['oilRate'] <= df_current_calc['mean_oilrate'].iloc[0]]
             if df_current_calc['limit_oilrate'].iloc[0] != 0:
@@ -114,11 +123,8 @@ def visualization(df_input_prod, percent, dict_result):
                 # production well areas drawing
                 gpd.GeoSeries(gdf_prod[~(gdf_prod['wellName'].isin(list_exception))]["AREA"]).plot(ax=ax,
                                                                                                    color="lightsalmon")
-                gpd.GeoSeries(gdf_prod[~(gdf_prod['wellName'].isin(list_exception))]["AREA"]).boundary.plot(ax=ax, ls=
-                type_lines[year],
-                                                                                                            color=
-                                                                                                            colors_prod[
-                                                                                                                year])
+                (gpd.GeoSeries(gdf_prod[~(gdf_prod['wellName'].isin(list_exception))]["AREA"])
+                 .boundary.plot(ax=ax, ls=type_lines[year], color=colors_prod[year]))
 
                 # Injection well areas drawing
                 gpd.GeoSeries(gdf_inj["AREA"]).plot(ax=ax, color="azure")
@@ -139,12 +145,7 @@ def visualization(df_input_prod, percent, dict_result):
                                    df_prod_nonexception.coordinateY.values,
                                    df_prod_nonexception.wellName):
                 ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
-            # Signature of excluded production wells
-            if len(contour_prod_exception):
-                for x, y, label in zip(df_prod_exception.coordinateX.values,
-                                       df_prod_exception.coordinateY.values,
-                                       df_prod_exception.wellName):
-                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
             # Trajectory of wells
             contour_prod_wells = contour_prod_wells.set_geometry(contour_prod_wells["GEOMETRY"])
             contour_prod_wells.plot(ax=ax, color="black", markersize=14)
@@ -157,10 +158,40 @@ def visualization(df_input_prod, percent, dict_result):
             gdf_measuring_all = gdf_measuring_all.set_geometry(df_result["POINT"])
             gdf_measuring_all.plot(ax=ax, color="blue", markersize=14, marker="^")
             if len(contour_prod_exception):
+                # Signature of excluded production wells
+                for x, y, label in zip(df_prod_exception.coordinateX.values,
+                                       df_prod_exception.coordinateY.values,
+                                       df_prod_exception.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
                 df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["POINT"])
                 df_prod_exception.plot(ax=ax, color="gray", markersize=14)
                 df_prod_exception = df_prod_exception.set_geometry(df_prod_exception["GEOMETRY"])
-                df_prod_exception.plot(ax=ax, color="gray", markersize=14, marker="^")
+                df_prod_exception.plot(ax=ax, color="gray", markersize=14)
+
+            if not df_research_project.empty:
+                # Signature of excluded production wells
+                for x, y, label in zip(df_research_project.coordinateX.values,
+                                       df_research_project.coordinateY.values,
+                                       df_research_project.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
+                df_research_project = df_research_project.set_geometry(df_research_project["POINT"])
+                df_research_project.plot(ax=ax, color="crimson", markersize=18)
+                df_research_project = df_research_project.set_geometry(df_research_project["GEOMETRY"])
+                df_research_project.plot(ax=ax, color="crimson", markersize=14, marker="^")
+
+            if not df_nonresearch_proj.empty:
+                # Signature of excluded production wells
+                for x, y, label in zip(df_nonresearch_proj.coordinateX.values,
+                                       df_nonresearch_proj.coordinateY.values,
+                                       df_nonresearch_proj.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
+                df_nonresearch_proj = df_nonresearch_proj.set_geometry(df_nonresearch_proj["POINT"])
+                df_nonresearch_proj.plot(ax=ax, facecolor="crimson", markersize=18, edgecolor='gray')
+                df_nonresearch_proj = df_nonresearch_proj.set_geometry(df_nonresearch_proj["GEOMETRY"])
+                df_nonresearch_proj.plot(ax=ax, facecolor="crimson", markersize=14, edgecolor='gray')
 
             piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
             inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
@@ -171,14 +202,18 @@ def visualization(df_input_prod, percent, dict_result):
                                 markerfacecolor='black', markersize=14)
             prod_point_exception = Line2D([0], [0], marker='.', color='white', label='Не охвачены исследованием',
                                           markerfacecolor='gray', markersize=14)
+            proj_point = Line2D([0], [0], marker='.', color='white', label='Охваченный проектный фонд',
+                                markerfacecolor='crimson', markersize=14)
+            proj_point_nonresearch = Line2D([0], [0], marker='.', color='gray', label='Неохваченный проектный фонд',
+                                            markerfacecolor='crimson', markersize=14)
             line_1_year = Line2D([0], [0], color='gray', linestyle="-", lw=1, label='Исследования на текущий год')
             line_2_year = Line2D([0], [0], color='gray', linestyle=":", lw=1, label='На 2 год')
             line_3_year = Line2D([0], [0], color='gray', linestyle="-.", lw=1, label='На 3 год')
 
             if polygon is None:
                 plt.legend(
-                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, line_1_year, line_2_year,
-                             line_3_year])
+                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, proj_point,
+                             proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                 plt.savefig(
                     f'output/pictures/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
@@ -187,8 +222,8 @@ def visualization(df_input_prod, percent, dict_result):
 
             else:
                 plt.legend(
-                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, line_1_year, line_2_year,
-                             line_3_year])
+                    handles=[piez, inj, prod, piez_point, prod_point, prod_point_exception, proj_point,
+                             proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                 plt.savefig(
                     f'output/pictures/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
@@ -204,7 +239,7 @@ def mesh_visualization(df_input, dict_mesh, percent):
     :param df_input: DataFrame с исходными данными
     :param dict_mesh: словарь с результатами расчета
     :param percent: процент длины траектории скважины, при котором она попадает в контур
-    :return: Сохраняет график, построенный по итерируемому объекту, в указанную директорию
+    :return: Сохраняется график, построенный по итерируемому объекту, в указанную директорию
     """
     logger.info("Clean pictures folder")
     clean_pictures_folder('output/mesh/')
@@ -217,24 +252,53 @@ def mesh_visualization(df_input, dict_mesh, percent):
         polygon = value[1]
         if df_result.empty:
             continue
-        list_objects = df_input.workHorizon.str.split(', ').explode().unique()  # все объекты месторождения
-        # list_objects = ['НП4']
+        list_objects = df_result[
+            df_result['fond'] != 'ПРОЕКТ'].current_horizon.explode().unique()  # все объекты месторождения
+        # list_objects = ['НП8']
         for obj in tqdm(list_objects, "Meshing for objects", position=0, leave=True, colour='white'):
             logger.info(f'Mapping object {obj}')
             gdf_research = gpd.GeoDataFrame(df_input[list(map(lambda x: len(set(x.replace(" ", "").split(",")) &
                                                                             set([obj])) > 0, df_input.workHorizon))])
             gdf_research = gdf_research[~gdf_research['wellName'].isin(df_result['wellName'].explode().unique())]
 
+            # выделение скважин на текущий объект расчета и отсеивание скважин, исключенных из ОС по проценту от фонда
+            df_result_obj = df_result[
+                (df_result['current_horizon'] == obj) & (
+                    ~df_result['intersection'].map(str).str.contains('Исключена из ОС'))]
+            gdf_result_obj = gpd.GeoDataFrame(df_result_obj)
+            # выделение проектных скважин в отдельный GeoDataFrame и удаление их из gdf_result_obj
+            gdf_research_proj = gdf_result_obj[gdf_result_obj['fond'] == 'ПРОЕКТ']
+            gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
+                ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
+            gdf_result_obj = gdf_result_obj[gdf_result_obj['fond'] != 'ПРОЕКТ']
+            # выделение исследуемых скважин в контуре, если контура нет, то берутся все, кроме ОС
             try:
                 gdf_research = gdf_research[gdf_research.wellName.isin(
-                    set(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
+                    list(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
+                gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
+                    ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
             except TypeError:
                 logger.info('Mapping out contour')
-                pass
-            df_result_obj = df_result[df_result['current_horizon'] == obj]
-            gdf_result_obj = gpd.GeoDataFrame(df_result_obj)
-            gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
-            if gdf_result_obj['limit_oilrate'].iloc[0] != 0:
+                gdf_research = gdf_research[gdf_research['wellName'].isin(list(
+                    set(gdf_result_obj[
+                            (gdf_result_obj['current_horizon'] == obj) & (gdf_result_obj['fond'] != 'ПРОЕКТ')][
+                            "intersection"].explode().unique())))]
+            # скважины, исключенные из ОС
+            df_result_exception = df_result[
+                (df_result['current_horizon'] == obj) & (
+                    df_result['intersection'].map(str).str.contains('Исключена из ОС'))]
+            # проверка на охват исключенных скважин скважинами ОС
+            df_result_exception = df_result_exception[df_result_exception['wellName'].isin(
+                check_intersection_area(cascaded_union(gdf_result_obj['AREA'].explode().unique()),
+                                        df_result_exception, percent, True))]
+            gdf_result_exception = gpd.GeoDataFrame(df_result_exception)
+
+            gdf_research = gdf_research[
+                gdf_research['wellName'].isin(list(gdf_result_obj['intersection'].explode().unique()))]
+            # если в результирующем DataFrame кол-во строк больше 0, то отсеиваются скважины с дебитом больше среднего
+            # по объекту и больше максимального, заданного пользователем
+            if gdf_result_obj.shape[0] != 0:
+                gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['limit_oilrate'].iloc[0]]
             gdf_piez = gdf_result_obj[df_result_obj['fond'] == 'ПЬЕЗ']
             gdf_inj = gdf_result_obj[df_result_obj['fond'] == 'НАГ']
@@ -261,6 +325,43 @@ def mesh_visualization(df_input, dict_mesh, percent):
                                    gdf_result_obj.wellName):
                 ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
 
+            # построение охваченных опорных скважин, исключенных из опорной сети
+            if not gdf_result_exception.empty:
+                for x, y, label in zip(gdf_result_exception.coordinateX.values,
+                                       gdf_result_exception.coordinateY.values,
+                                       gdf_result_exception.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red",
+                                fontsize=6)
+
+                gdf_result_exception = gdf_result_exception.set_geometry('POINT')
+                gdf_result_exception.plot(ax=ax, color='gray', markersize=18, marker='^')
+                gdf_result_exception = gdf_result_exception.set_geometry('GEOMETRY')
+                gdf_result_exception.plot(ax=ax, color='gray', markersize=14)
+
+            if not gdf_research_proj.empty:
+                # Signature of excluded production wells
+                for x, y, label in zip(gdf_research_proj.coordinateX.values,
+                                       gdf_research_proj.coordinateY.values,
+                                       gdf_research_proj.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
+                gdf_research_proj = gdf_research_proj.set_geometry(gdf_research_proj["POINT"])
+                gdf_research_proj.plot(ax=ax, color="crimson", markersize=18)
+                gdf_research_proj = gdf_research_proj.set_geometry(gdf_research_proj["GEOMETRY"])
+                gdf_research_proj.plot(ax=ax, color="crimson", markersize=14)
+            # построение проектных скважин, которые не охвачены скважинами ОС
+            if not gdf_proj.empty:
+                # Signature of excluded production wells
+                for x, y, label in zip(gdf_proj.coordinateX.values,
+                                       gdf_proj.coordinateY.values,
+                                       gdf_proj.wellName):
+                    ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="navy", fontsize=6)
+
+                gdf_proj = gdf_proj.set_geometry(gdf_proj["POINT"])
+                gdf_proj.plot(ax=ax, facecolor="crimson", markersize=18, edgecolor='gray')
+                gdf_proj = gdf_proj.set_geometry(gdf_proj["GEOMETRY"])
+                gdf_proj.plot(ax=ax, facecolor="crimson", markersize=14, edgecolor='gray')
+
             # построение траекторий скважин
             gdf_research = gdf_research.set_geometry('POINT')
             gdf_research.plot(ax=ax, color='black', markersize=14)
@@ -278,10 +379,30 @@ def mesh_visualization(df_input, dict_mesh, percent):
                                 markerfacecolor='blue', markersize=14)
             prod_point = Line2D([0], [0], marker='.', color='white', label='Скважины, охваченные исследованиями',
                                 markerfacecolor='black', markersize=14)
+            piez_exception_point = Line2D([0], [0], marker='^', color='white',
+                                          label='Скважины, исключенные из регулярной сети',
+                                          markerfacecolor='gray', markersize=14)
+            proj_point = Line2D([0], [0], marker='.', color='white', label='Охваченный проектный фонд',
+                                markerfacecolor='crimson', markersize=14)
+            proj_point_nonresearch = Line2D([0], [0], marker='.', color='gray', label='Неохваченный проектный фонд',
+                                            markerfacecolor='crimson', markersize=14)
 
-            plt.legend(handles=[piez, inj, prod, piez_point, prod_point])
-            plt.savefig(f'output/mesh/MESH {obj.replace('/', '_')}, {contour_name}, k = {mult_coef}.png', dpi=200)
-            plt.title(
-                f'Объект: {obj.replace('/', '_')}, {contour_name}, (k = {mult_coef})')
+            if polygon is None:
+                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, piez_exception_point, proj_point,
+                                    proj_point_nonresearch])
+                plt.savefig(
+                    f'output/mesh/regular mesh, {str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
+                    dpi=200)
+                plt.title(
+                    f'Объект: {str(obj).replace('/', '_')}, out_contour, (k = {mult_coef})')
+
+            else:
+                plt.legend(handles=[piez, inj, prod, piez_point, prod_point, piez_exception_point, proj_point,
+                                    proj_point_nonresearch])
+                plt.savefig(
+                    f'output/mesh/regular mesh, {str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
+                    dpi=200)
+                plt.title(
+                    f'Объект: {str(obj).replace('/', '_')}, {contour_name}, (k = {mult_coef})')
 
     pass

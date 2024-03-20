@@ -246,6 +246,10 @@ def upload_parameters(path):
     list_order = (list_order.upper()).split(', ')
     dict_parameters['list_order_fond'] = list_order
 
+    project = dict_parameters['project_fond_file']
+    project = None if project == "нет" else project
+    dict_parameters['project_fond_file'] = project
+
     return dict_parameters
 
 
