@@ -250,6 +250,11 @@ def upload_parameters(path):
     project = None if project == "нет" else project
     dict_parameters['project_fond_file'] = project
 
+    mean_oilrate = dict_parameters['mean_oilrate_option']
+    mean_oilrate = False if mean_oilrate == "нет" else mean_oilrate
+    mean_oilrate = True if mean_oilrate == "да" else mean_oilrate
+    dict_parameters['mean_oilrate_option'] = mean_oilrate
+
     return dict_parameters
 
 
@@ -259,10 +264,12 @@ def get_path():
     """
     if getattr(sys, 'frozen', False):
         application_path = os.path.dirname(sys.executable)
+        return application_path
     elif __file__:
         application_path = os.path.dirname(__file__)
-
-    return application_path
+        return application_path
+    else:
+        raise Exception('Executable file path not found')
 
 
 def clean_work_horizon(df, count_of_hor):

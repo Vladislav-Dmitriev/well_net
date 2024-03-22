@@ -58,6 +58,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_prod_wells': 'Доля добывающих в опорной сети',
         'year_of_survey': 'Год исследования',
+        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
 
@@ -107,7 +108,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         df_not_wellnet['wellNet'] = 'Вне опорной сети'
 
         df.drop(
-            columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'mean_oilrate', 'limit_oilrate', 'gasStatus', 'min_dist'],
+            columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'limit_oilrate', 'gasStatus', 'min_dist'],
             axis=1, inplace=True)
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
@@ -178,6 +179,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_piez_wells': 'Доля пьезометров в опорной сети',
         'year_of_survey': 'Год исследования',
+        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
     df_main = df_input.copy()
@@ -220,7 +222,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
         df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA',
-                         'gasStatus', 'mean_oilrate', 'limit_oilrate'], axis=1, inplace=True)
+                         'gasStatus', 'limit_oilrate'], axis=1, inplace=True)
         df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
 
         list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин

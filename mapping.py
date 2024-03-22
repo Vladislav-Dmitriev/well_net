@@ -22,9 +22,10 @@ def clean_pictures_folder(path):
     pass
 
 
-def visualization(df_input_prod, percent, dict_result):
+def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
     """
     Визуализация полученных результатов сценария с оптимальным охватом исследованиями добывающего фонда
+    :param mean_oilrate_option: опция учета процента среднего дебита нефти по объекту
     :param percent: процент длины траектории скважины, при котором она попадает в контур
     :param df_input_prod: DataFrame продуктивных скважин из исходного файла
     :param dict_result: словарь с результатами расчета
@@ -49,7 +50,9 @@ def visualization(df_input_prod, percent, dict_result):
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                          df_input_prod.workHorizon))]
 
-            df_current_calc = df_result.loc[(df_result.current_horizon == horizon) & (df_result.fond != 'ПРОЕКТ')]
+            df_current_calc = df_result.loc[
+                (df_result.current_horizon == horizon) & (df_result.fond != 'ПРОЕКТ') & (df_result.num_of_research < 2)]
+            # df_necessarily = df_result.loc[(df_result.current_horizon == horizon) & (df_result.num_of_research > 1)]
             # выделение DataFrame проектных скважин, тк охваченные исслед-ми проектные скважины содержатся в df_result
             df_research_project = df_result.loc[(df_result.current_horizon == horizon) & (df_result.fond == 'ПРОЕКТ')]
             df_nonresearch_proj = hor_prod_wells[(hor_prod_wells['fond'] == 'ПРОЕКТ') & (
@@ -68,11 +71,13 @@ def visualization(df_input_prod, percent, dict_result):
                     hor_prod_wells["wellName"].isin(list(
                         set(df_result[df_result['current_horizon'] == horizon]["intersection"].explode().unique())))]
 
-            contour_prod_wells = contour_prod_wells.loc[
-                contour_prod_wells['oilRate'] <= df_current_calc['mean_oilrate'].iloc[0]]
-            if df_current_calc['limit_oilrate'].iloc[0] != 0:
+            if (df_current_calc.shape[0] != 0) and mean_oilrate_option:
+                contour_prod_wells = contour_prod_wells.loc[
+                    contour_prod_wells['oilRate'] <= df_current_calc['mean_oilrate'].iloc[0]]
+            if df_current_calc.shape[0] != 0:
                 contour_prod_wells = contour_prod_wells.loc[
                     contour_prod_wells['oilRate'] <= df_current_calc['limit_oilrate'].iloc[0]]
+
             # division production wells on two parts
             list_exception = list(set(
                 df_current_calc[df_current_calc['intersection'].map(str) == 'Не охвачены исследованием!!!'].wellName))
@@ -170,7 +175,7 @@ def visualization(df_input_prod, percent, dict_result):
                 df_prod_exception.plot(ax=ax, color="gray", markersize=14)
 
             if not df_research_project.empty:
-                # Signature of excluded production wells
+                # Signature of reseached project wells
                 for x, y, label in zip(df_research_project.coordinateX.values,
                                        df_research_project.coordinateY.values,
                                        df_research_project.wellName):
@@ -182,7 +187,7 @@ def visualization(df_input_prod, percent, dict_result):
                 df_research_project.plot(ax=ax, color="crimson", markersize=14, marker="^")
 
             if not df_nonresearch_proj.empty:
-                # Signature of excluded production wells
+                # Signature of unreseached project wells
                 for x, y, label in zip(df_nonresearch_proj.coordinateX.values,
                                        df_nonresearch_proj.coordinateY.values,
                                        df_nonresearch_proj.wellName):
@@ -192,6 +197,20 @@ def visualization(df_input_prod, percent, dict_result):
                 df_nonresearch_proj.plot(ax=ax, facecolor="crimson", markersize=18, edgecolor='gray')
                 df_nonresearch_proj = df_nonresearch_proj.set_geometry(df_nonresearch_proj["GEOMETRY"])
                 df_nonresearch_proj.plot(ax=ax, facecolor="crimson", markersize=14, edgecolor='gray')
+
+            # if not df_necessarily.empty:
+            #     # Signature of necessarily researched wells
+            #     for x, y, label in zip(df_necessarily.coordinateX.values,
+            #                            df_necessarily.coordinateY.values,
+            #                            df_necessarily.wellName):
+            #         ax.annotate(label, xy=(x, y), xytext=(3, 3), textcoords="offset points", color="red", fontsize=6)
+            #     df_necessarily = gpd.GeoDataFrame(df_necessarily)
+            #     df_necessarily = df_necessarily.set_geometry(df_nonresearch_proj["POINT"])
+            #     df_necessarily.plot(ax=ax, color='blue', markersize=14, marker='^')
+            #     df_necessarily = df_necessarily.set_geometry(df_nonresearch_proj["GEOMETRY"])
+            #     df_necessarily.plot(ax=ax, color='blue', markersize=14, marker='^')
+            #     gpd.GeoSeries(df_necessarily["AREA"]).plot(ax=ax, color='mistyrose')
+            #     gpd.GeoSeries(df_necessarily["AREA"]).boundary.plot(ax=ax, color='orangered')
 
             piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
             inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
@@ -233,9 +252,10 @@ def visualization(df_input_prod, percent, dict_result):
     pass
 
 
-def mesh_visualization(df_input, dict_mesh, percent):
+def mesh_visualization(df_input, dict_mesh, percent, mean_oilrate_option):
     """
     Визуализация результатов, полученных в ходе сценария с построением ОС для каждого фонда по отдельности
+    :param mean_oilrate_option: опция учета процента среднего дебита нефти по объекту
     :param df_input: DataFrame с исходными данными
     :param dict_mesh: словарь с результатами расчета
     :param percent: процент длины траектории скважины, при котором она попадает в контур
@@ -289,16 +309,17 @@ def mesh_visualization(df_input, dict_mesh, percent):
                     df_result['intersection'].map(str).str.contains('Исключена из ОС'))]
             # проверка на охват исключенных скважин скважинами ОС
             df_result_exception = df_result_exception[df_result_exception['wellName'].isin(
-                check_intersection_area(cascaded_union(gdf_result_obj['AREA'].explode().unique()),
-                                        df_result_exception, percent, True))]
+                list(check_intersection_area(cascaded_union(gdf_result_obj['AREA'].explode().unique()),
+                                             df_result_exception, percent, True)))]
             gdf_result_exception = gpd.GeoDataFrame(df_result_exception)
 
             gdf_research = gdf_research[
                 gdf_research['wellName'].isin(list(gdf_result_obj['intersection'].explode().unique()))]
             # если в результирующем DataFrame кол-во строк больше 0, то отсеиваются скважины с дебитом больше среднего
             # по объекту и больше максимального, заданного пользователем
-            if gdf_result_obj.shape[0] != 0:
+            if (gdf_result_obj.shape[0] != 0) and mean_oilrate_option:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
+            if gdf_result_obj.shape[0] != 0:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['limit_oilrate'].iloc[0]]
             gdf_piez = gdf_result_obj[df_result_obj['fond'] == 'ПЬЕЗ']
             gdf_inj = gdf_result_obj[df_result_obj['fond'] == 'НАГ']

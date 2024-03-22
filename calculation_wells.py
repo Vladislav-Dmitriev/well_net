@@ -33,11 +33,11 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                      df_in_contour.workHorizon))]
         df_proj_wells = df_horizon[df_horizon['fond'] == 'ПРОЕКТ']
         # вычисление среднего дебита продуктивных скважин по текущему объекту расчета
-        if df_horizon[df_horizon['fond'] == 'ДОБ'].shape[0] == 0:
-            mean_oilrate = 0
-        else:
-            mean_oilrate = (df_horizon[df_horizon['fond'] == 'ДОБ']['oilRate'].mean()
-                            * dict_parameters['percent_oilrate'] / 100)
+        # if df_horizon[df_horizon['fond'] == 'ДОБ'].shape[0] == 0:
+        #     mean_oilrate = 0
+        # else:
+        #     mean_oilrate = (df_horizon[df_horizon['fond'] == 'ДОБ']['oilRate'].mean()
+        #                     * dict_parameters['percent_oilrate'] / 100)
         # расчет среднего и минимального радиуса первого окружения по объекту
         mean_rad, df_horizon = mean_radius(df_horizon[df_horizon['fond'] != 'ПРОЕКТ'],
                                            dict_parameters['verticalWellAngle'],
@@ -55,16 +55,33 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
 
             logger.info(f'Add shapely types with coefficient = {coeff}')
             df_horizon = add_shapely_types(df_horizon, mean_rad, coeff)
+            # df_necessarily_wells = df_horizon[df_horizon['num_of_research'] > 1]
+            # # условие на проверку и исключение из основного DataFrame скважин с несколькими исследованиями за год
+            # if not df_necessarily_wells.empty:
+            #     df_horizon = df_horizon[
+            #         ~df_horizon['wellName'].isin(list(df_necessarily_wells['wellName'].explode().unique()))]
+            #     df_necessarily_wells['intersection'] = list(
+            #         map(lambda x: check_intersection_area(x, df_horizon, dict_parameters['percent'],
+            #                                               dict_parameters['calc_option']),
+            #             df_necessarily_wells['AREA']))
+            #     df_horizon = df_horizon[
+            #         ~df_horizon['wellName'].isin(list(set(df_necessarily_wells['intersection'].explode().unique())))]
+
+            df_prod_wells = df_horizon.loc[df_horizon['fond'] == 'ДОБ']
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта, дебит нефти которых не превышает
             # среднего дебита нефти по объекту
-            df_prod_wells = df_horizon.loc[(df_horizon['fond'] == 'ДОБ') &
-                                           (df_horizon['oilRate'] <= mean_oilrate)]
-            if dict_parameters['limit_oilrate'] != 0:
+            mean_oilrate = 0
+            if dict_parameters['mean_oilrate_option'] and (df_prod_wells.shape[0] > 0):
+                mean_oilrate = df_prod_wells['oilRate'].mean()
+                df_prod_wells = df_prod_wells.loc[
+                    df_prod_wells['oilRate'] <= mean_oilrate * dict_parameters['percent_oilrate'] / 100]
                 df_prod_wells = df_prod_wells[df_prod_wells['oilRate'] <= dict_parameters['limit_oilrate']]
+
             df_piez_wells = df_horizon.loc[df_horizon['fond'] == 'ПЬЕЗ']
             df_inj_wells = df_horizon.loc[df_horizon['fond'] == 'НАГ']
             logger.info(f'Key of dictionary: {key}, Mult coefficient: {coeff}')
             df_result = pd.DataFrame()
+            # df_result = pd.concat([df_result, df_necessarily_wells], axis=0, sort=False).reset_index(drop=True)
 
             if dict_parameters['calculation_scenario'] == 'optimize':
                 logger.info(f'Selected first scenario')

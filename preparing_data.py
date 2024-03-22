@@ -16,7 +16,7 @@ def upload_input_data(dict_constant, dict_parameters):
     """
     Считывание файла с исключенными скважинами, затем загрузка данных,
     их подготовка к расчету в зависимости от базы данных
-    и удаление исключенных скважин
+    и удаление исключенных скважин, загрузка проектных скважин при наличии
 
     :param dict_constant: словарь со статусами работы скважин
     :param dict_parameters: словарь с параметрами расчета
@@ -51,12 +51,14 @@ def upload_input_data(dict_constant, dict_parameters):
 
         df = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=0, sep=';',
                          encoding=use_encoding, decimal='.')
+        df = df.dropna(subset=['№ скважины'])
         df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])  # предобработка данных из NGT
         df_input, date = preparing(dict_constant, df_input,
                                    dict_parameters['horizon_count'], dict_parameters['water_cut'],
                                    dict_parameters['fluid_rate'], list_exception)
         # добавление DataFrame проектных скважин
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
+        df_input = df_input.fillna(0)
 
     elif first_row.loc[0][0] == 'NSKV':
 
@@ -64,11 +66,13 @@ def upload_input_data(dict_constant, dict_parameters):
 
         df = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=0, sep=';',
                          encoding='cp1251', decimal='.', skiprows=[1])
+        df = df.dropna(subset=['NSKV'])
         df_input = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
         df_input, date = preparing(dict_constant, df_input, dict_parameters['horizon_count'],
                                    dict_parameters['water_cut'], dict_parameters['fluid_rate'], list_exception)
         # добавление DataFrame проектных скважин
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
+        df_input = df_input.fillna(0)
     else:
         print('Формат загруженного файла не подходит для модуля')
         sys.exit()
@@ -372,7 +376,8 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
     df_input['gasStatus'] = df_input['gasStatus'].where(df_input['fond'] != 'ПЬЕЗ', 'пьезометрическая')
 
     # delete production wells with fluid rate less than fluid_rate in parameters
-    df_input = df_input[~((df_input['fond'] == 'ДОБ') & (df_input.fluidRate <= fluid_rate))]
+    df_input = df_input[
+        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.fluidRate <= fluid_rate))]
     # delete production wells with water cut less
     df_input = df_input[~((df_input['gasStatus'] == 'ДОБ') & (df_input.water_cut <= watercut))]
 

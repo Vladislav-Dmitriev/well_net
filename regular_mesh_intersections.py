@@ -96,7 +96,9 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
             df_current_result = pd.concat([df_current_result, df_fond], axis=0, sort=False).reset_index(drop=True)
 
         # увеличение площади многоугольника по мере итерации по фондам
-        list_polygons = list_polygons + list(df_current_result['AREA'].explode())
+        list_polygons = list_polygons + list(
+            df_current_result.loc[~df_current_result['intersection'].map(str).str.contains('Исключена')][
+                'AREA'].explode())
         current_area = cascaded_union(list_polygons)
 
         df_current_result[
@@ -161,9 +163,10 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:
-        list_proj_research = list(check_intersection_area(cascaded_union(list(df_result['AREA'].explode())),
-                                                          df_proj_wells, dict_parameters['percent'],
-                                                          dict_parameters['calc_option']))
+        list_proj_research = list(check_intersection_area(cascaded_union(
+            list(df_result.loc[~df_result['intersection'].map(str).str.contains('Исключена')]['AREA'].explode())),
+            df_proj_wells, dict_parameters['percent'],
+            dict_parameters['calc_option']))
         df_proj_wells = df_proj_wells[df_proj_wells['wellName'].isin(list_proj_research)]
         df_proj_wells['current_horizon'] = horizon
         df_result = pd.concat([df_result, df_proj_wells], axis=0, sort=False).reset_index(drop=True)
