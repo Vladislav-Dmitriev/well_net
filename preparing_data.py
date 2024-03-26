@@ -110,7 +110,8 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input['X3'] = 0
     df_input['Y3'] = 0
     required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'PEREV', 'KUST', 'X', 'X3',
-                     'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
+                     'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND',
+                     'RESEARCH']
     df_input = df_input[required_cols]
 
     list_well_names = list(df_input['UWI'].explode().unique())  # список уникальных названий скважин
@@ -152,7 +153,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
     correct_order = ['NSKV', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'KUST', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'DEBGAS', 'PRIEM', 'PRIEMGAS', 'VPROCOBV', 'SPOSOB', 'DEBCOND',
-                     'well type']
+                     'well type', 'RESEARCH']
 
     df_input = df_input[correct_order]
     df_input.columns = dict_geobd_columns.values()
