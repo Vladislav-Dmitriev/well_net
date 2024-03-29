@@ -11,9 +11,10 @@ from geometry import check_intersection_area
 
 
 def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
-                      horizon, path_property, dict_parameters, obj_square, mean_rad, coeff):
+                      horizon, path_property, dict_parameters, obj_square, mean_rad, coeff, list_exception):
     """
     Расчет регулярной сетки скважин
+    :param list_exception: список скважин для исключения из ОС
     :param df_necessarily_wells: DataFrame скважин, обязательных для включения в ОС
     :param df_proj_wells: DataFrame проектных скважин
     :param df_prod_wells: DataFrame добывающих скважин на текущий объект расчета
@@ -28,9 +29,15 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     :param coeff: коэффициент кратного увеличения радиуса исследования
     :return: результирующий DataFrame с опорными скважинами
     """
+    # удаление исключенных скважин из DataFrame пьезометров, нагнетательных и добывающих
+    df_piez_wells = df_piez_wells[~df_piez_wells['wellName'].isin(list_exception)]
+    df_inj_wells = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
+    df_prod_wells = df_prod_wells[~df_prod_wells['wellName'].isin(list_exception)]
+    # кол-во скважин в каждом фонде для определения процента вхождения в ОС
     inj_count = df_inj_wells.shape[0]
     prod_count = df_prod_wells.shape[0]
     piez_count = df_piez_wells.shape[0]
+    # словарь с DataFrame каждого фонда, процентом скважин в ОС и приоритетных скважин
     dict_fonds = {}
     dict_fonds['ПЬЕЗ'] = [df_piez_wells, dict_parameters['percent_piez'],
                           df_necessarily_wells[df_necessarily_wells['fond'] == 'ПЬЕЗ']]
@@ -55,7 +62,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
         # условие на очистку DataFrame, если до текущей итерации уже были отобраны опорные скважины из другого фонда
         # и охватили какую-то площадь
-        if current_area != 0:
+        if current_area != 0 and not df_fond.empty:
             df_fond = df_fond[~df_fond['wellName'].isin(list(check_intersection_area(current_area, df_fond,
                                                                                      dict_parameters['percent'],
                                                                                      dict_parameters['calc_option'])))]
@@ -123,7 +130,8 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     # расчет времени исследования с использованием PVT справочника
     dict_property = get_property(path_property)
     df_result['time_coef/objects'] = df_result.apply(
-        lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.gasStatus), axis=1)
+        lambda x: get_time_coef(dict_property, x.workHorizon, x.water_cut, x.oilfield, x.gasStatus),
+        axis=1)
     df_result['time_coef'] = list(map(lambda x: x[0], df_result['time_coef/objects']))
     # рассчитанные средние свойства по скважинам
     # df_result['mu'] = list(map(lambda x: x[1], df_result['time_coef/objects']))
@@ -142,11 +150,29 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         map(lambda x: 100 * x[7] / x[8], df_result['time_coef/objects']))  # процент
     # объектов со свойствами по умолчанию
     df_result.drop(['time_coef/objects'], axis=1, inplace=True)
-    df_result[
-        'current_horizon'] = horizon  # добавления столбца объектов для понимания, по какому идет расчет
-    df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist']
-                                  * df_result[
-                                      'time_coef'])  # время исследования в сут через min расстояние
+    # добавления столбца объектов для понимания, по какому идет расчет
+    df_result['current_horizon'] = horizon
+    # время исследования в сут через min расстояние
+    df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist'] * df_result['time_coef'])
+
+    # отбрасывание скважин по времени исследования, если оно больше максимального
+    if dict_parameters['limit_research_time']:
+        df_result = df_result.loc[
+            ~((df_result['well type'] == 'vertical') & (
+                    df_result['research_time'] > dict_parameters['max_research_time']))]
+        df_result = df_result.loc[
+            ~((df_result['well type'] == 'horizontal') & (
+                    df_result['research_time'] > 2 * dict_parameters['max_research_time']))]
+        df_result['research_time'] = df_result.apply(
+            lambda x: dict_parameters['min_research_time'] if (
+                    x['well type'] == 'vertical' and x['research_time'] < dict_parameters['min_research_time']) else x[
+                'research_time'], axis=1)
+        df_result['research_time'] = df_result.apply(lambda x:
+                                                     2 * dict_parameters['min_research_time'] if
+                                                     (x['well type'] == 'horizontal' and x['research_time'] <
+                                                      2 * dict_parameters['min_research_time']) else
+                                                     x['research_time'], axis=1)
+
     df_result['oil_loss'] = 0
     df_result['gas_loss'] = 0
     df_result['injection_loss'] = 0

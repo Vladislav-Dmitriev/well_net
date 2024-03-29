@@ -113,8 +113,6 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
             axis=1, inplace=True)
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        # также в df_result присутствуют скважины, исключенные из ОС после расчета, их маркер изменяется
-        df.loc[df['intersection'] == 'Исключена из ОС', 'wellNet'] = 'Исключена из ОС'
 
         df = pd.concat([df, df_research, df_not_wellnet], ignore_index=True, sort=False)
         df.columns = dict_rename.values()

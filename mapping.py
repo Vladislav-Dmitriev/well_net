@@ -45,6 +45,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
         if df_result.empty:
             continue
         list_objects = df_result.current_horizon.explode().unique()
+        # list_objects = ['НП2-3']
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='white'):
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
@@ -331,7 +332,7 @@ def mesh_visualization(df_input, dict_mesh, percent, mean_oilrate_option):
             continue
         list_objects = df_result[
             df_result['fond'] != 'ПРОЕКТ'].current_horizon.explode().unique()  # все объекты месторождения
-        # list_objects = ['НП8']
+        # list_objects = ['2Ю1']
         for obj in tqdm(list_objects, "Meshing for objects", position=0, leave=True, colour='white'):
             logger.info(f'Mapping object {obj}')
             gdf_research = gpd.GeoDataFrame(df_input[list(map(lambda x: len(set(x.replace(" ", "").split(",")) &
@@ -420,7 +421,7 @@ def mesh_visualization(df_input, dict_mesh, percent, mean_oilrate_option):
                 gdf_result_exception = gdf_result_exception.set_geometry('POINT')
                 gdf_result_exception.plot(ax=ax, color='gray', markersize=18, marker='^')
                 gdf_result_exception = gdf_result_exception.set_geometry('GEOMETRY')
-                gdf_result_exception.plot(ax=ax, color='gray', markersize=14)
+                gdf_result_exception.plot(ax=ax, color='gray', markersize=14, marker='^')
 
             if not gdf_research_proj.empty:
                 # Signature of excluded production wells

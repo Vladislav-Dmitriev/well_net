@@ -24,6 +24,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
+    # list_objects = ['ПК1']
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
@@ -83,20 +84,22 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
             df_inj_wells = df_horizon_copy.loc[df_horizon['fond'] == 'НАГ']
             logger.info(f'Key of dictionary: {key}, Mult coefficient: {coeff}')
             df_result = pd.DataFrame()
-
+            # сценарий с целью охвата всех добывающих
             if dict_parameters['calculation_scenario'] == 'optimize':
                 logger.info(f'Selected optimize mesh scenario')
-                # если DataFrame с добывающими скважинами пустой, то вычисления по объекту нет
+                # если DataFrame с добывающими скважинами и DataFrame с приоритетными скважинами пустые,
+                # то вычисления по объекту нет
                 if (df_prod_wells.shape[0] + df_necessarily_wells.shape[0]) == 0:
                     continue
                 df_result = calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                                          df_result, df_necessarily_wells, horizon, mean_rad, coeff, key, obj_square,
                                          path_property, list_exception, dict_parameters)
+            # сценарий с построением регулярной сеткой на каждом из фондов
             elif dict_parameters['calculation_scenario'] == 'regular':
                 logger.info(f'Selected regular mesh scenario')
                 df_result = calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result,
                                               df_necessarily_wells, horizon, path_property, dict_parameters, obj_square,
-                                              mean_rad, coeff)
+                                              mean_rad, coeff, list_exception)
 
             else:
                 raise NameError(
@@ -277,6 +280,9 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
     средним радиусом в этом случае для построения области взаимодействия будет заданное максимальное расстояние
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
+    # удаление исключенных скважин из DataFrame пьезометров и нагнетательных
+    df_piez_wells = df_piez_wells[~df_piez_wells['wellName'].isin(list_exception)]
+    df_inj_wells = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
 
     df_result = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad, coeff,
                              horizon, obj_square, dict_parameters['min_research_time'],
@@ -336,10 +342,11 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
 
 
 def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
-                 obj_square, min_time_research, max_time_research, calc_option, df_piez_wells,
-                 df_prod_wells, df_inj_wells, df_result, df_necessarily_wells):
+                 obj_square, min_time_research, max_time_research, calc_option, limit_research_time,
+                 df_piez_wells, df_prod_wells, df_inj_wells, df_result, df_necessarily_wells):
     """
     Функция для расчета результирующего DataFrame по объекту
+    :param limit_research_time: параметр учета границ времени исследования
     :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param max_time_research: ограничение максимального времени исследования ННС
     :param min_time_research: ограничение минимального времени исследования ННС
@@ -412,17 +419,19 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist']
                                   * df_result['time_coef'])  # время исследования в сут через min расстояние
 
-    # # filter and delete wells, which don't fit the parameters limit research time
-    # df_result = df_result.loc[
-    #     ~((df_result['well type'] == 'vertical') & (df_result['research_time'] > max_time_research))]
-    # df_result = df_result.loc[
-    #     ~((df_result['well type'] == 'horizontal') & (df_result['research_time'] > 2 * max_time_research))]
-    # df_result['research_time'] = df_result.apply(
-    #     lambda x: min_time_research if (x['well type'] == 'vertical' and x['research_time'] < min_time_research) else x[
-    #         'research_time'], axis=1)
-    # df_result['research_time'] = df_result.apply(lambda x: 2 * min_time_research if (
-    #         x['well type'] == 'horizontal' and x['research_time'] < 2 * min_time_research) else x['research_time'],
-    #                                              axis=1)
+    # filter and delete wells, which don't fit the parameters limit research time
+    if limit_research_time:
+        df_result = df_result.loc[
+            ~((df_result['well type'] == 'vertical') & (df_result['research_time'] > max_time_research))]
+        df_result = df_result.loc[
+            ~((df_result['well type'] == 'horizontal') & (df_result['research_time'] > 2 * max_time_research))]
+        df_result['research_time'] = df_result.apply(
+            lambda x: min_time_research if (
+                    x['well type'] == 'vertical' and x['research_time'] < min_time_research) else x[
+                'research_time'], axis=1)
+        df_result['research_time'] = df_result.apply(lambda x: 2 * min_time_research if (
+                x['well type'] == 'horizontal' and x['research_time'] < 2 * min_time_research) else x['research_time'],
+                                                     axis=1)
 
     df_result['oil_loss'] = 0
     df_result['gas_loss'] = 0

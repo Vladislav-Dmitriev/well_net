@@ -198,7 +198,9 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     k = k / (num_obj + num_default)
     gas_viscocity = gas_viscocity / (num_obj + num_default)
     pressure = (pressure / (num_obj + num_default)) / 1.033
-    if 'газ' in str(gas_status).lower():
+    if 'газ' in str(gas_status).lower() and gas_viscocity == 0:
+        time_coef = phi * 0.01938265 / (4 * k * pressure * 3600 * 24 * 10 ** (-7))
+    elif 'газ' in str(gas_status).lower() and gas_viscocity != 0:
         time_coef = phi * gas_viscocity / (4 * k * pressure * 3600 * 24 * 10 ** (-7))
     else:
         time_coef = 462.2824 * (mu * ct * phi / k) / 24  # сутки
@@ -226,10 +228,6 @@ def upload_parameters(path):
     with open(path, encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
 
-    gdis_file = dict_parameters['gdis_file']
-    gdis_file = None if gdis_file == "нет" else gdis_file
-    dict_parameters['gdis_file'] = gdis_file
-
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
     year = None if year == "нет" else year
     dict_parameters['gdis_option'] = str(year)
@@ -238,22 +236,19 @@ def upload_parameters(path):
     separation = None if separation == "нет" else separation
     dict_parameters['separation_by_years'] = separation
 
-    exception = dict_parameters['exception_file']
-    exception = None if exception == "нет" else exception
-    dict_parameters['exception_file'] = exception
-
     list_order = dict_parameters['list_order_fond']
     list_order = (list_order.upper()).split(', ')
     dict_parameters['list_order_fond'] = list_order
-
-    project = dict_parameters['project_fond_file']
-    project = None if project == "нет" else project
-    dict_parameters['project_fond_file'] = project
 
     mean_oilrate = dict_parameters['mean_oilrate_option']
     mean_oilrate = False if mean_oilrate == "нет" else mean_oilrate
     mean_oilrate = True if mean_oilrate == "да" else mean_oilrate
     dict_parameters['mean_oilrate_option'] = mean_oilrate
+
+    limit_research = dict_parameters['limit_research_time']
+    limit_research = False if limit_research == 'нет' else limit_research
+    limit_research = True if limit_research == 'да' else limit_research
+    dict_parameters['limit_research_time'] = limit_research
 
     return dict_parameters
 

@@ -23,13 +23,10 @@ if __name__ == '__main__':
     dict_parameters = upload_parameters('conf_files/parameters.yml')
 
     # Upload files and initial data preparation_________________________________________________________________________
-    df_input, date, list_exception = upload_input_data(dict_constant, dict_parameters)
+    df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
 
     # Upload files and GDIS data preparation____________________________________________________________________________
-    if (dict_parameters['gdis_option'] is not None) and (
-            pd.to_datetime(dict_parameters['gdis_option'], format='%d.%m.%Y') < date) and (
-            dict_parameters['gdis_file'] is not None):
-        df_input = upload_gdis_data(df_input, date, dict_parameters)
+    df_input = upload_gdis_data(df_input, dict_parameters)
 
     # add logs to file
     logger.add('output/logfile.log', level='INFO', format="{message}")
