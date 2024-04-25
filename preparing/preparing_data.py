@@ -8,8 +8,8 @@ import pandas as pd
 from loguru import logger
 from shapely.geometry import Point, LineString
 
-from auxiliary_functions import get_path, clean_work_horizon, unpack_status
-from dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
+from calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status
+from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
 def upload_input_data(dict_constant, dict_parameters):
@@ -32,14 +32,14 @@ def upload_input_data(dict_constant, dict_parameters):
     logger.info("Data type definition")
 
     # с новой выгрузкой NGT 'utf-8' не всегда может считать, поэтому добавил try/except
-    first_row = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']), header=None,
+    first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
                               sheet_name='Фонд', nrows=1)
 
     if first_row.loc[0][0] == '№ скважины':
 
         logger.info("Preparing NGT data")
 
-        df = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']), header=0,
+        df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
                            skiprows=[1],
                            sheet_name='Фонд')
         df = df.dropna(subset=['№ скважины'])
@@ -56,7 +56,7 @@ def upload_input_data(dict_constant, dict_parameters):
 
         logger.info("Preparing GeoBD data")
 
-        df = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']), header=0,
+        df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
                            skiprows=[1],
                            sheet_name='Фонд')
         df = df.dropna(subset=['NSKV'])
@@ -96,7 +96,8 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input = df_input[df_input.KUST.notnull()]
     df_input = df_input[df_input['KUST'] != 0]
     df_input = df_input[df_input['SOST'] != 0]
-    df_input[['NSKV', 'PLAST', 'STATUS_DATE']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE']].astype('str')
+    df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']].astype(
+        'str')
 
     # cleaning wellStatus
     df_input = df_input.loc[~df_input.SOST.map(str.lower).str.contains(DELETE_MARKER)]
@@ -143,7 +144,6 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
 
         df_input.loc[df_input['UWI'] == well, 'PLAST'] = df_input.apply(lambda x: ', '.join(objs), axis=1)
 
-    df_input.reset_index(drop=True)
     df_input = df_input.drop_duplicates(subset=['UWI'])
     df_input = df_input.reset_index(drop=True)
 
@@ -169,10 +169,10 @@ def preparing_project_wells(dict_parameters):
     logger.info('Preparing project wells')
     application_path = get_path()
     try:
-        df_project = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']),
+        df_project = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                    header=0, skiprows=[1], decimal='.', sheet_name='Проектный фонд')
         if df_project.empty:
-            return df_project
+            return pd.DataFrame()
     except ValueError:
         logger.info('Sheet with name "Проектный фонд" not found in data file')
         return pd.DataFrame()
@@ -297,7 +297,8 @@ def upload_gdis_data(df_input, dict_parameters):
     application_path = get_path()
     logger.info("Upload GDIS file")
     try:
-        df_gdis = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']), skiprows=[0],
+        df_gdis = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                skiprows=[0],
                                 sheet_name='ГДИС')
         if df_gdis.empty:
             return df_input
@@ -389,9 +390,10 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
 
     # delete production wells with fluid rate less than fluid_rate in parameters
     df_input = df_input[
-        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.fluidRate <= fluid_rate))]
+        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.fluidRate >= fluid_rate))]
     # delete production wells with water cut less
-    df_input = df_input[~((df_input['gasStatus'] == 'ДОБ') & (df_input.water_cut <= watercut))]
+    df_input = df_input[
+        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.water_cut <= watercut))]
 
     df_input['oilfield'] = list(map(lambda x: str(x).upper(), df_input['oilfield']))
     df_input['water_cut'] = df_input.apply(lambda x: 100 if (x.water_cut == 0 and
@@ -459,7 +461,8 @@ def gdis_preparing(df_gdis, input_wells, year):
     try:
         df_gdis = df_gdis[df_gdis['end_of_research'] >= pd.to_datetime(year, format='%d.%m.%Y')]
     except ValueError:
-        raise ValueError(f'Введена некорректная дата ГДИС {year}. Введите дату в формате ДД.ММ.ГГГГ')
+        raise ValueError(
+            f'Введена некорректная дата ГДИС {year}. Введите в параметрах расчета дату в формате ДД.ММ.ГГГГ')
 
     return df_gdis
 
@@ -492,7 +495,7 @@ def preparing_reservoir_properties(dict_parameters, path):
     """
     application_path = get_path()
     try:
-        df_property = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']),
+        df_property = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                     skiprows=[0],
                                     sheet_name='PVT')
         if df_property.empty:
@@ -524,13 +527,24 @@ def preparing_reservoir_properties(dict_parameters, path):
         'Кпрон (средняя) по нефти': 'K_abs'
     }
     df_property.columns = df_property.columns.str.strip()
-    df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
-                               'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
-                               'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
-                               'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw  (для ОФП)',
-                               'Степень для функции Krw (доп)  (для ОФП)', 'Степень Kro  (для ОФП)',
-                               'Степень для функции Kro (доп) (для ОФП)', 'Swo (для ОФП)', 'Swk  (для ОФП)',
-                               'Krwk  (для ОФП)', 'Krok  (для ОФП)', 'Кпрон (средняя) по нефти']]
+    # выделение нужных столбцов PVT свойств для старого и нового формата файла справочника PVT
+    try:
+        df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
+                                   'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
+                                   'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
+                                   'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw  (для ОФП)',
+                                   'Степень для функции Krw (доп)  (для ОФП)', 'Степень Kro  (для ОФП)',
+                                   'Степень для функции Kro (доп) (для ОФП)', 'Swo (для ОФП)', 'Swk  (для ОФП)',
+                                   'Krwk  (для ОФП)', 'Krok  (для ОФП)', 'Кпрон (средняя) по нефти']]
+    except KeyError:
+        df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
+                                   'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
+                                   'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
+                                   'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw:',
+                                   'Степень для функции Krw (доп):', 'Степень Kro:',
+                                   'Степень для функции Kro (доп):', 'Swo', 'Swk',
+                                   'Krwk', 'Krok', 'Кпрон']]
+
     df_property.columns = dict_names_prop.values()
     for i in df_property.columns:
         df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
@@ -586,7 +600,7 @@ def get_exception_wells(dict_parameters, sheet):
     """
     application_path = get_path()
     try:
-        df_exception = pd.read_excel(os.path.join(application_path, "files\\", dict_parameters['data_file']),
+        df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                      header=None,
                                      sheet_name=sheet)
         if df_exception.empty:

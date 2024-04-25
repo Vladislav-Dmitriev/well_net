@@ -6,13 +6,13 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from auxiliary_functions import upload_parameters, get_path
-from calculation_wells import calculation
-from dictionaries import dict_constant
-from geometry import check_intersection_area, load_contour
-from mapping import mesh_visualization, visualization
-from preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
-from print_in_excel import write_optim_mesh, write_regular_mesh
+from calculation.auxiliary_functions import upload_parameters, get_path
+from calculation.calculation_wells import calculation
+from calculation.geometry import check_intersection_area, load_contour
+from preparing.dictionaries import dict_constant
+from preparing.preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
+from visualization.mapping import mesh_visualization, visualization
+from visualization.print_in_excel import write_optim_mesh, write_regular_mesh
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -20,7 +20,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 if __name__ == '__main__':
 
     # Upload parameters
-    dict_parameters = upload_parameters('conf_files/parameters.yml')
+    dict_parameters = upload_parameters('input/parameters.yml')
 
     # Upload files and initial data preparation_________________________________________________________________________
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
@@ -46,8 +46,9 @@ if __name__ == '__main__':
     logger.info("check the content of contours")
 
     # get path and names of contour files with coordinates
-    contours_path = application_path + "\\contours"
-    contours_content = os.listdir(path=contours_path)
+    contours_path = application_path + "\\input"
+    # contours_content = os.listdir(path=contours_path)
+    contours_content = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
 
     well_out_contour = set(df_input.wellName.values)
     dict_result = {}
@@ -93,9 +94,11 @@ if __name__ == '__main__':
                          dict_parameters['calc_option'], **dict_constant)
     else:
         # Map drawing for regular mesh scenario
-        mesh_visualization(df_input, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
+        mesh_visualization(df_input, dict_result, list_exception,
+                           dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start print in Excel
-        write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
+        write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'],
+                           **dict_constant)
 
     logger.info("End of calculation")
 

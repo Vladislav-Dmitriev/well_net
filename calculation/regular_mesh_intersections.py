@@ -6,8 +6,8 @@ from shapely.ops import cascaded_union
 from shapely.ops import unary_union
 from tqdm import tqdm
 
-from auxiliary_functions import get_property, get_time_coef
-from geometry import check_intersection_area
+from calculation.auxiliary_functions import get_property, get_time_coef
+from calculation.geometry import check_intersection_area
 
 
 def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
@@ -34,9 +34,11 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     df_inj_wells = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
     df_prod_wells = df_prod_wells[~df_prod_wells['wellName'].isin(list_exception)]
     # кол-во скважин в каждом фонде для определения процента вхождения в ОС
-    inj_count = df_inj_wells.shape[0]
-    prod_count = df_prod_wells.shape[0]
-    piez_count = df_piez_wells.shape[0]
+    inj_count = df_inj_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'НАГ'].shape[0]
+    prod_count = df_prod_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'ДОБ'].shape[0]
+    piez_count = df_piez_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'ПЬЕЗ'].shape[0]
+    gas_prod_count = df_prod_wells[df_prod_wells['gasStatus'].str.contains('газ')].shape[0] + df_necessarily_wells[
+        (df_necessarily_wells['fond'] == 'ДОБ') & (df_necessarily_wells['gasStatus'].str.contains('газ'))].shape[0]
     # словарь с DataFrame каждого фонда, процентом скважин в ОС и приоритетных скважин
     dict_fonds = {}
     dict_fonds['ПЬЕЗ'] = [df_piez_wells, dict_parameters['percent_piez'],
@@ -88,6 +90,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                     df_fond[df_fond['wellName'] == list_optim[0]][
                         'intersection'].explode().unique())
                 list_optim = [x for x in list_optim if x not in list_exception]
+            # добавление обязательных скважин r результирующему DataFrame
             df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
             df_current_result = pd.concat([df_necessarily_fond, df_current_result], axis=0, sort=False).reset_index(
                 drop=True)
@@ -120,10 +123,6 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
         df_result = pd.concat([df_result, df_current_result], axis=0, sort=False).reset_index(drop=True)
 
-    if df_result.empty and df_necessarily_wells.empty:
-        return df_result
-    else:
-        df_result = pd.concat([df_result, df_necessarily_wells], axis=0, sort=False).reset_index(drop=True)
     df_result[
         'mean_radius'] = mean_rad * coeff  # столбец с текущим средним радиусом по объекту, домножается на коэфф.
     df_result['min_dist'] = df_result['min_dist'] * coeff
@@ -187,18 +186,24 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         list(df_result['AREA'].explode())).area / obj_square * 100
     # процент скважин в опорной сети из скважин на объекте по каждому типу
     df_result['percent_piez_wells'] = 0
-    if df_piez_wells.shape[0] != 0:
-        df_result['percent_piez_wells'] = 100 * \
-                                          df_result[df_result['fond'] == 'ПЬЕЗ'].shape[
-                                              0] / piez_count
+    if piez_count != 0:
+        df_result['percent_piez_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ПЬЕЗ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
+            0] / piez_count
     df_result['percent_inj_wells'] = 0
-    if df_inj_wells.shape[0] != 0:
-        df_result['percent_inj_wells'] = 100 * df_result[df_result['fond'] == 'НАГ'].shape[
+    if inj_count != 0:
+        df_result['percent_inj_wells'] = 100 * df_result[
+            (df_result['fond'] == 'НАГ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
             0] / inj_count
     df_result['percent_prod_wells'] = 0
-    if df_prod_wells.shape[0] != 0:
-        df_result['percent_prod_wells'] = 100 * df_result[df_result['fond'] == 'ДОБ'].shape[
+    if prod_count != 0:
+        df_result['percent_prod_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ДОБ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
             0] / prod_count
+    df_result['percent_gas_wells'] = 0
+    if gas_prod_count != 0:
+        df_result['percent_gas_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ДОБ') & (df_result['gasStatus'].str.contains('газ'))].shape[0] / gas_prod_count
     df_result['year_of_survey'] = 0
 
     # поиск охвата проектного фонда скважинами из ОС

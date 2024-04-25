@@ -1,17 +1,29 @@
 -----------------------------------------------Содержание-----------------------------------------------
 
-- auxiliary_functions.py
-- calculation_wells.py
-- design.py
-- dictionaries.py
-- FirstRowWells.py
-- geometry.py
-- main.py
-- mapping.py
-- preparing_data.py
-- print_in_excel.py
-- regular_mesh_all_wells.py
-- regular_mesh_intersections.py
+wellnet/
+	calculation/
+		__init__.py
+		auxiliary_functions.py
+		calculation_wells.py
+		FirstRowWells.py
+		geometry.py
+		regular_mesh_all_wells.py
+		regular_mesh_intersections.py
+
+	preparing/
+		__init__.py
+		dictionaries.py
+		preparing_data.py
+
+	visualization/
+		__init__.py
+		design.py
+		mapping.py
+		print_in_excel.py
+	
+	__init__.py
+	main.py
+
 
 -----------------------------------------------Инструкция-----------------------------------------------
 

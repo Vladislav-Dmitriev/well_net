@@ -61,8 +61,8 @@ dict_project_columns = {
 # CONSTANT
 dict_constant = {
     'PROD_STATUS': "раб|нак|ост",
-    'PROD_MARKER': "неф|газ|водозаб|вдз|гк|конд",
+    'PROD_MARKER': "неф|газ|гк|конд",
     'PIEZ_STATUS': "пьез",
     'INJ_MARKER': "наг|пог",
     'INJ_STATUS': "раб",
-    'DELETE_STATUS': "лик|конс|перев|б/д|осв"}
+    'DELETE_STATUS': "лик|конс|перев|б/д|осв|безд|ост|проек"}

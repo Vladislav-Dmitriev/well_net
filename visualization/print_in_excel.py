@@ -3,13 +3,14 @@ import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
-from auxiliary_functions import unpack_status
-from geometry import check_intersection_area
+from calculation.auxiliary_functions import unpack_status
+from calculation.geometry import check_intersection_area
 
 
-def write_regular_mesh(df_input, dict_result, percent, calc_option):
+def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
     """
     Запись результатов расчета регулярной сетки в Excel
+    :param dict_constant: словарь со статусами скважин
     :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param percent: процент длины ГС для включения в зону охвата
     :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
@@ -24,6 +25,10 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         'oilfield': 'Месторождение',
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
         'oilRate': 'Дебит нефти (ТР), т/сут',
         'fluidRate': 'Дебит жидкости (ТР), м3/сут',
         'gasRate': 'Дебит природного газа, тыс.м3/сут',
@@ -32,13 +37,9 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         'water_cut': 'Обводненность (ТР), % (объём)',
         'exploitation': 'Способ эксплуатации',
         'condRate': 'Дебит конденсата газа, т/сут',
-        'num_of_research': 'Количество исследований в год',
         'well type': 'Тип скважины',
-        'coordinateX': 'Координата X',
-        'coordinateX3': 'Координата забоя Х (по траектории)',
-        'coordinateY': 'Координата Y',
-        'coordinateY3': 'Координата забоя Y (по траектории)',
         'fond': 'Фонд скважины',
+        'num_of_research': 'Количество исследований в год',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
@@ -52,12 +53,13 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         'current_horizon': 'Объект расчета',
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
-        'gas_loss': 'Потери газа',
+        'gas_loss': 'Потери газа, тыс. м3',
         'injection_loss': 'Потери закачки, м3',
         'coverage_percentage': 'Процент охвата площади объекта',
         'percent_piez_wells': 'Доля пьезометров в опорной сети',
         'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
         'year_of_survey': 'Год исследования',
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
@@ -99,6 +101,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         # всем скважинам в df_result добавляется маркер, означающий, что они выбраны в ОС
         df['wellNet'] = 'Выбрана в опорную сеть'
         list_research = list(df['intersection'].explode().unique())
+        df_in_contour = df_in_contour[~df_in_contour['wellName'].isin(list(df['wellName'].explode().unique()))]
         # из исходного DataFrame, обрезанного контуром, если он задан, удаляются скважины, отобранные/исключенные из ОС
         df_research = df_in_contour[
             (df_in_contour['wellName'].isin(list_research)) | (df_in_contour['wellName'].isin(list_research_proj))]
@@ -113,10 +116,18 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
             axis=1, inplace=True)
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
+        df.loc[df['intersection'].str.contains('Исключена'), 'wellNet'] = 'Исключена из ОС'
 
         df = pd.concat([df, df_research, df_not_wellnet], ignore_index=True, sort=False)
         df.columns = dict_rename.values()
         sht.range('A1').options().value = pd.DataFrame(df)
+
+    df_report = get_report(dict_result, **dict_constant)
+    if "report" in new_wb.sheets:
+        xw.Sheet["report"].delete()
+    new_wb.sheets.add("report")
+    sht = new_wb.sheets("report")
+    sht.range('A1').options().value = df_report
 
     new_wb.save("output/out_file_mesh.xlsx")
     # End print
@@ -144,6 +155,10 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         'oilfield': 'Месторождение',
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
         'oilRate': 'Дебит нефти (ТР), т/сут',
         'fluidRate': 'Дебит жидкости (ТР), м3/сут',
         'gasRate': 'Дебит природного газа, тыс.м3/сут',
@@ -152,13 +167,9 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         'water_cut': 'Обводненность (ТР), % (объём)',
         'exploitation': 'Способ эксплуатации',
         'condRate': 'Дебит конденсата газа, т/сут',
-        'num_of_research': 'Количество исследований в год',
         'well type': 'Тип скважины',
-        'coordinateX': 'Координата X',
-        'coordinateX3': 'Координата забоя Х (по траектории)',
-        'coordinateY': 'Координата Y',
-        'coordinateY3': 'Координата забоя Y (по траектории)',
         'fond': 'Фонд скважины',
+        'num_of_research': 'Количество исследований в год',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
@@ -172,12 +183,13 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         'current_horizon': 'Объект расчета',
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
-        'gas_loss': 'Потери газа',
+        'gas_loss': 'Потери газа, тыс. м3',
         'injection_loss': 'Потери закачки, м3',
         'coverage_percentage': 'Процент охвата площади объекта',
-        'percent_prod_wells': 'Доля добывающих в опорной сети',
-        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_piez_wells': 'Доля пьезометров в опорной сети',
+        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
         'year_of_survey': 'Год исследования',
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
@@ -273,9 +285,12 @@ def get_report(dict_result, **dict_constant):
                          'oil_loss0': 'Потери нефти 1 год, т',
                          'oil_loss1': 'Потери нефти 2 год, т',
                          'oil_loss2': 'Потери нефти 3 год, т',
-                         'injection_loss0': 'Потери закачки 1 год, м3',
-                         'injection_loss1': 'Потери закачки 2 год, м3',
-                         'injection_loss2': 'Потери закачки 3 год, м3',
+                         'injection_loss0': 'Потери закачки жидкости 1 год, м3',
+                         'injection_loss1': 'Потери закачки жидкости 2 год, м3',
+                         'injection_loss2': 'Потери закачки жидкости 3 год, м3',
+                         'gas_loss0': 'Потери по добыче газа 1 год, тыс.м3',
+                         'gas_loss1': 'Потери по добыче газа 2 год, тыс.м3',
+                         'gas_loss2': 'Потери по добыче газа 3 год, тыс.м3',
                          'percent_of_default': 'Процент объектов по умолчанию'}
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
@@ -310,17 +325,25 @@ def get_report(dict_result, **dict_constant):
             len(set(df[df['year_of_survey'] == 1]['intersection'].explode().unique()))]
         dict_report['research_wells2'] = dict_report.get('research_wells2', []) + [
             len(set(df[df['year_of_survey'] == 2]['intersection'].explode().unique()))]
-
+        # потери по добыче нефти
         dict_report['oil_loss0'] = dict_report.get('oil_loss0', []) + [df[df['year_of_survey'] == 0].oil_loss.sum()]
         dict_report['oil_loss1'] = dict_report.get('oil_loss1', []) + [df[df['year_of_survey'] == 1].oil_loss.sum()]
         dict_report['oil_loss2'] = dict_report.get('oil_loss2', []) + [df[df['year_of_survey'] == 2].oil_loss.sum()]
-
+        # потери по закачке жидкости
         dict_report['injection_loss0'] = (dict_report.get('injection_loss0', []) +
                                           [df[df['year_of_survey'] == 0].injection_loss.sum()])
         dict_report['injection_loss1'] = (dict_report.get('injection_loss1', []) +
                                           [df[df['year_of_survey'] == 1].injection_loss.sum()])
         dict_report['injection_loss2'] = dict_report.get('injection_loss2', []) + [
             df[df['year_of_survey'] == 2].injection_loss.sum()]
+        # потери по добыче газа
+        dict_report['gas_loss0'] = (dict_report.get('gas_loss0', []) +
+                                    [df[(df['year_of_survey'] == 0) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss1'] = (dict_report.get('gas_loss1', []) +
+                                    [df[(df['year_of_survey'] == 1) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss2'] = (dict_report.get('gas_loss2', []) +
+                                    [df[(df['year_of_survey'] == 2) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+
         dict_report['percent_of_default'] = (dict_report.get('percent_of_default', []) +
                                              [100 * df.default_count.sum() / df.obj_count.sum()])
 

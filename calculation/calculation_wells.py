@@ -4,10 +4,10 @@ from loguru import logger
 from shapely.ops import unary_union, cascaded_union
 from tqdm import tqdm
 
-from FirstRowWells import mean_radius
-from auxiliary_functions import get_time_coef, get_property, dict_keys
-from geometry import intersect_number, optimization, check_intersection_area, add_shapely_types
-from regular_mesh_intersections import calc_regular_mesh
+from .FirstRowWells import mean_radius
+from .auxiliary_functions import get_time_coef, get_property, dict_keys
+from .geometry import intersect_number, optimization, check_intersection_area, add_shapely_types
+from .regular_mesh_intersections import calc_regular_mesh
 
 
 def calculation(polygon, df_in_contour, contour_name, path_property, list_exception, dict_parameters):
@@ -24,7 +24,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
-    # list_objects = ['ПК1']
+    # list_objects = ['БВ8/1']
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
@@ -90,6 +90,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                 # если DataFrame с добывающими скважинами и DataFrame с приоритетными скважинами пустые,
                 # то вычисления по объекту нет
                 if (df_prod_wells.shape[0] + df_necessarily_wells.shape[0]) == 0:
+                    logger.info(f'THERE ARE NO PRODUCTION AND NECESSARILY WELLS FOR OBJECT {horizon}')
                     continue
                 df_result = calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                                          df_result, df_necessarily_wells, horizon, mean_rad, coeff, key, obj_square,
@@ -286,8 +287,10 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
 
     df_result = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad, coeff,
                              horizon, obj_square, dict_parameters['min_research_time'],
-                             dict_parameters['max_research_time'], dict_parameters['calc_option'], df_piez_wells,
-                             df_prod_wells, df_inj_wells, df_result.copy(), df_necessarily_wells)
+                             dict_parameters['max_research_time'], dict_parameters['calc_option'],
+                             dict_parameters['limit_research_time'], df_piez_wells, df_prod_wells, df_inj_wells,
+                             df_result.copy(), df_necessarily_wells)
+
     df_result['year_of_survey'] = 0  # для скважин первой итерации расчета год исследования ставится текущий
 
     if (coeff > dict_parameters['limit_radius_coef']) and (dict_parameters['separation_by_years'] is not None):
@@ -315,8 +318,9 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
         df_result_invisible = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad,
                                            coeff, horizon, obj_square, dict_parameters['min_research_time'],
                                            dict_parameters['max_research_time'], dict_parameters['calc_option'],
-                                           df_piez_recalc, df_prod_recalc, df_inj_recalc, df_result_invisible,
-                                           pd.DataFrame())
+                                           dict_parameters['limit_research_time'], df_piez_recalc, df_prod_recalc,
+                                           df_inj_recalc, df_result_invisible,
+                                           pd.DataFrame(columns=df_piez_recalc.columns))
         if dict_parameters['separation_by_years'] == 1:
             df_result_invisible['year_of_survey'] = 1
             df_result = pd.concat([df_result, df_result_invisible],
@@ -346,6 +350,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                  df_piez_wells, df_prod_wells, df_inj_wells, df_result, df_necessarily_wells):
     """
     Функция для расчета результирующего DataFrame по объекту
+    :param df_necessarily_wells: DataFrame с обязательными скважинами
     :param limit_research_time: параметр учета границ времени исследования
     :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param max_time_research: ограничение максимального времени исследования ННС
@@ -363,11 +368,13 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     :param df_result: пустой DataFrame, в который записывается результат расчета
     :return: результирующий DataFrame по объекту
     """
-    inj_count = df_inj_wells.shape[0]
-    prod_count = df_prod_wells.shape[0]
-    piez_count = df_piez_wells.shape[0]
+    inj_count = df_inj_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'НАГ'].shape[0]
+    prod_count = df_prod_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'ДОБ'].shape[0]
+    piez_count = df_piez_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'ПЬЕЗ'].shape[0]
+    gas_prod_count = df_prod_wells[df_prod_wells['gasStatus'].str.contains('газ')].shape[0] + df_necessarily_wells[
+        (df_necessarily_wells['fond'] == 'ДОБ') & (df_necessarily_wells['gasStatus'].str.contains('газ'))].shape[0]
 
-    if prod_count != 0:
+    if df_prod_wells.shape[0] != 0:
 
         logger.info(f'Calculation for {horizon}')
         # I. Piezometric wells_____________________________________________________________________________________
@@ -392,6 +399,8 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                                                                       hor_prod_wells,
                                                                       df_result, percent,
                                                                       calc_option)
+    else:
+        logger.info(f'THERE ARE NO PRODUCTION WELLS FOR OBJECT {horizon}')
 
     df_result = pd.concat([df_result, df_necessarily_wells], axis=0, sort=False).reset_index(drop=True)
 
@@ -438,21 +447,32 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['injection_loss'] = 0
     df_result['oil_loss'] = df_result.apply(
         lambda x: (x.oilRate + x.condRate) * x.research_time if (
-                str(x.gasStatus) == 'газоконденсатная') else x.oilRate * x.research_time, axis=1)  # потери по нефти
+                str(x.gasStatus) == 'газоконденсатная') else x.oilRate * x.research_time, axis=1)  # потери по нефти, т
     df_result['gas_loss'] = df_result.apply(lambda x: (x.injectivity_day * x.research_time) if (
-            str(x.gasStatus) == 'газонагнетательная') else x.gasRate * x.research_time, axis=1)  # потери по газу
-    df_result['injection_loss'] = df_result['injectivity'] * df_result['research_time']  # потери по закачке воды
+            str(x.gasStatus) == 'газонагнетательная') else x.gasRate * x.research_time,
+                                            axis=1)  # потери по газу, тыс.м3
+    df_result['injection_loss'] = df_result['injectivity'] * df_result['research_time']  # потери по закачке воды, м3
     df_result['coverage_percentage'] = unary_union(list(df_result['AREA'].explode())).area / obj_square
     # процент скважин в опорной сети из скважин на объекте по каждому типу
     df_result['percent_piez_wells'] = 0
-    if df_piez_wells.shape[0] != 0:
-        df_result['percent_piez_wells'] = df_result[df_result['fond'] == 'ПЬЕЗ'].shape[0] / piez_count
+    if piez_count != 0:
+        df_result['percent_piez_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ПЬЕЗ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
+            0] / piez_count
     df_result['percent_inj_wells'] = 0
-    if df_inj_wells.shape[0] != 0:
-        df_result['percent_inj_wells'] = df_result[df_result['fond'] == 'НАГ'].shape[0] / inj_count
+    if inj_count != 0:
+        df_result['percent_inj_wells'] = 100 * df_result[
+            (df_result['fond'] == 'НАГ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
+            0] / inj_count
     df_result['percent_prod_wells'] = 0
-    if df_prod_wells.shape[0] != 0:
-        df_result['percent_prod_wells'] = df_result[df_result['fond'] == 'ДОБ'].shape[0] / prod_count
+    if prod_count != 0:
+        df_result['percent_prod_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ДОБ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
+            0] / prod_count
+    df_result['percent_gas_wells'] = 0
+    if gas_prod_count != 0:
+        df_result['percent_gas_wells'] = 100 * df_result[
+            (df_result['fond'] == 'ДОБ') & (df_result['gasStatus'].str.contains('газ'))].shape[0] / gas_prod_count
 
     return df_result
 
