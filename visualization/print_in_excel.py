@@ -3,7 +3,6 @@ import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
-from calculation.auxiliary_functions import unpack_status
 from calculation.geometry import check_intersection_area
 
 
@@ -122,7 +121,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
         df.columns = dict_rename.values()
         sht.range('A1').options().value = pd.DataFrame(df)
 
-    df_report = get_report(dict_result, **dict_constant)
+    df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
         xw.Sheet["report"].delete()
     new_wb.sheets.add("report")
@@ -250,7 +249,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
             axis=1)
         df.columns = dict_rename_columns.values()
         sht.range('A1').options().value = df
-    df_report = get_report(dict_result, **dict_constant)
+    df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
         xw.Sheet["report"].delete()
     new_wb.sheets.add("report")
@@ -262,7 +261,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
     pass
 
 
-def get_report(dict_result, **dict_constant):
+def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
     :param dict_result: словарь с результатами расчетов по всем объектам
@@ -293,7 +292,6 @@ def get_report(dict_result, **dict_constant):
                          'gas_loss2': 'Потери по добыче газа 3 год, тыс.м3',
                          'percent_of_default': 'Процент объектов по умолчанию'}
 
-    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
     dict_report = {}
 
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
@@ -306,12 +304,9 @@ def get_report(dict_result, **dict_constant):
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]
         dict_report['mean_time'] = dict_report.get('mean_time', []) + [df['research_time'].mean()]
-        dict_report['piez_count'] = dict_report.get('piez_count', []) + [
-            len(df.loc[df.wellStatus.str.contains(PIEZ_STATUS)])]
-        dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(
-            df.loc[(df.workMarker.str.contains(INJ_MARKER)) & (df.wellStatus.str.contains(INJ_STATUS))])]
-        dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(
-            df.loc[(df.workMarker.str.contains(PROD_MARKER)) & (df.wellStatus.str.contains(PROD_STATUS))])]
+        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df[df['fond'] == 'ПЬЕЗ'])]
+        dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(df[df['fond'] == 'НАГ'])]
+        dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(df[df['fond'] == 'ДОБ'])]
 
         dict_report['well_quantity0'] = dict_report.get('well_quantity0', []) + [df[df['year_of_survey'] == 0].shape[0]]
         dict_report['well_quantity1'] = (dict_report.get('well_quantity1', []) +

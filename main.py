@@ -33,7 +33,7 @@ if __name__ == '__main__':
     logger.info("Starting calculation")
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = 'conf_files/reservoir_properties.json'
+    path_property = 'input/reservoir_properties.json'
     logger.info(f"path: {path_property}")
 
     # Upload and print reservoir_properties.yml
