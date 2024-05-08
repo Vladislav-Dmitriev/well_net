@@ -3,13 +3,15 @@ import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
-from functions import unpack_status
-from geometry import check_intersection_area
+from src.calculation.geometry import check_intersection_area
 
 
-def write_cluster_mesh(df_input, dict_result, percent):
+def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
     """
     Запись результатов расчета регулярной сетки в Excel
+    :param dict_constant: словарь со статусами скважин
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
+    :param percent: процент длины ГС для включения в зону охвата
     :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
     :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
@@ -36,33 +38,37 @@ def write_cluster_mesh(df_input, dict_result, percent):
         'condRate': 'Дебит конденсата газа, т/сут',
         'well type': 'Тип скважины',
         'fond': 'Фонд скважины',
+        'num_of_research': 'Количество исследований в год',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
         'time_coef': 'Коэффициент для расчет времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
-        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
+        'pressure': 'Начальное пластовое давление (карты изобар), атм',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
         'percent_of_default': 'Процент объектов со свойствами по умолчанию',
         'current_horizon': 'Объект расчета',
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
-        'gas_loss': 'Потери газа',
+        'gas_loss': 'Потери газа, тыс. м3',
         'injection_loss': 'Потери закачки, м3',
         'coverage_percentage': 'Процент охвата площади объекта',
         'percent_piez_wells': 'Доля пьезометров в опорной сети',
         'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
         'year_of_survey': 'Год исследования',
+        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
 
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
-    for key, value in dict_result.items():
+    for key, value in tqdm(dict_result.items(), "Write regular mesh to excel file", position=0, leave=True,
+                           colour='white', ncols=80):
         name = str(key).replace("/", " ")
 
         if f"{name}" in new_wb.sheets:
@@ -77,26 +83,50 @@ def write_cluster_mesh(df_input, dict_result, percent):
 
         df = value[0]
         polygon = value[1]
+        # если контур не задан, то берутся все скважины из df_input кроме скважин в df_result
         if polygon is None:
             df_in_contour = df_input.copy()
         else:
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option=True))
+            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option))
             df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
+        # удаление лишних столбцов из df_in_contour
         df_in_contour.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
+        # корректировка списков проектных скважин
+        list_research_proj = list(df[df['fond'] == 'ПРОЕКТ'].wellName.explode().unique())
+        list_proj = list(df_in_contour[df_in_contour['fond'] == 'ПРОЕКТ'].wellName.explode().unique())
+        list_proj = [x for x in list_proj if x not in list_research_proj]
+        df = df[df['fond'] != 'ПРОЕКТ']  # исключение проектных скважин, охваченных скважинами ОС из df_result
+        # всем скважинам в df_result добавляется маркер, означающий, что они выбраны в ОС
+        df['wellNet'] = 'Выбрана в опорную сеть'
+        list_research = list(df['intersection'].explode().unique())
+        df_in_contour = df_in_contour[~df_in_contour['wellName'].isin(list(df['wellName'].explode().unique()))]
+        # из исходного DataFrame, обрезанного контуром, если он задан, удаляются скважины, отобранные/исключенные из ОС
+        df_research = df_in_contour[
+            (df_in_contour['wellName'].isin(list_research)) | (df_in_contour['wellName'].isin(list_research_proj))]
+        df_research['wellNet'] = 'Исследуемый фонд'
+        df_not_wellnet = df_in_contour[(~df_in_contour['wellName'].isin(list_research)) &
+                                       (~df_in_contour['wellName'].isin(list_research_proj)) &
+                                       (~df_in_contour['wellName'].isin(list(df.wellName.explode().unique())))]
+        df_not_wellnet['wellNet'] = 'Вне опорной сети'
+
+        df.drop(
+            columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'limit_oilrate', 'gasStatus', 'min_dist'],
+            axis=1, inplace=True)
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'mean_oilrate', 'gasStatus', 'min_dist'],
-                axis=1, inplace=True)
-        df['wellNet'] = 'Выбрана в опорную сеть'
-        list_wellnet = list(df['wellName'].explode().unique())
-        df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]
-        list_research = df_not_wellnet['wellName'].explode().unique()
-        df = pd.concat([df, df_not_wellnet], ignore_index=True, sort=False)
-        df['wellNet'] = df.apply(lambda x: 'Исследуемый фонд' if x.wellName in list_research else x.wellNet, axis=1)
-        df.columns = dict_rename.values()
+        df.loc[df['intersection'].str.contains('Исключена'), 'wellNet'] = 'Исключена из ОС'
 
+        df = pd.concat([df, df_research, df_not_wellnet], ignore_index=True, sort=False)
+        df.columns = dict_rename.values()
         sht.range('A1').options().value = pd.DataFrame(df)
+
+    df_report = get_report(dict_result)
+    if "report" in new_wb.sheets:
+        xw.Sheet["report"].delete()
+    new_wb.sheets.add("report")
+    sht = new_wb.sheets("report")
+    sht.range('A1').options().value = df_report
 
     new_wb.save("output/out_file_mesh.xlsx")
     # End print
@@ -104,10 +134,11 @@ def write_cluster_mesh(df_input, dict_result, percent):
     pass
 
 
-def write_to_excel(percent, df_input, dict_result, **dict_constant):
+def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
     :param percent: процент длины ГС для включения в зону охвата для сценария с опорной сеткой
     :param dict_constant: словарь со статусами скважин
@@ -137,26 +168,29 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
         'condRate': 'Дебит конденсата газа, т/сут',
         'well type': 'Тип скважины',
         'fond': 'Фонд скважины',
+        'num_of_research': 'Количество исследований в год',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
         'time_coef': 'Коэффициент для расчет времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
-        'pressure': 'Начальное пластовое давление (карты изобар), кгс/см2',
+        'pressure': 'Начальное пластовое давление (карты изобар), атм',
         'default_count': 'Объектов по умолчанию',
         'obj_count': 'Объектов всего',
         'percent_of_default': 'Процент объектов со свойствами по умолчанию',
         'current_horizon': 'Объект расчета',
         'research_time': 'Время исследования, сут',
         'oil_loss': 'Потери нефти, т',
-        'gas_loss': 'Потери газа',
+        'gas_loss': 'Потери газа, тыс. м3',
         'injection_loss': 'Потери закачки, м3',
         'coverage_percentage': 'Процент охвата площади объекта',
-        'percent_prod_wells': 'Доля добывающих в опорной сети',
-        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
         'percent_piez_wells': 'Доля пьезометров в опорной сети',
+        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
         'year_of_survey': 'Год исследования',
+        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
     df_main = df_input.copy()
@@ -164,7 +198,7 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
-    for key, value in tqdm(dict_result.items(), "Write to excel file", position=0, leave=True,
+    for key, value in tqdm(dict_result.items(), "Write optimal mesh to excel file", position=0, leave=True,
                            colour='white', ncols=80):
         name = str(key).replace("/", " ")
 
@@ -183,24 +217,39 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
             df_in_contour = df_main.copy()
         else:
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option=True))
+            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option))
             df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
+        # распределение проектных скважин на охваченные исследованием и неохваченные
+        list_research_proj = list(
+            df[df['fond'] == 'ПРОЕКТ']['wellName'].explode().unique())  # список охваченных проектных скважин
+        list_proj = list(df_in_contour[df_in_contour['fond'] == 'ПРОЕКТ']['wellName'].explode().unique())
+        list_proj = [x for x in list_proj if x not in list_research_proj]
+        df_research_proj = df_in_contour[df_in_contour['wellName'].isin(list_research_proj)]
+        df_research_proj['wellNet'] = 'Исследуемый фонд'
+        # df_not_research_proj = df_in_contour[df_in_contour['wellName'].isin(list_proj)]
+        # df_not_research_proj['wellNet'] = 'Вне опорной сети'
+
+        df = df[df['fond'] != 'ПРОЕКТ']  # убираем проектные скважины из результирующего DataFrame
         df["intersection"] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA', 'gasStatus', 'mean_oilrate'],
-                axis=1,
-                inplace=True)
+        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA',
+                         'gasStatus', 'limit_oilrate'], axis=1, inplace=True)
         df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
 
         list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин
         list_research = list(df['intersection'].explode().unique())  # список скважин, охваченных исследованием
         df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]  # скважины не попали в сеть
-        df = pd.concat([df, df_not_wellnet], ignore_index=True, sort=False)
-        df['wellNet'] = df.apply(lambda x: 'Исследуемый фонд' if x.wellName in list_research else x.wellNet, axis=1)
-        df['wellNet'] = df.apply(lambda x: 'Вне опорной сети' if x.wellNet != x.wellNet else x.wellNet, axis=1)
+
+        df = pd.concat([df, df_research_proj, df_not_wellnet], ignore_index=True, sort=False)
+        df['wellNet'] = df.apply(
+            lambda x: 'Исследуемый фонд' if (x.wellName in list_research) else x.wellNet,
+            axis=1)
+        df['wellNet'] = df.apply(
+            lambda x: 'Вне опорной сети' if (x.wellNet != x.wellNet) or (x.wellName in list_proj) else x.wellNet,
+            axis=1)
         df.columns = dict_rename_columns.values()
         sht.range('A1').options().value = df
-    df_report = get_report(dict_result, **dict_constant)
+    df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
         xw.Sheet["report"].delete()
     new_wb.sheets.add("report")
@@ -209,11 +258,10 @@ def write_to_excel(percent, df_input, dict_result, **dict_constant):
     new_wb.save("output/out_file_geometry.xlsx")
     # End print
     app1.kill()
-    # os.startfile(str(get_path() + 'output/out_file_geometry.xlsx'))
     pass
 
 
-def get_report(dict_result, **dict_constant):
+def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
     :param dict_result: словарь с результатами расчетов по всем объектам
@@ -236,29 +284,29 @@ def get_report(dict_result, **dict_constant):
                          'oil_loss0': 'Потери нефти 1 год, т',
                          'oil_loss1': 'Потери нефти 2 год, т',
                          'oil_loss2': 'Потери нефти 3 год, т',
-                         'injection_loss0': 'Потери закачки 1 год, м3',
-                         'injection_loss1': 'Потери закачки 2 год, м3',
-                         'injection_loss2': 'Потери закачки 3 год, м3',
+                         'injection_loss0': 'Потери закачки жидкости 1 год, м3',
+                         'injection_loss1': 'Потери закачки жидкости 2 год, м3',
+                         'injection_loss2': 'Потери закачки жидкости 3 год, м3',
+                         'gas_loss0': 'Потери по добыче газа 1 год, тыс.м3',
+                         'gas_loss1': 'Потери по добыче газа 2 год, тыс.м3',
+                         'gas_loss2': 'Потери по добыче газа 3 год, тыс.м3',
                          'percent_of_default': 'Процент объектов по умолчанию'}
 
-    PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_STATUS = unpack_status(dict_constant)
     dict_report = {}
 
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
                            colour='white', ncols=80):
         df = value[0]
+        df = df[df['fond'] != 'ПРОЕКТ']
         if df.empty:
             continue
         dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]
         dict_report['mean_time'] = dict_report.get('mean_time', []) + [df['research_time'].mean()]
-        dict_report['piez_count'] = dict_report.get('piez_count', []) + [
-            len(df.loc[df.wellStatus.str.contains(PIEZ_STATUS)])]
-        dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(
-            df.loc[(df.workMarker.str.contains(INJ_MARKER)) & (df.wellStatus.str.contains(INJ_STATUS))])]
-        dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(
-            df.loc[(df.workMarker.str.contains(PROD_MARKER)) & (df.wellStatus.str.contains(PROD_STATUS))])]
+        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df[df['fond'] == 'ПЬЕЗ'])]
+        dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(df[df['fond'] == 'НАГ'])]
+        dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(df[df['fond'] == 'ДОБ'])]
 
         dict_report['well_quantity0'] = dict_report.get('well_quantity0', []) + [df[df['year_of_survey'] == 0].shape[0]]
         dict_report['well_quantity1'] = (dict_report.get('well_quantity1', []) +
@@ -272,17 +320,25 @@ def get_report(dict_result, **dict_constant):
             len(set(df[df['year_of_survey'] == 1]['intersection'].explode().unique()))]
         dict_report['research_wells2'] = dict_report.get('research_wells2', []) + [
             len(set(df[df['year_of_survey'] == 2]['intersection'].explode().unique()))]
-
+        # потери по добыче нефти
         dict_report['oil_loss0'] = dict_report.get('oil_loss0', []) + [df[df['year_of_survey'] == 0].oil_loss.sum()]
         dict_report['oil_loss1'] = dict_report.get('oil_loss1', []) + [df[df['year_of_survey'] == 1].oil_loss.sum()]
         dict_report['oil_loss2'] = dict_report.get('oil_loss2', []) + [df[df['year_of_survey'] == 2].oil_loss.sum()]
-
+        # потери по закачке жидкости
         dict_report['injection_loss0'] = (dict_report.get('injection_loss0', []) +
                                           [df[df['year_of_survey'] == 0].injection_loss.sum()])
         dict_report['injection_loss1'] = (dict_report.get('injection_loss1', []) +
                                           [df[df['year_of_survey'] == 1].injection_loss.sum()])
         dict_report['injection_loss2'] = dict_report.get('injection_loss2', []) + [
             df[df['year_of_survey'] == 2].injection_loss.sum()]
+        # потери по добыче газа
+        dict_report['gas_loss0'] = (dict_report.get('gas_loss0', []) +
+                                    [df[(df['year_of_survey'] == 0) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss1'] = (dict_report.get('gas_loss1', []) +
+                                    [df[(df['year_of_survey'] == 1) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss2'] = (dict_report.get('gas_loss2', []) +
+                                    [df[(df['year_of_survey'] == 2) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+
         dict_report['percent_of_default'] = (dict_report.get('percent_of_default', []) +
                                              [100 * df.default_count.sum() / df.obj_count.sum()])
 

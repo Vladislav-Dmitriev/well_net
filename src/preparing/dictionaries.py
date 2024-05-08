@@ -18,7 +18,8 @@ dict_names_column = {
     'Способ эксплуатации': 'exploitation',
     'Дебит природного газа, тыс.м3/сут': 'gasRate',
     'Приемистость (по суточным), м3/сут': 'injectivity_day',
-    'Дебит конденсата газа, т/сут': 'condRate'
+    'Дебит конденсата газа, т/сут': 'condRate',
+    # 'Количество исследований за год': 'num_of_research'
 }
 
 # input GeoBD data column names
@@ -42,14 +43,26 @@ dict_geobd_columns = {
     'VPROCOBV': 'water_cut',
     'SPOSOB': 'exploitation',
     'DEBCOND': 'condRate',
+    'well type': 'well type',
+    # 'RESEARCH': 'num_of_research'
+}
+
+# input project data column values
+dict_project_columns = {
+    'NSKV': 'wellName',
+    'X': 'coordinateX',
+    'X3': 'coordinateX3',
+    'Y': 'coordinateY',
+    'Y3': 'coordinateY3',
+    'PLAST': 'workHorizon',
     'well type': 'well type'
 }
 
 # CONSTANT
 dict_constant = {
     'PROD_STATUS': "раб|нак|ост",
-    'PROD_MARKER': "неф|газ|водозаб|вдз|гк|конд",
+    'PROD_MARKER': "неф|газ|гк|конд",
     'PIEZ_STATUS': "пьез",
     'INJ_MARKER': "наг|пог",
     'INJ_STATUS': "раб",
-    'DELETE_STATUS': "лик|конс|перев|б/д|осв"}
+    'DELETE_STATUS': "лик|конс|перев|б/д|осв|безд|ост|проек"}

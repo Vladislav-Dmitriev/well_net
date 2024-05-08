@@ -79,11 +79,12 @@ def check_intersection_point(point, df_areas, percent, calc_option):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
-def intersect_number(df_prod, df_inj_piez, percent):
+def intersect_number(df_prod, df_inj_piez, percent, calc_option):
     """
     Функция добавляет в DataFrame столбец 'intersection', в него записываются
     имена скважин из другого DataFrame, с которыми пересекается текущая, затем добавляется столбец 'number',
     в который заносится кол-во пересечений конкретной скважины с остальными
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param percent: процент попадания скважины в зону охвата
     :param df_prod: добывающие
     :param df_inj_piez: нагнетательные/пьезометры
@@ -97,11 +98,11 @@ def intersect_number(df_prod, df_inj_piez, percent):
         df_prod.insert(loc=df_prod.shape[1], column="intersection", value=0)
         df_prod.insert(loc=df_prod.shape[1], column="number", value=0)
 
-    df_inj_piez["intersection"] = list(map(lambda x: check_intersection_area(x, df_prod, percent, True),
+    df_inj_piez["intersection"] = list(map(lambda x: check_intersection_area(x, df_prod, percent, calc_option),
                                            df_inj_piez.AREA))
     df_inj_piez["number"] = df_inj_piez['intersection'].apply(lambda x: np.size(x))
     df_inj_piez = df_inj_piez[df_inj_piez.number > 0]
-    df_prod["intersection"] = list(map(lambda x: check_intersection_point(x, df_inj_piez, percent, True),
+    df_prod["intersection"] = list(map(lambda x: check_intersection_point(x, df_inj_piez, percent, calc_option),
                                        df_prod.GEOMETRY))
     df_prod["number"] = df_prod['intersection'].apply(lambda x: np.size(x))
     return df_prod, df_inj_piez
@@ -178,16 +179,6 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
-def add_shapely_circle(df_input, mean_rad, coeff):
-    if 'AREA' not in df_input:
-        df_input.insert(loc=df_input.shape[1], column="AREA", value=0)
-
-    df_input["AREA"] = list(map(lambda x, y: get_polygon_well(
-        mean_rad * coeff, "vertical", x, y), df_input.coordinateX, df_input.coordinateY))
-
-    return df_input
-
-
 def load_contour(contour_path):
     """
     Загрузка файла с координатами контура и построение многоугольника
@@ -196,6 +187,7 @@ def load_contour(contour_path):
     """
     columns_name = ['coordinateX', 'coordinateY']
     df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
+    df_contour = df_contour[df_contour['coordinateX'] != '/']
     gdf_contour = gpd.GeoDataFrame(df_contour)
     list_of_coord = [[x, y] for x, y in zip(gdf_contour.coordinateX, gdf_contour.coordinateY)]
     polygon = Polygon(list_of_coord)

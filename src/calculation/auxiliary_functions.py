@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from scipy.optimize import fsolve
+from tqdm import tqdm
 
 
 def unpack_status(dict_constant):
@@ -17,36 +18,6 @@ def unpack_status(dict_constant):
     """
     return dict_constant.get("PROD_STATUS"), dict_constant.get("PROD_MARKER"), dict_constant.get("PIEZ_STATUS"), \
         dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS"), dict_constant.get("DELETE_STATUS")
-
-
-def get_time_research(path, df_result, horizon):
-    """
-    Добавление в результирующий DataFrame столбца со временем исследования, при условии,
-    что дебит у скважины не 0
-    :param path: путь к yaml-файлу с параметрами
-    :param df_result: DataFrame рассчитанный для контура
-    :param horizon: имя контура
-    :return: возвращает DataFrame с добавленным столбцом времени исследования
-    """
-    dict_property = get_property(path)
-    df_result.insert(loc=df_result.shape[1], column="research_time", value=0)
-    df_result["research_time"] = df_result["research_time"].where((df_result["well type"] != "vertical") |
-                                                                  (df_result["oilRate"] == 0),
-                                                                  list(map(lambda x:
-                                                                           462.2824 * x * dict_property[horizon]['mu'] *
-                                                                           dict_property[horizon]['ct'] *
-                                                                           dict_property[horizon]['phi'] /
-                                                                           dict_property[horizon]['k'],
-                                                                           df_result.mean_radius)))
-    df_result["research_time"] = df_result["research_time"].where((df_result["well type"] != "horizontal") |
-                                                                  (df_result["oilRate"] == 0),
-                                                                  list(map(lambda x:
-                                                                           462.2824 * x * dict_property[horizon]['mu'] *
-                                                                           dict_property[horizon]['ct'] *
-                                                                           dict_property[horizon]['phi'] /
-                                                                           dict_property[horizon]['k'],
-                                                                           df_result.mean_radius)))
-    return df_result
 
 
 def get_property(path):
@@ -61,13 +32,18 @@ def get_property(path):
 
 
 def wc_func(x, water_cut, const, S_o_init, S_w_init, Corey_w, Corey_o):
+    """
+    Функция зависимости обводненности от водонасыщенности
+    :param x: начальное приближение для поиска корня уравнения
+    :param water_cut: обводненность
+    :param const: коэффициент перед функцией (начальная водонасыщенность, остаточная нефтенасыщенность, вязкости, проницаемости)
+    :param S_o_init: остаточная нефтенасыщенность
+    :param S_w_init: начальная водонасыщенность
+    :param Corey_w: степень Кори для воды
+    :param Corey_o: степень Кори для нефти
+    :return: возвращает значение функции обводненности
+    """
     return -water_cut + (1 / (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w))
-
-
-def wc_func_derivative(x, const, S_o_init, S_w_init, Corey_w, Corey_o):
-    return (Corey_o * const * (1 - x - S_o_init) ** (Corey_o - Corey_w) * (x - S_w_init) ** (- Corey_w)
-            - Corey_w * const * (1 - x - S_o_init) ** Corey_o * (x - S_w_init) ** (- Corey_w - 1) /
-            (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w) ** 2)
 
 
 def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
@@ -86,7 +62,8 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     list_obj = list(str(objects).split(', '))
     mu, ct, phi, k, gas_viscocity, pressure, num_default, num_obj = 0, 0, 0, 0, 0, 0, 0, 0
 
-    for obj in list_obj:
+    for obj in tqdm(list_obj, "Calculate time coefficient for objects of well", position=0, leave=True, colour='white',
+                    ncols=80):
         if obj in dict_property[oilfield].keys():
             num_obj += 1
             # расчет свойств объектов, которые есть в PVT таблице
@@ -120,10 +97,10 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
                    (water_cut * mu_oil + (1 - water_cut) * mu_water))
             ct += (1 - Sw) * oil_compr + Sw * water_compr + rock_compr
             phi += dict_property[oilfield][obj]['porosity'] / 100
-            K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_degree) / np.power(1 - Swo - Sno, Kro_degree))
+            K_o = K_abs * K_omax * (np.power(1 - Sw - Sno, Kro_func) / np.power(1 - Swo - Sno, Kro_func))
             if math.isnan(K_o):
                 K_o = 0
-            K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_degree) / np.power(1 - Swo - Sno, Krw_degree))
+            K_w = K_abs * K_wmax * (np.power(Sw - Swo, Krw_degree) / np.power(1 - Swo - Sno, Krw_func))
             if math.isnan(K_w):
                 K_w = 0
             k += ((mu_oil + mu_water) /
@@ -171,15 +148,16 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
             k += ((mu_oil + mu_water) /
                   (water_cut * mu_oil + (1 - water_cut) * mu_water)) * (K_o / mu_oil + K_w / mu_water)
 
-    # time_coef = 462.2824 * (mu * ct * phi / k) / (len(list_obj) ** 2)
     mu = mu / (num_obj + num_default)
     ct = ct / (num_obj + num_default)
     phi = phi / (num_obj + num_default)
     k = k / (num_obj + num_default)
     gas_viscocity = gas_viscocity / (num_obj + num_default)
-    pressure = pressure / (num_obj + num_default)
-    if 'газ' in str(gas_status).lower():
-        time_coef = phi * gas_viscocity * 10.2 / (4 * k * pressure * 3600 * 24 * 10 ** (-6))
+    pressure = (pressure / (num_obj + num_default)) / 1.033
+    if 'газ' in str(gas_status).lower() and gas_viscocity == 0:
+        time_coef = phi * 0.01938265 / (4 * k * pressure * 3600 * 24 * 10 ** (-7))
+    elif 'газ' in str(gas_status).lower() and gas_viscocity != 0:
+        time_coef = phi * gas_viscocity / (4 * k * pressure * 3600 * 24 * 10 ** (-7))
     else:
         time_coef = 462.2824 * (mu * ct * phi / k) / 24  # сутки
 
@@ -206,10 +184,6 @@ def upload_parameters(path):
     with open(path, encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
 
-    gdis_file = dict_parameters['gdis_file']
-    gdis_file = None if gdis_file == "нет" else gdis_file
-    dict_parameters['gdis_file'] = gdis_file
-
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
     year = None if year == "нет" else year
     dict_parameters['gdis_option'] = str(year)
@@ -218,13 +192,19 @@ def upload_parameters(path):
     separation = None if separation == "нет" else separation
     dict_parameters['separation_by_years'] = separation
 
-    exception = dict_parameters['exception_file']
-    exception = None if exception == "нет" else exception
-    dict_parameters['exception_file'] = exception
-
     list_order = dict_parameters['list_order_fond']
     list_order = (list_order.upper()).split(', ')
     dict_parameters['list_order_fond'] = list_order
+
+    mean_oilrate = dict_parameters['mean_oilrate_option']
+    mean_oilrate = False if mean_oilrate == "нет" else mean_oilrate
+    mean_oilrate = True if mean_oilrate == "да" else mean_oilrate
+    dict_parameters['mean_oilrate_option'] = mean_oilrate
+
+    limit_research = dict_parameters['limit_research_time']
+    limit_research = False if limit_research == 'нет' else limit_research
+    limit_research = True if limit_research == 'да' else limit_research
+    dict_parameters['limit_research_time'] = limit_research
 
     return dict_parameters
 
@@ -235,10 +215,12 @@ def get_path():
     """
     if getattr(sys, 'frozen', False):
         application_path = os.path.dirname(sys.executable)
+        return application_path
     elif __file__:
-        application_path = os.path.dirname(__file__)
-
-    return application_path
+        application_path = '\\'.join((os.path.dirname(__file__).split('\\')[:-2]))
+        return application_path
+    else:
+        raise Exception('Executable file path not found')
 
 
 def clean_work_horizon(df, count_of_hor):
@@ -258,19 +240,3 @@ def clean_work_horizon(df, count_of_hor):
         return df
     else:
         raise TypeError(f'Wrong parameter {count_of_hor}. Expected values: 0, 1, 2...')
-
-
-def exception_marker(list_exception, wellName, fond):
-    """
-    Функция очистки пьезометрических и нагнетательных скважин из списка исключений
-    :param list_exception: список исключений
-    :param wellName: имя скважины
-    :param fond: фонд, к которому относится скважина
-    :return: либо имя скважины, либо пустую строку ''
-    """
-    if (str(wellName) in list_exception) and (str(fond) == 'ПЬЕЗ'):
-        return ''
-    elif (str(wellName) in list_exception) and (str(fond) == 'НАГ'):
-        return ''
-    else:
-        return wellName

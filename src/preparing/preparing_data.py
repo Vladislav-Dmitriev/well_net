@@ -8,64 +8,74 @@ import pandas as pd
 from loguru import logger
 from shapely.geometry import Point, LineString
 
-from dictionaries import dict_geobd_columns, dict_names_column
-from functions import get_path, clean_work_horizon, unpack_status, exception_marker
+from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status
+from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
 def upload_input_data(dict_constant, dict_parameters):
     """
     Считывание файла с исключенными скважинами, затем загрузка данных,
     их подготовка к расчету в зависимости от базы данных
-    и удаление исключенных скважин
+    и удаление исключенных скважин, загрузка проектных скважин при наличии
 
     :param dict_constant: словарь со статусами работы скважин
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
+    # Upload project wells
+    df_project = preparing_project_wells(dict_parameters)
 
     # Upload exception list wells
-    list_exception = []
-    if dict_parameters['exception_file'] is not None:
-        list_exception += get_exception_wells(dict_parameters)
+    list_exception = get_exception_wells(dict_parameters, 'Исключения')
 
     application_path = get_path()
     logger.info("Data type definition")
 
     # с новой выгрузкой NGT 'utf-8' не всегда может считать, поэтому добавил try/except
-    try:
-        first_row = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=None, sep=';',
-                                encoding='utf-8', nrows=1)
-        use_encoding = 'utf-8'
-    except UnicodeDecodeError:
-        first_row = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=None, sep=';',
-                                encoding='cp1251', nrows=1)
-        use_encoding = 'cp1251'
-    # first_row = pd.read_excel(os.path.join(application_path, dict_parameters['data_file']), header=None, nrows=1)
+    first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
+                              sheet_name='Фонд', nrows=1)
+
     if first_row.loc[0][0] == '№ скважины':
-        # base = 'NGT'
+
         logger.info("Preparing NGT data")
 
-        df = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=0, sep=';',
-                         encoding=use_encoding, decimal='.')
+        df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
+                           skiprows=[1],
+                           sheet_name='Фонд')
+        df = df.dropna(subset=['№ скважины'])
         df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])  # предобработка данных из NGT
-        df_input, date = preparing(dict_constant, df_input,
-                                   dict_parameters['horizon_count'], dict_parameters['water_cut'],
-                                   dict_parameters['fluid_rate'], list_exception)
+        df_input = preparing(dict_constant, df_input,
+                             dict_parameters['horizon_count'], dict_parameters['water_cut'],
+                             dict_parameters['fluid_rate'])
+        # добавление DataFrame проектных скважин
+        df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
+        df_input = df_input.fillna(0)
+        df_input['num_of_research'] = 1
 
     elif first_row.loc[0][0] == 'NSKV':
-        # base = 'GeoBD'
 
         logger.info("Preparing GeoBD data")
 
-        df = pd.read_csv(os.path.join(application_path, dict_parameters['data_file']), header=0, sep=';',
-                         encoding='cp1251', decimal='.', skiprows=[1])
+        df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
+                           skiprows=[1],
+                           sheet_name='Фонд')
+        df = df.dropna(subset=['NSKV'])
         df_input = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
-        df_input, date = preparing(dict_constant, df_input, dict_parameters['horizon_count'],
-                                   dict_parameters['water_cut'], dict_parameters['fluid_rate'], list_exception)
+        df_input = preparing(dict_constant, df_input, dict_parameters['horizon_count'],
+                             dict_parameters['water_cut'], dict_parameters['fluid_rate'])
+        # добавление DataFrame проектных скважин
+        df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
+        df_input = df_input.fillna(0)
+        df_input['num_of_research'] = 1
     else:
         print('Формат загруженного файла не подходит для модуля')
         sys.exit()
-    return df_input, date, list_exception
+
+    # Upload necessarily research wells
+    list_necessarily = get_exception_wells(dict_parameters, 'Приоритетные скважины')
+    df_input.loc[df_input['wellName'].isin(list_necessarily), 'num_of_research'] = 2
+
+    return df_input, list_exception
 
 
 def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
@@ -86,7 +96,8 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input = df_input[df_input.KUST.notnull()]
     df_input = df_input[df_input['KUST'] != 0]
     df_input = df_input[df_input['SOST'] != 0]
-    df_input[['NSKV', 'PLAST', 'STATUS_DATE']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE']].astype('str')
+    df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']].astype(
+        'str')
 
     # cleaning wellStatus
     df_input = df_input.loc[~df_input.SOST.map(str.lower).str.contains(DELETE_MARKER)]
@@ -107,7 +118,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input['well type'] = ''
     for well in list_well_names:
         objs = list(
-            df_input[df_input['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов месторождения
+            df_input[df_input['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов текущей скважины
         if len(set(df_input[df_input['UWI'] == well].NSKV)) > 1:  # если в столбце имен скважин уникальных больше 1,
             # но у них одинаковая кодировка, то это горизонтальная скважина
             df_input.loc[df_input['UWI'] == well, 'well type'] = 'horizontal'
@@ -133,7 +144,6 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
 
         df_input.loc[df_input['UWI'] == well, 'PLAST'] = df_input.apply(lambda x: ', '.join(objs), axis=1)
 
-    df_input.reset_index(drop=True)
     df_input = df_input.drop_duplicates(subset=['UWI'])
     df_input = df_input.reset_index(drop=True)
 
@@ -148,6 +158,78 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input['injectivity_day'] = df_input['injectivity_day'] * 1000
 
     return df_input
+
+
+def preparing_project_wells(dict_parameters):
+    """
+    Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
+    :param dict_parameters: словарь с параметрами расчета
+    :return: подготовленный DataFrame с проектными скважинами
+    """
+    logger.info('Preparing project wells')
+    application_path = get_path()
+    try:
+        df_project = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                   header=0, skiprows=[1], decimal='.', sheet_name='Проектный фонд')
+        if df_project.empty:
+            return pd.DataFrame()
+    except ValueError:
+        logger.info('Sheet with name "Проектный фонд" not found in data file')
+        return pd.DataFrame()
+    df_project['NSKV'] = df_project['NSKV'].str.strip()
+    df_project['PLAST'] = df_project['PLAST'].str.strip()
+    df_project['UWI'] = df_project['NSKV'].str.replace('T3', '')
+
+    df_project['X3'] = 0
+    df_project['Y3'] = 0
+
+    list_well_names = list(df_project['UWI'].explode().unique())  # список уникальных названий скважин
+    df_project = df_project.sort_values(by=['NSKV'], ascending=True)
+    df_project.reset_index(drop=True)
+    df_project['well type'] = ''
+    for well in list_well_names:
+        objs = list(
+            df_project[df_project['UWI'] == well].PLAST.explode().unique())  # список уникальных объектов скважины
+
+        if len(set(df_project[df_project['UWI'] == well].NSKV)) > 1:  # если в столбце имен скважин уникальных больше 1,
+            # но у них одинаковая кодировка, то это горизонтальная скважина
+            df_project.loc[df_project['UWI'] == well, 'well type'] = 'horizontal'
+
+        else:
+            df_project.loc[df_project['UWI'] == well, 'well type'] = 'vertical'
+
+        coord_x = list(df_project[df_project['UWI'] == well].X.explode().unique())
+        coord_y = list(df_project[df_project['UWI'] == well].Y.explode().unique())
+        df_project.loc[df_project['UWI'] == well, 'X'] = coord_x[0]
+        df_project.loc[df_project['UWI'] == well, 'X3'] = coord_x[-1]
+        df_project.loc[df_project['UWI'] == well, 'Y'] = coord_y[0]
+        df_project.loc[df_project['UWI'] == well, 'Y3'] = coord_y[-1]
+        # запись всех объектов работы текущей скважины в одну ячейку через запятую
+        df_project.loc[df_project['UWI'] == well, 'PLAST'] = df_project.apply(lambda x: ', '.join(objs), axis=1)
+
+    df_project = df_project.drop_duplicates(subset=['UWI'])
+    df_project.drop(columns=['UWI'], axis=1, inplace=True)
+    df_project = df_project[['NSKV', 'X', 'X3', 'Y', 'Y3', 'PLAST', 'well type']]
+    df_project.columns = dict_project_columns.values()
+
+    # add to input dataframe columns for shapely types of coordinates
+
+    df_project.insert(loc=df_project.shape[1], column="POINT",
+                      value=list(map(lambda x, y: Point(x, y), df_project.coordinateX, df_project.coordinateY)))
+
+    df_project.insert(loc=df_project.shape[1], column="POINT3",
+                      value=list(map(lambda x, y: Point(x, y), df_project.coordinateX3, df_project.coordinateY3)))
+    df_project.insert(loc=df_project.shape[1], column="GEOMETRY", value=0)
+    df_project["GEOMETRY"] = df_project["GEOMETRY"].where(df_project["well type"] != "vertical",
+                                                          list(map(lambda x: x, df_project.POINT)))
+    df_project["GEOMETRY"] = df_project["GEOMETRY"].where(df_project["well type"] != "horizontal",
+                                                          list(map(lambda x, y: LineString(
+                                                              tuple(x.coords) + tuple(y.coords)),
+                                                                   df_project.POINT, df_project.POINT3)))
+
+    df_project['fond'] = 'ПРОЕКТ'
+
+    return df_project
 
 
 def preprocessing_NGT(df_input, min_length_horWell):
@@ -203,22 +285,29 @@ def preprocessing_NGT(df_input, min_length_horWell):
     return df_input
 
 
-def upload_gdis_data(df_input, date, dict_parameters):
+def upload_gdis_data(df_input, dict_parameters):
     """
     Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
     скважин, на которых проводились исследования начиная с введенной пользователем даты по сей день
 
     :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
-    :param date: дата выгрузки файла со скважинами
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
     application_path = get_path()
     logger.info("Upload GDIS file")
-    df_gdis = pd.read_excel(os.path.join(application_path, dict_parameters['gdis_file']), skiprows=[0])
+    try:
+        df_gdis = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                skiprows=[0],
+                                sheet_name='ГДИС')
+        if df_gdis.empty:
+            return df_input
+    except ValueError:
+        logger.info('Sheet with name "ГДИС" not found in data file')
+        return df_input
 
     # get preparing dataframes
-    df_gdis = gdis_preparing(df_gdis, df_input['wellName'], date)
+    df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
 
     # drop wells by horizon gdis
     objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
@@ -228,14 +317,13 @@ def upload_gdis_data(df_input, date, dict_parameters):
     return df_input
 
 
-def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_exception):
+def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
     :param fluid_rate: ограничение по дебиту жидкости
     :param dict_constant: словарь со статусами работы скважин
     :param watercut: ограничение на обводненность
-    :param list_exception: список имен исключаемых скважин
     :param count_of_hor: кол-во объектов, заданное пользователем
     :param df_input: DataFrame, полученный из входного файла
     :return: Возврат DataFrame, подготовленного к расчету
@@ -296,17 +384,16 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
 
     # separation piezometric wells
     df_input['gasStatus'] = df_input['gasStatus'].where(df_input['fond'] != 'ПЬЕЗ', 'пьезометрическая')
+    df_input['gasStatus'] = df_input['gasStatus'].where(
+        ~((df_input['fond'] == 'ПЬЕЗ') & (df_input['workMarker'].str.lower().str.contains('газ'))),
+        'пьезометрическая газовая')
 
     # delete production wells with fluid rate less than fluid_rate in parameters
-    df_input = df_input[~((df_input['fond'] == 'ДОБ') & (df_input.fluidRate <= fluid_rate))]
+    df_input = df_input[
+        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.fluidRate >= fluid_rate))]
     # delete production wells with water cut less
-    df_input = df_input[~((df_input['gasStatus'] == 'ДОБ') & (df_input.water_cut <= watercut))]
-
-    # clean piez and inj wells from exception
-    if list_exception:
-        df_input['wellName'] = df_input.apply(
-            lambda x: exception_marker(list_exception, x.wellName, x.fond), axis=1)
-        df_input = df_input[df_input['wellName'] != '']
+    df_input = df_input[
+        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.water_cut <= watercut))]
 
     df_input['oilfield'] = list(map(lambda x: str(x).upper(), df_input['oilfield']))
     df_input['water_cut'] = df_input.apply(lambda x: 100 if (x.water_cut == 0 and
@@ -329,9 +416,9 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate, list_
                                                           tuple(x.coords) + tuple(y.coords)),
                                                                df_input.POINT, df_input.POINT3)))
 
-    date = pd.to_datetime(df_input['nameDate'].iloc[0], format='%d.%m.%Y')
+    # date = pd.to_datetime(df_input['nameDate'].iloc[0], format='%d.%m.%Y')
 
-    return df_input, date
+    return df_input
 
 
 def gdis_preparing(df_gdis, input_wells, year):
@@ -354,16 +441,13 @@ def gdis_preparing(df_gdis, input_wells, year):
         'Оценка': 'quality'
     }
 
-    # HIGH: str = "результат достоверный"
-    # MEDIUM: str = "результат оценочный"
     LOW = ["результат ненадежен", "низкая"]
-    # LOW: str = "низкая"
 
     df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
     df_gdis.columns = dict_names_gdis.values()
     df_gdis = df_gdis.fillna(0)
     df_gdis = df_gdis.astype({'wellName': str, 'workHorizon': str, 'quality': str})
-    df_gdis = df_gdis[df_gdis['wellName'].isin(input_wells)]
+    df_gdis = df_gdis[df_gdis['wellName'].isin(list(input_wells.explode().unique()))]
     df_gdis = df_gdis[(df_gdis['end_of_research'] != 0) & (df_gdis['begin_of_research'] != 0)]
 
     df_gdis['begin_of_research'] = pd.to_datetime(df_gdis['begin_of_research'])
@@ -374,12 +458,12 @@ def gdis_preparing(df_gdis, input_wells, year):
     df_gdis = df_gdis[~df_gdis['quality'].isin(LOW)]
     df_gdis['time_of_research'] = df_gdis['end_of_research'] - df_gdis['begin_of_research']
     df_gdis = df_gdis[df_gdis['time_of_research'] != timedelta(0)]
-    df_gdis = df_gdis[df_gdis['end_of_research'] >= pd.to_datetime(year, format='%d.%m.%Y')]
-    # df_gdis['how_long_ago'] = (pd.to_datetime(current_date, format='%d.%m.%Y') - df_gdis[
-    #     'end_of_research']).dt.days / 365  # разница между датой
-    # окончания ГДИС и датой выгрузки файла
-    # df_gdis = df_gdis[(df_gdis['how_long_ago'] >= 0) & (df_gdis['how_long_ago'] <= year)]  # удаление ГДИС, которые
-    # начаты после даты выгрузки файла, выделение на которых проводились ГДИС не более заданного кол-ва лет назад
+    try:
+        df_gdis = df_gdis[df_gdis['end_of_research'] >= pd.to_datetime(year, format='%d.%m.%Y')]
+    except ValueError:
+        raise ValueError(
+            f'Введена некорректная дата ГДИС {year}. Введите в параметрах расчета дату в формате ДД.ММ.ГГГГ')
+
     return df_gdis
 
 
@@ -410,7 +494,17 @@ def preparing_reservoir_properties(dict_parameters, path):
     :return: сохраняет словарь в корневую папку в виде json файла со свойствами месторождений
     """
     application_path = get_path()
-    df_property = pd.read_excel(os.path.join(application_path, dict_parameters['property_file']), skiprows=[0])
+    try:
+        df_property = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                    skiprows=[0],
+                                    sheet_name='PVT')
+        if df_property.empty:
+            logger.info('Not found PVT properties data')
+            raise Exception('Загрузите справочник PVT свойств')
+    except ValueError:
+        logger.info('Sheet with name "PVT" not found in data file')
+        raise Exception('Загрузите справочник PVT свойств')
+
     dict_names_prop = {
         'Месторождение': 'oilfield',
         'Пласт OIS': 'reservoir',
@@ -433,13 +527,24 @@ def preparing_reservoir_properties(dict_parameters, path):
         'Кпрон (средняя) по нефти': 'K_abs'
     }
     df_property.columns = df_property.columns.str.strip()
-    df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
-                               'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
-                               'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
-                               'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw  (для ОФП)',
-                               'Степень для функции Krw (доп)  (для ОФП)', 'Степень Kro  (для ОФП)',
-                               'Степень для функции Kro (доп) (для ОФП)', 'Swo (для ОФП)', 'Swk  (для ОФП)',
-                               'Krwk  (для ОФП)', 'Krok  (для ОФП)', 'Кпрон (средняя) по нефти']]
+    # выделение нужных столбцов PVT свойств для старого и нового формата файла справочника PVT
+    try:
+        df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
+                                   'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
+                                   'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
+                                   'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw  (для ОФП)',
+                                   'Степень для функции Krw (доп)  (для ОФП)', 'Степень Kro  (для ОФП)',
+                                   'Степень для функции Kro (доп) (для ОФП)', 'Swo (для ОФП)', 'Swk  (для ОФП)',
+                                   'Krwk  (для ОФП)', 'Krok  (для ОФП)', 'Кпрон (средняя) по нефти']]
+    except KeyError:
+        df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
+                                   'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
+                                   'm,     %', 'β, 1/атм*10-5 породы', 'β, 1/атм*10-5 нефть',
+                                   'β, 1/атм*10-5 вода', 'μг., сП в пласт. усл.', 'Степень Krw:',
+                                   'Степень для функции Krw (доп):', 'Степень Kro:',
+                                   'Степень для функции Kro (доп):', 'Swo', 'Swk',
+                                   'Krwk', 'Krok', 'Кпрон']]
+
     df_property.columns = dict_names_prop.values()
     for i in df_property.columns:
         df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
@@ -484,15 +589,26 @@ def preparing_reservoir_properties(dict_parameters, path):
     pass
 
 
-def get_exception_wells(dict_parameters):
+def get_exception_wells(dict_parameters, sheet):
     """
-    Загрузка скважин для исключения из расчета
+    Загрузка скважин для исключения из расчета или скважин обязательных для включения в ОС в зависимости от имени листа
+    в Excel
 
+    :param sheet: имя листа в исходном файле Excel
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает список скважин для исключения
     """
     application_path = get_path()
-    df_exception = pd.read_excel(os.path.join(application_path, dict_parameters['exception_file']), header=None)
+    try:
+        df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                     header=None,
+                                     sheet_name=sheet)
+        if df_exception.empty:
+            return []
+    except ValueError:
+        logger.info(f'Sheet with name {sheet} not found in data file')
+        return []
+
     df_exception[0] = df_exception[0].astype(str)
     list_exception = list(df_exception[0].explode().unique())
 

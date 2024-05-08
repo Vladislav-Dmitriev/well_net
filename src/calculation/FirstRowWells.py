@@ -226,6 +226,17 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
 
 def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
                 angle_horizontalT1, angle_horizontalT3, max_distance):
+    """
+    Расчет среднего и минимального радиусов первого ряда окружения по объекту
+    :param df_in_contour: DataFrame скважин, попавших в контур
+    :param verticalWellAngle: угол расширения сектора вертикальных скважин в полярной системе координат
+    :param MaxOverlapPercent: максимальный процент перекрытия от общей длины скважины
+    :param angle_horizontalT1: угол расширения сектора T1 ГС в полярной системе координат
+    :param angle_horizontalT3: угол расширения сектора T3 ГС в полярной системе координат
+    :param max_distance: максимальный радиус для выделения скважин первого окружения
+    :return: средний радиус по объекту и DataFrame с добавленными столбцами минимального расстояния первого окружения
+     для каждой скважины и средним радиусом для всех скважин текущего объекта расчета
+    """
     df_in_contour.set_index("wellName", inplace=True, drop=False)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="distance", value=0)
     df_in_contour.insert(loc=df_in_contour.shape[1], column="mean_dist", value=0)
