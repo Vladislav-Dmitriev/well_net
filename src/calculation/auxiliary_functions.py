@@ -217,7 +217,7 @@ def get_path():
         application_path = os.path.dirname(sys.executable)
         return application_path
     elif __file__:
-        application_path = '\\'.join((os.path.dirname(__file__).split('\\')[:-1]))
+        application_path = '\\'.join((os.path.dirname(__file__).split('\\')[:-2]))
         return application_path
     else:
         raise Exception('Executable file path not found')

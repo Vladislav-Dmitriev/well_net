@@ -8,7 +8,7 @@ from matplotlib.lines import Line2D
 from shapely.ops import cascaded_union
 from tqdm import tqdm
 
-from calculation.geometry import check_intersection_area
+from src.calculation.geometry import check_intersection_area
 
 
 def clean_pictures_folder(path):

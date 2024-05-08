@@ -8,7 +8,7 @@ import pandas as pd
 from loguru import logger
 from shapely.geometry import Point, LineString
 
-from calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status
+from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status
 from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 

@@ -6,13 +6,13 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from calculation.auxiliary_functions import upload_parameters, get_path
-from calculation.calculation_wells import calculation
-from calculation.geometry import check_intersection_area, load_contour
-from preparing.dictionaries import dict_constant
-from preparing.preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
-from visualization.mapping import mesh_visualization, visualization
-from visualization.print_in_excel import write_optim_mesh, write_regular_mesh
+from src.calculation.auxiliary_functions import upload_parameters, get_path
+from src.calculation.calculation_wells import calculation
+from src.calculation.geometry import check_intersection_area, load_contour
+from src.preparing.dictionaries import dict_constant
+from src.preparing.preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
+from src.visualization.mapping import mesh_visualization, visualization
+from src.visualization.print_in_excel import write_optim_mesh, write_regular_mesh
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'

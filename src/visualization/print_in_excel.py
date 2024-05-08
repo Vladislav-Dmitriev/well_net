@@ -3,7 +3,7 @@ import pandas as pd
 import xlwings as xw
 from tqdm import tqdm
 
-from calculation.geometry import check_intersection_area
+from src.calculation.geometry import check_intersection_area
 
 
 def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):

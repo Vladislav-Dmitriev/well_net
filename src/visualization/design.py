@@ -4,11 +4,22 @@ import sys
 import matplotlib
 
 matplotlib.use('Qt5Agg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasAgg as FigureCanvas, \
+    NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
-from calculation.auxiliary_functions import get_path
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+
+from src.calculation.auxiliary_functions import get_path
+
+
+class MyCanvas(FigureCanvas):
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+        self.axes.plot([1, 4, 5], [2, 0, 7])
+        super(MyCanvas, self).__init__(fig)
 
 
 class MainWindow(QMainWindow):
@@ -23,7 +34,14 @@ class MainWindow(QMainWindow):
         self.create_menu_bar()
         self.btns()
         self.createActions()
-        self.picture = MplWidget()
+        self.sc = MyCanvas(self, width=5, height=4, dpi=100)
+        self.toolbar = NavigationToolbar(self.sc)
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.toolbar)
+        self.layout.addWidget(self.sc)
+        # widget = QWidget()
+        # widget.setLayout(self.layout)
+        self.show()
 
     def create_menu_bar(self):
         menuBar = self.menuBar()
@@ -140,19 +158,6 @@ class MainWindow(QMainWindow):
         # Help actions
         self.referenceAction = QAction("&Reference", self)
         self.referenceAction.triggered.connect(lambda: os.startfile(str(get_path() + '/README.txt')))
-
-
-class MplWidget(QWidget):
-
-    def __init__(self, parent=None):
-        QWidget.__init__(self, parent)
-
-        self.canvas = FigureCanvas(Figure())
-        vertical_layout = QVBoxLayout()
-        vertical_layout.addWidget(self.canvas.draw())
-        self.canvas.axes = self.canvas.figure.add_subplot(111)
-        self.canvas.axes.scatter([1, 4], [4, 6])
-        self.setLayout(vertical_layout)
 
 
 app = QApplication(sys.argv)

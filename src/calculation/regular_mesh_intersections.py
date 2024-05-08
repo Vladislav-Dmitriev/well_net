@@ -6,8 +6,8 @@ from shapely.ops import cascaded_union
 from shapely.ops import unary_union
 from tqdm import tqdm
 
-from calculation.auxiliary_functions import get_property, get_time_coef
-from calculation.geometry import check_intersection_area
+from src.calculation.auxiliary_functions import get_property, get_time_coef
+from src.calculation.geometry import check_intersection_area
 
 
 def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
