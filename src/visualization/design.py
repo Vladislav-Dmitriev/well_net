@@ -4,7 +4,6 @@ import os
 import random
 import sys
 
-import pandas as pd
 from PyQt5 import QtCore, QtGui, QtWidgets
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
@@ -17,8 +16,8 @@ class App(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.left = 400
-        self.top = 300
+        self.left = 350
+        self.top = 100
         self.width = 1200
         self.height = 800
         self.main_window()
@@ -34,7 +33,9 @@ class App(QtWidgets.QMainWindow):
         self.setCentralWidget(widget)
         hlayout = QtWidgets.QHBoxLayout(widget)
         labels = WidgetLabels(self)
-        m = TablePlots()
+        list_scen = ['k = 1', 'k = 1.5', 'k = 2', 'k = 2.5']
+        list_obj = ['A1', 'B1', 'C1']
+        m = WidgetPlot(list_scen, list_obj)
         hlayout.addWidget(labels, stretch=1)
         hlayout.addWidget(m, stretch=3)
 
@@ -43,9 +44,7 @@ class TablePlots(QtWidgets.QTabWidget):
 
     def __init__(self):
         QtWidgets.QTabWidget.__init__(self)
-        file = pd.ExcelFile(get_path() + '//output//' + 'out_file_geometry.xlsx')
-        for name in file.sheet_names[1:-1]:
-            self.addTab(WidgetPlot(), name)
+        self.addTab()
 
 
 class PlotCanvas(FigureCanvas):
@@ -68,21 +67,35 @@ class PlotCanvas(FigureCanvas):
 
 class WidgetPlot(QtWidgets.QWidget):
 
-    def __init__(self, *args, **kwargs):
-        QtWidgets.QWidget.__init__(self, *args, **kwargs)
+    def __init__(self, list_scenario, list_objects):
+        QtWidgets.QWidget.__init__(self)
+        self.list_scenario = list_scenario
+        self.list_objects = list_objects
         self.setLayout(QtWidgets.QVBoxLayout())
-        self.canvas = PlotCanvas(self, width=5, heigth=4, dpi=100)
-        self.toolbar = NavigationToolbar(self.canvas)
-        button_plot = QtWidgets.QComboBox(self)
-        button_plot.addItem('k = 1')
-        button_plot.addItem('k = 1.5')
-        button_plot.addItem('k = 2')
-        button_plot.addItem('k = 2.5')
-        button_plot.setFixedSize(200, 25)
+        canvas = PlotCanvas(self, width=5, heigth=4, dpi=100)
+        toolbar = NavigationToolbar(canvas)
+        hbox = QtWidgets.QHBoxLayout(self)
+        scenario_plot = QtWidgets.QComboBox()
+        scenario_plot.setFixedSize(200, 25)
+        object_plot = QtWidgets.QComboBox()
+        object_plot.setFixedSize(200, 25)
+        hbox.addWidget(scenario_plot)
+        hbox.addWidget(object_plot)
+        hbox.setAlignment(QtCore.Qt.AlignLeft)
+        hwidget = QtWidgets.QWidget(self)
+        hwidget.setLayout(hbox)
 
-        self.layout().addWidget(button_plot)
-        self.layout().addWidget(self.toolbar)
-        self.layout().addWidget(self.canvas)
+        for scen in list_scenario:
+            scenario_plot.addItem(scen)
+
+        for obj in list_objects:
+            object_plot.addItem(obj)
+
+        # scenario_plot.setFixedSize(200, 25)
+
+        self.layout().addWidget(hwidget)
+        self.layout().addWidget(toolbar)
+        self.layout().addWidget(canvas)
 
 
 class WidgetLabels(QtWidgets.QWidget):
@@ -119,8 +132,8 @@ class WidgetLabels(QtWidgets.QWidget):
         # горизонтальный виджет для выбора критерия охвата скважин исследованиями
         box_criteria = QtWidgets.QHBoxLayout(self)
         edit_criteria = QtWidgets.QComboBox()
-        edit_criteria.addItem('True')
-        edit_criteria.addItem('False')
+        edit_criteria.addItem('Процент длины ствола')  # True
+        edit_criteria.addItem('Попадание точки входа в пласт')  # False
         edit_criteria.setFixedSize(155, 25)
         box_criteria.addWidget(QtWidgets.QLabel('Критерий охвата:'))
         box_criteria.addWidget(edit_criteria)
@@ -155,7 +168,11 @@ class WidgetLabels(QtWidgets.QWidget):
         main_box.addLayout(box_max_coef)
         main_box.addLayout(box_step_coef)
 
-        main_box.setAlignment(QtCore.Qt.AlignTop)
+        # main_box.setAlignment(QtCore.Qt.AlignTop)
+        # кнопка расчета
+        start_button = QtWidgets.QPushButton("Расчет")
+        # start_button.clicked.connect()
+        main_box.addWidget(start_button, alignment=QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight)
 
 
 class CreateMenu(QtWidgets.QMenuBar):

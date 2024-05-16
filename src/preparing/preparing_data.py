@@ -176,9 +176,9 @@ def preparing_project_wells(dict_parameters):
     except ValueError:
         logger.info('Sheet with name "Проектный фонд" not found in data file')
         return pd.DataFrame()
-    df_project['NSKV'] = df_project['NSKV'].str.strip()
-    df_project['PLAST'] = df_project['PLAST'].str.strip()
-    df_project['UWI'] = df_project['NSKV'].str.replace('T3', '')
+    df_project['NSKV'] = df_project['NSKV'].apply(lambda x: str(x).strip())
+    df_project['PLAST'] = df_project['PLAST'].apply(lambda x: str(x).strip())
+    df_project['UWI'] = df_project['NSKV'].str.replace('_T3', '')
 
     df_project['X3'] = 0
     df_project['Y3'] = 0
