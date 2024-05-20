@@ -390,10 +390,14 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
 
     # delete production wells with fluid rate less than fluid_rate in parameters
     df_input = df_input[
-        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.fluidRate >= fluid_rate))]
+        ~((df_input['fond'] == 'ДОБ') & (
+                (df_input['gasStatus'] == 'нефтяная') | (df_input['gasStatus'] == 'газоконденсатная')) & (
+                  df_input.fluidRate <= fluid_rate))]
     # delete production wells with water cut less
     df_input = df_input[
-        ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (df_input.water_cut <= watercut))]
+        ~((df_input['fond'] == 'ДОБ') & (
+                (df_input['gasStatus'] == 'нефтяная') | (df_input['gasStatus'] == 'газоконденсатная')) & (
+                  df_input.water_cut <= watercut))]
 
     df_input['oilfield'] = list(map(lambda x: str(x).upper(), df_input['oilfield']))
     df_input['water_cut'] = df_input.apply(lambda x: 100 if (x.water_cut == 0 and

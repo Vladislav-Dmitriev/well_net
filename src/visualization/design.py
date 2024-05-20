@@ -44,7 +44,9 @@ class TablePlots(QtWidgets.QTabWidget):
 
     def __init__(self):
         QtWidgets.QTabWidget.__init__(self)
-        self.addTab()
+        list_scen = ['k = 1', 'k = 1.5', 'k = 2', 'k = 2.5']
+        list_obj = ['A1', 'B1', 'C1']
+        WidgetPlot(list_scen, list_obj).object_plot.currentIndexChanged()
 
 
 class PlotCanvas(FigureCanvas):
@@ -55,13 +57,16 @@ class PlotCanvas(FigureCanvas):
         self.setParent(parent)
         FigureCanvas.setSizePolicy(self, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         FigureCanvas.updateGeometry(self)
+        fig.clear()
         self.picture_plot()
+        self.draw()
+        # self.show()
 
     def picture_plot(self):
         data = [random.random() for i in range(250)]
-        ax = self.figure.add_subplot(111)
-        ax.plot(data, 'r-', linewidth=0.5)
-        ax.set_title('PyQt Matplotlib Example')
+        self.ax = self.figure.add_subplot(111)
+        self.ax.plot(data, 'r-', linewidth=0.5)
+        self.ax.set_title('PyQt Matplotlib Example')
         self.draw()
 
 
@@ -72,30 +77,35 @@ class WidgetPlot(QtWidgets.QWidget):
         self.list_scenario = list_scenario
         self.list_objects = list_objects
         self.setLayout(QtWidgets.QVBoxLayout())
-        canvas = PlotCanvas(self, width=5, heigth=4, dpi=100)
-        toolbar = NavigationToolbar(canvas)
-        hbox = QtWidgets.QHBoxLayout(self)
-        scenario_plot = QtWidgets.QComboBox()
-        scenario_plot.setFixedSize(200, 25)
-        object_plot = QtWidgets.QComboBox()
-        object_plot.setFixedSize(200, 25)
-        hbox.addWidget(scenario_plot)
-        hbox.addWidget(object_plot)
-        hbox.setAlignment(QtCore.Qt.AlignLeft)
-        hwidget = QtWidgets.QWidget(self)
-        hwidget.setLayout(hbox)
-
+        self.canvas = PlotCanvas(self, width=5, heigth=4, dpi=100)
+        self.toolbar = NavigationToolbar(self.canvas)
+        self.hbox = QtWidgets.QHBoxLayout(self)
+        self.scenario_plot = QtWidgets.QComboBox()
+        self.scenario_plot.setFixedSize(200, 25)
+        self.object_plot = QtWidgets.QComboBox()
+        self.object_plot.setFixedSize(200, 25)
         for scen in list_scenario:
-            scenario_plot.addItem(scen)
-
+            self.scenario_plot.addItem(scen)
         for obj in list_objects:
-            object_plot.addItem(obj)
+            self.object_plot.addItem(obj)
+        self.object_plot.currentIndexChanged.connect(self.rebuild)
+        # self.object_plot.currentText()
+
+        self.hbox.addWidget(self.scenario_plot)
+        self.hbox.addWidget(self.object_plot)
+        self.hbox.setAlignment(QtCore.Qt.AlignLeft)
+        self.hwidget = QtWidgets.QWidget(self)
+        self.hwidget.setLayout(self.hbox)
 
         # scenario_plot.setFixedSize(200, 25)
 
-        self.layout().addWidget(hwidget)
-        self.layout().addWidget(toolbar)
-        self.layout().addWidget(canvas)
+        self.layout().addWidget(self.hwidget)
+        self.layout().addWidget(self.toolbar)
+        self.layout().addWidget(self.canvas)
+
+    def rebuild(self):
+        self.canvas = PlotCanvas(self, width=5, heigth=4, dpi=100)
+        self.canvas.draw()
 
 
 class WidgetLabels(QtWidgets.QWidget):

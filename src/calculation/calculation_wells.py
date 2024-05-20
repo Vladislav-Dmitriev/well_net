@@ -71,14 +71,19 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                                 df_necessarily_wells['AREA'])) for y in ys])]
 
             df_prod_wells = df_horizon_copy.loc[df_horizon['fond'] == 'ДОБ']
+            # удаление из расчета добывающих скважин с дебитом выше заданного максимального значения
+            df_prod_wells = df_prod_wells[~((df_prod_wells['oilRate'] >= dict_parameters['limit_oilrate']) & (
+                    (df_prod_wells['gasStatus'] == 'нефтяная') | (
+                    df_prod_wells['gasStatus'] == 'газоконденсатная')))]
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта, дебит нефти которых не превышает
             # среднего дебита нефти по объекту
             mean_oilrate = 0
             if dict_parameters['mean_oilrate_option'] and (df_prod_wells.shape[0] > 0):
                 mean_oilrate = df_prod_wells['oilRate'].mean()
-                df_prod_wells = df_prod_wells.loc[
-                    df_prod_wells['oilRate'] <= mean_oilrate * dict_parameters['percent_oilrate'] / 100]
-                df_prod_wells = df_prod_wells[df_prod_wells['oilRate'] <= dict_parameters['limit_oilrate']]
+                df_prod_wells = df_prod_wells[~(
+                        (df_prod_wells['oilRate'] >= mean_oilrate * dict_parameters['percent_oilrate'] / 100) & (
+                        (df_prod_wells['gasStatus'] == 'нефтяная') | (
+                        df_prod_wells['gasStatus'] == 'газоконденсатная')))]
 
             df_piez_wells = df_horizon_copy.loc[df_horizon['fond'] == 'ПЬЕЗ']
             df_inj_wells = df_horizon_copy.loc[df_horizon['fond'] == 'НАГ']
