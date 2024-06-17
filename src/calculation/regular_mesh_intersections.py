@@ -100,16 +100,27 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         else:
             continue
 
+        # проверка на корректность процента по текущему фонду
+        if wellnet_percent is None:
+            # увеличение площади многоугольника по мере итерации по фондам
+            list_polygons = list_polygons + list(
+                df_current_result.loc[~df_current_result['intersection'].map(str).str.contains('Исключена')][
+                    'AREA'].explode())
+            current_area = cascaded_union(list_polygons)
+
+            df_result = pd.concat([df_result, df_current_result], axis=0, sort=False).reset_index(drop=True)
+            continue
+
         # функция проверки процента скважин в опорной сети от текущего фонда
         count_target = math.ceil(wellnet_percent / 100 * (df_fond.shape[0] + df_necessarily_fond.shape[0]))
-        if df_current_result.shape[0] > count_target:
+        if (df_current_result.shape[0] > count_target) and (dict_parameters['option_percent']):
             df_current_result = df_current_result.sort_values(by=['number'], axis=0, ascending=False)
             list_out_wellnet = df_current_result[
                                -(df_current_result.shape[0] - count_target):].wellName.explode().unique()
             df_current_result.loc[
                 df_current_result['wellName'].isin(list_out_wellnet), 'intersection'] = 'Исключена из ОС'
         # добавить недостающие скважины в ОС
-        elif df_current_result.shape[0] < count_target:
+        elif (df_current_result.shape[0] < count_target) and (dict_parameters['option_percent']):
             df_fond = df_fond[~df_fond['wellName'].isin(list(df_current_result['wellName'].explode().unique()))]
             df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=True)
             df_fond = df_fond[:(count_target - df_current_result.shape[0])]
@@ -155,7 +166,8 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist'] * df_result['time_coef'])
 
     # отбрасывание скважин по времени исследования, если оно больше максимального
-    if dict_parameters['limit_research_time']:
+    if ((dict_parameters['limit_research_time']) and (not dict_parameters['min_research_time'] is None)
+            and (not dict_parameters['max_research_time'] is None)):
         df_result = df_result.loc[
             ~((df_result['well type'] == 'vertical') & (
                     df_result['research_time'] > dict_parameters['max_research_time']))]

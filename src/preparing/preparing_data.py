@@ -44,9 +44,7 @@ def upload_input_data(dict_constant, dict_parameters):
                            sheet_name='Фонд')
         df = df.dropna(subset=['№ скважины'])
         df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])  # предобработка данных из NGT
-        df_input = preparing(dict_constant, df_input,
-                             dict_parameters['horizon_count'], dict_parameters['water_cut'],
-                             dict_parameters['fluid_rate'])
+        df_input = preparing(dict_constant, df_input, dict_parameters)
         # добавление DataFrame проектных скважин
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
@@ -61,8 +59,7 @@ def upload_input_data(dict_constant, dict_parameters):
                            sheet_name='Фонд')
         df = df.dropna(subset=['NSKV'])
         df_input = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
-        df_input = preparing(dict_constant, df_input, dict_parameters['horizon_count'],
-                             dict_parameters['water_cut'], dict_parameters['fluid_rate'])
+        df_input = preparing(dict_constant, df_input, dict_parameters)
         # добавление DataFrame проектных скважин
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
@@ -307,17 +304,22 @@ def upload_gdis_data(df_input, dict_parameters):
         return df_input
 
     # get preparing dataframes
-    df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
+    if not (dict_parameters['gdis_option'] is None):
+        df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
 
-    # drop wells by horizon gdis
-    objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
-    df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
-    df_input = df_input[df_input['workHorizon'] != '']
+        # drop wells by horizon gdis
+        objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
+        df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
+        df_input = df_input[df_input['workHorizon'] != '']
 
-    return df_input
+        return df_input
+
+    else:
+        logger.info('Incorrect date of GDIS')
+        return df_input
 
 
-def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
+def preparing(dict_constant, df_input, dict_parameters):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
@@ -331,9 +333,6 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
 
-    # rename columns
-    # df_input.columns = dict_names.values()
-
     # cleaning null values
     df_input = df_input[df_input.workHorizon.notnull()]
     df_input = df_input[df_input.wellCluster.notnull()]
@@ -346,7 +345,7 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
     df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
 
     # cleaning work horizon
-    df_input = clean_work_horizon(df_input, count_of_hor)
+    df_input = clean_work_horizon(df_input, dict_parameters['horizon_count'])
 
     df_input = df_input[(df_input['workMarker'] != 0) & (df_input['wellStatus'] != 0)]
 
@@ -388,16 +387,21 @@ def preparing(dict_constant, df_input, count_of_hor, watercut, fluid_rate):
         ~((df_input['fond'] == 'ПЬЕЗ') & (df_input['workMarker'].str.lower().str.contains('газ'))),
         'пьезометрическая газовая')
 
+    # delete production wells with oil rate bigger than value in parameters
+    if not (dict_parameters['limit_oilrate'] is None):
+        df_input = df_input[
+            ~((df_input['gasStatus'] == 'нефтяная') & (df_input['oilRate'] > dict_parameters['limit_oilrate']))]
+
     # delete production wells with fluid rate less than fluid_rate in parameters
-    df_input = df_input[
-        ~((df_input['fond'] == 'ДОБ') & (
-                (df_input['gasStatus'] == 'нефтяная') | (df_input['gasStatus'] == 'газоконденсатная')) & (
-                  df_input.fluidRate <= fluid_rate))]
+    if not (dict_parameters['limit_oilrate'] is None):
+        df_input = df_input[
+            ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
+                    df_input.fluidRate <= dict_parameters['fluid_rate']))]
     # delete production wells with water cut less
-    df_input = df_input[
-        ~((df_input['fond'] == 'ДОБ') & (
-                (df_input['gasStatus'] == 'нефтяная') | (df_input['gasStatus'] == 'газоконденсатная')) & (
-                  df_input.water_cut <= watercut))]
+    if not (dict_parameters['limit_oilrate'] is None):
+        df_input = df_input[
+            ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
+                    df_input.water_cut <= dict_parameters['water_cut']))]
 
     df_input['oilfield'] = list(map(lambda x: str(x).upper(), df_input['oilfield']))
     df_input['water_cut'] = df_input.apply(lambda x: 100 if (x.water_cut == 0 and
@@ -501,7 +505,7 @@ def preparing_reservoir_properties(dict_parameters, path):
     try:
         df_property = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                     skiprows=[0],
-                                    sheet_name='PVT')
+                                    sheet_name='PVT', decimal=',')
         if df_property.empty:
             logger.info('Not found PVT properties data')
             raise Exception('Загрузите справочник PVT свойств')

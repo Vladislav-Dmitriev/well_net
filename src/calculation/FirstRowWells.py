@@ -60,6 +60,8 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                              пересечении, чтобы скважина осталась в первом ряду
     :return: listNamesFisrtRowWells - список скважин первого ряда
     """
+    if None in [verticalWellAngle, MaxOverlapPercent, angle_horizontalT1, angle_horizontalT3]:
+        raise ValueError("Incorrect angle values for searching first row wells")
     #  injection well type check
     if df_WellOneArea["well type"].loc[wellNumberInj] == "vertical":
         """Выбор центральных точек для оценки первого ряда: 

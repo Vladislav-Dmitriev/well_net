@@ -21,10 +21,12 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     :param dict_parameters: словарь с параметрами расчета
     :return: словарь с результирующим DataFrame по каждому ключу
     """
+    if dict_parameters['mult_coef'] is None:
+        logger.info('List of radius multiples is not specified. Current coefficient is 1.')
+        dict_parameters['mult_coef'] = [1]
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
-    # list_objects = ['БВ8/1']
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
@@ -71,10 +73,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                                 df_necessarily_wells['AREA'])) for y in ys])]
 
             df_prod_wells = df_horizon_copy.loc[df_horizon['fond'] == 'ДОБ']
-            # удаление из расчета добывающих скважин с дебитом выше заданного максимального значения
-            df_prod_wells = df_prod_wells[~((df_prod_wells['oilRate'] >= dict_parameters['limit_oilrate']) & (
-                    (df_prod_wells['gasStatus'] == 'нефтяная') | (
-                    df_prod_wells['gasStatus'] == 'газоконденсатная')))]
+
             # выделение продуктивных, нагнетательных и исследуемых скважин для объекта, дебит нефти которых не превышает
             # среднего дебита нефти по объекту
             mean_oilrate = 0
@@ -298,7 +297,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
 
     df_result['year_of_survey'] = 0  # для скважин первой итерации расчета год исследования ставится текущий
 
-    if (coeff > dict_parameters['limit_radius_coef']) and (dict_parameters['separation_by_years'] is not None):
+    if ((coeff > dict_parameters['limit_radius_coef']) and (dict_parameters['separation_by_years'] is not None)
+            and (dict_parameters['limit_radius_coef'] is not None)):
         df_result_invisible = pd.DataFrame()
         # выделение охваченных исследованиями добывающих скважин результата первой итерации расчета из исходного
         # DataFrame добывающих скважин
@@ -337,6 +337,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
                                   axis=0, sort=False).reset_index(drop=True)
         else:
             pass
+    else:
+        logger.info('Incorrect value of separation_by_years parameter or limit_radius_coeff')
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:
@@ -434,7 +436,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
                                   * df_result['time_coef'])  # время исследования в сут через min расстояние
 
     # filter and delete wells, which don't fit the parameters limit research time
-    if limit_research_time:
+    if limit_research_time and (not min_time_research is None) and (not max_time_research is None):
         df_result = df_result.loc[
             ~((df_result['well type'] == 'vertical') & (df_result['research_time'] > max_time_research))]
         df_result = df_result.loc[

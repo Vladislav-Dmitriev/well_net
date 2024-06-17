@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 import yaml
+from loguru import logger
 from scipy.optimize import fsolve
 from tqdm import tqdm
 
@@ -184,27 +185,36 @@ def upload_parameters(path):
     with open(path, encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
 
+    # дата последнего проведенного ГДИС
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
     year = None if year == "нет" else year
     dict_parameters['gdis_option'] = str(year)
 
+    #  кол-во лет для распределения по годам скважин в слепых зонах для ГДИС
     separation = dict_parameters['separation_by_years']
     separation = None if separation == "нет" else separation
     dict_parameters['separation_by_years'] = separation
 
+    # параметр для 2 сценария (порядок построения регулярной сети из разных фондов [доб, наг, пьез])
     list_order = dict_parameters['list_order_fond']
     list_order = (list_order.upper()).split(', ')
     dict_parameters['list_order_fond'] = list_order
 
+    # отбрасывать из добывающего фонда скважины с дебитом выше среднего по объекту
     mean_oilrate = dict_parameters['mean_oilrate_option']
-    mean_oilrate = False if mean_oilrate == "нет" else mean_oilrate
-    mean_oilrate = True if mean_oilrate == "да" else mean_oilrate
+    mean_oilrate = False if (str(mean_oilrate).lower() == "нет" or mean_oilrate is None) else mean_oilrate
+    mean_oilrate = True if str(mean_oilrate).lower() == "да" else mean_oilrate
     dict_parameters['mean_oilrate_option'] = mean_oilrate
 
     limit_research = dict_parameters['limit_research_time']
-    limit_research = False if limit_research == 'нет' else limit_research
+    limit_research = False if ((str(limit_research).lower() == 'нет') or (limit_research is None)) else limit_research
     limit_research = True if limit_research == 'да' else limit_research
     dict_parameters['limit_research_time'] = limit_research
+
+    option_percent = dict_parameters['option_percent']
+    option_percent = False if (option_percent is None or str(option_percent).lower() == 'нет') else option_percent
+    option_percent = True if str(option_percent).lower() == 'да' else option_percent
+    dict_parameters['option_percent'] = option_percent
 
     return dict_parameters
 
@@ -231,12 +241,11 @@ def clean_work_horizon(df, count_of_hor):
     :param count_of_hor: максимальное кол-во объектов работы скважины, задается пользователем
     :return: DataFrame со скважинами, число объектов работы которых не превышает заданного пользователем кол-ва
     """
-    if (count_of_hor != 0) and (count_of_hor > 0):
+    if (not count_of_hor is None) and (count_of_hor > 0):
         df['horizon_count'] = df['workHorizon'].apply(lambda x: len(set(x.replace(" ", "").split(","))))
         df = df[df['horizon_count'] <= count_of_hor]
         df.drop(columns=['horizon_count'], axis=1, inplace=True)
         return df
-    elif count_of_hor == 0:
-        return df
     else:
-        raise TypeError(f'Wrong parameter {count_of_hor}. Expected values: 0, 1, 2...')
+        logger.info('Value of well`s horizon count was left as a default')
+        return df
