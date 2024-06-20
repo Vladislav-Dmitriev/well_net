@@ -5,6 +5,8 @@ from datetime import timedelta
 
 import numpy as np
 import pandas as pd
+import xlwings as xw
+from dateutil.parser import parse as parseDate
 from loguru import logger
 from shapely.geometry import Point, LineString
 
@@ -49,6 +51,8 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
         df_input['num_of_research'] = 1
+        # учет ГДИС
+        df_input = ngt_gdis_data(df_input, dict_parameters)
 
     elif first_row.loc[0][0] == 'NSKV':
 
@@ -64,6 +68,9 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
         df_input['num_of_research'] = 1
+        # учет ГДИС
+        df_input = geobd_gdis_data(df_input, dict_parameters)
+
     else:
         print('Формат загруженного файла не подходит для модуля')
         sys.exit()
@@ -229,96 +236,6 @@ def preparing_project_wells(dict_parameters):
     return df_project
 
 
-def preprocessing_NGT(df_input, min_length_horWell):
-    """
-    Подготовка данных из NGT
-
-    :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
-    :param df_input: Выгрузка данных NGT
-    :return: подготовленный DataFrame выгрузки NGT, скважины разделены на ННС и ГС
-    """
-
-    # rename columns
-    df_input.columns = dict_names_column.values()
-
-    # cleaning null values
-    df_input = df_input[df_input.workHorizon.notnull()]
-    df_input = df_input[df_input.wellCluster.notnull()]
-    df_input = df_input.fillna(0)
-
-    # transfer to string type
-    df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
-        df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
-    df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
-    df_input['oilfield'] = df_input['oilfield'].str.upper()
-
-    # create a base coordinate for each well
-    df_input.loc[df_input["coordinateXT3"] == 0, 'coordinateXT3'] = df_input.coordinateXT1
-    df_input.loc[df_input["coordinateYT3"] == 0, 'coordinateYT3'] = df_input.coordinateYT1
-    df_input.loc[df_input["coordinateXT1"] == 0, 'coordinateXT1'] = df_input.coordinateXT3
-    df_input.loc[df_input["coordinateYT1"] == 0, 'coordinateYT1'] = df_input.coordinateYT3
-    df_input["length of well T1-3"] = np.sqrt(np.power(df_input.coordinateXT3 - df_input.coordinateXT1, 2)
-                                              + np.power(df_input.coordinateYT3 - df_input.coordinateYT1, 2))
-
-    df_input["well type"] = 0
-    df_input.loc[df_input["length of well T1-3"] < min_length_horWell, "well type"] = "vertical"
-    df_input.loc[
-        df_input["length of well T1-3"] >= min_length_horWell, "well type"] = "horizontal"
-
-    df_input["coordinateX"] = 0
-    df_input["coordinateX3"] = 0
-    df_input["coordinateY"] = 0
-    df_input["coordinateY3"] = 0
-    df_input.loc[df_input["well type"] == "vertical", ['coordinateX', 'coordinateX3']] = df_input.coordinateXT1
-    df_input.loc[df_input["well type"] == "vertical", ['coordinateY', 'coordinateY3']] = df_input.coordinateYT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX'] = df_input.coordinateXT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX3'] = df_input.coordinateXT3
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY'] = df_input.coordinateYT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY3'] = df_input.coordinateYT3
-
-    df_input.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
-                  axis=1, inplace=True)
-
-    return df_input
-
-
-def upload_gdis_data(df_input, dict_parameters):
-    """
-    Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
-    скважин, на которых проводились исследования начиная с введенной пользователем даты по сей день
-
-    :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
-    :param dict_parameters: словарь с параметрами расчета
-    :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
-    """
-    application_path = get_path()
-    logger.info("Upload GDIS file")
-    try:
-        df_gdis = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
-                                skiprows=[0],
-                                sheet_name='ГДИС')
-        if df_gdis.empty:
-            return df_input
-    except ValueError:
-        logger.info('Sheet with name "ГДИС" not found in data file')
-        return df_input
-
-    # get preparing dataframes
-    if not (dict_parameters['gdis_option'] is None):
-        df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
-
-        # drop wells by horizon gdis
-        objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
-        df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
-        df_input = df_input[df_input['workHorizon'] != '']
-
-        return df_input
-
-    else:
-        logger.info('Incorrect date of GDIS')
-        return df_input
-
-
 def preparing(dict_constant, df_input, dict_parameters):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
@@ -429,6 +346,165 @@ def preparing(dict_constant, df_input, dict_parameters):
     return df_input
 
 
+def preprocessing_NGT(df_input, min_length_horWell):
+    """
+    Подготовка данных из NGT
+
+    :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
+    :param df_input: Выгрузка данных NGT
+    :return: подготовленный DataFrame выгрузки NGT, скважины разделены на ННС и ГС
+    """
+
+    # rename columns
+    df_input.columns = dict_names_column.values()
+
+    # cleaning null values
+    df_input = df_input[df_input.workHorizon.notnull()]
+    df_input = df_input[df_input.wellCluster.notnull()]
+    df_input = df_input.fillna(0)
+
+    # transfer to string type
+    df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
+        df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
+    df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
+    df_input['oilfield'] = df_input['oilfield'].str.upper()
+
+    # create a base coordinate for each well
+    df_input.loc[df_input["coordinateXT3"] == 0, 'coordinateXT3'] = df_input.coordinateXT1
+    df_input.loc[df_input["coordinateYT3"] == 0, 'coordinateYT3'] = df_input.coordinateYT1
+    df_input.loc[df_input["coordinateXT1"] == 0, 'coordinateXT1'] = df_input.coordinateXT3
+    df_input.loc[df_input["coordinateYT1"] == 0, 'coordinateYT1'] = df_input.coordinateYT3
+    df_input["length of well T1-3"] = np.sqrt(np.power(df_input.coordinateXT3 - df_input.coordinateXT1, 2)
+                                              + np.power(df_input.coordinateYT3 - df_input.coordinateYT1, 2))
+
+    df_input["well type"] = 0
+    df_input.loc[df_input["length of well T1-3"] < min_length_horWell, "well type"] = "vertical"
+    df_input.loc[
+        df_input["length of well T1-3"] >= min_length_horWell, "well type"] = "horizontal"
+
+    df_input["coordinateX"] = 0
+    df_input["coordinateX3"] = 0
+    df_input["coordinateY"] = 0
+    df_input["coordinateY3"] = 0
+    df_input.loc[df_input["well type"] == "vertical", ['coordinateX', 'coordinateX3']] = df_input.coordinateXT1
+    df_input.loc[df_input["well type"] == "vertical", ['coordinateY', 'coordinateY3']] = df_input.coordinateYT1
+    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX'] = df_input.coordinateXT1
+    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX3'] = df_input.coordinateXT3
+    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY'] = df_input.coordinateYT1
+    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY3'] = df_input.coordinateYT3
+
+    df_input.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
+                  axis=1, inplace=True)
+
+    return df_input
+
+
+def geobd_gdis_data(df_input, dict_parameters):
+    """
+    Функция обработки данных ГДИС из выгрузки ГеоБД
+    :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
+    :param dict_parameters: словарь с параметрами расчета
+    :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
+    """
+    app1 = xw.App(visible=False)
+    gdis_wb = xw.Book(os.path.join(get_path(), "input", dict_parameters['data_file']))
+    gdis_sheet = gdis_wb.sheets['ГДИС']
+    list_cells = gdis_sheet[
+        f'L3:L{gdis_sheet['A1'].expand().last_cell.address.split('$')[-1]}']
+    for row_cell in list_cells:
+        if ((row_cell.font.color == (255, 0, 0)) or (row_cell.font.color == (0, 176, 80)) or (
+                row_cell.font.color == (0, 128, 0))):
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверны"
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (0, 128, 0)
+        else:
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат ненадежен"
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
+            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (255, 0, 0)
+    gdis_wb.save()
+    app1.kill()
+
+    try:
+        df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']), skiprows=[1],
+                                sheet_name='ГДИС')
+        if df_gdis.empty:
+            return df_input
+    except ValueError:
+        logger.info('Sheet with name "ГДИС" not found in data file')
+        return df_input
+
+    if not (dict_parameters['gdis_option'] is None):
+        dict_rename = {
+            'Скважина': 'Скважина',
+            'Пласт ОИС': 'Пласты',
+            'Вид исследования': 'Вид исследования',
+            'Дата испытания': 'Начальная дата',
+            'Дата окончания': 'Дата окончания',
+            'Качество исследования': 'Оценка',
+        }
+
+        df_gdis = df_gdis[df_gdis['Качество исследования'] == 'результат достоверны']
+        df_gdis = df_gdis.fillna(0)
+        df_gdis = df_gdis[df_gdis['Общее время исслед.'] > 24].reset_index(drop=True)
+        df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(
+            lambda x: x if parseDate(str(x), dayfirst=True).year > 1950 else 0)
+        df_gdis = df_gdis[df_gdis['Дата испытания'] != 0]
+        df_gdis['Дата окончания'] = pd.to_datetime(df_gdis['Дата испытания']) + df_gdis['Общее время исслед.'].apply(
+            lambda x: timedelta(hours=x))
+        df_gdis = df_gdis[
+            ['Скважина', 'Пласт ОИС', 'Вид исследования', 'Дата испытания', 'Дата окончания', 'Качество исследования']]
+        df_gdis.columns = dict_rename.values()
+        df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
+
+        # drop wells by horizon gdis
+        objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
+        df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
+        df_input = df_input[df_input['workHorizon'] != '']
+
+        return df_input
+
+    else:
+        logger.info('Incorrect date of GDIS')
+        return df_input
+
+
+def ngt_gdis_data(df_input, dict_parameters):
+    """
+    Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
+    скважин, на которых проводились исследования начиная с введенной пользователем даты по сей день
+
+    :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
+    :param dict_parameters: словарь с параметрами расчета
+    :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
+    """
+    logger.info("Upload NGT GDIS table")
+    try:
+        df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']),
+                                skiprows=[0], sheet_name='ГДИС')
+        if df_gdis.empty:
+            return df_input
+    except ValueError:
+        logger.info('Sheet with name "ГДИС" not found in data file')
+        return df_input
+
+    # get preparing dataframes
+    if not (dict_parameters['gdis_option'] is None):
+
+        df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
+        df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
+
+        # drop wells by horizon gdis
+        objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
+        df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
+        df_input = df_input[df_input['workHorizon'] != '']
+
+        return df_input
+
+    else:
+        logger.info('Incorrect date of GDIS')
+        return df_input
+
+
 def gdis_preparing(df_gdis, input_wells, year):
     """
     Функция очищает загруженные данные ГДИС от скважин, на которых
@@ -451,7 +527,6 @@ def gdis_preparing(df_gdis, input_wells, year):
 
     LOW = ["результат ненадежен", "низкая"]
 
-    df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
     df_gdis.columns = dict_names_gdis.values()
     df_gdis = df_gdis.fillna(0)
     df_gdis = df_gdis.astype({'wellName': str, 'workHorizon': str, 'quality': str})
@@ -460,17 +535,17 @@ def gdis_preparing(df_gdis, input_wells, year):
 
     df_gdis['begin_of_research'] = pd.to_datetime(df_gdis['begin_of_research'])
     df_gdis['end_of_research'] = pd.to_datetime(df_gdis['end_of_research'])
+    try:
+        df_gdis = df_gdis[df_gdis['end_of_research'] >= pd.to_datetime(year, format='%d.%m.%Y')]
+    except ValueError:
+        raise ValueError(
+            f'Введена некорректная дата ГДИС {year}. Введите в параметрах расчета дату в формате ДД.ММ.ГГГГ')
 
     df_gdis['workHorizon'] = list(map(lambda x: x.replace(" ", "").split(";"), df_gdis['workHorizon']))
     df_gdis['type_of_research'] = list(map(lambda x: x.replace(" ", "").split("+"), df_gdis['type_of_research']))
     df_gdis = df_gdis[~df_gdis['quality'].isin(LOW)]
     df_gdis['time_of_research'] = df_gdis['end_of_research'] - df_gdis['begin_of_research']
     df_gdis = df_gdis[df_gdis['time_of_research'] != timedelta(0)]
-    try:
-        df_gdis = df_gdis[df_gdis['end_of_research'] >= pd.to_datetime(year, format='%d.%m.%Y')]
-    except ValueError:
-        raise ValueError(
-            f'Введена некорректная дата ГДИС {year}. Введите в параметрах расчета дату в формате ДД.ММ.ГГГГ')
 
     return df_gdis
 

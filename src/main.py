@@ -10,7 +10,7 @@ from src.calculation.auxiliary_functions import upload_parameters, get_path
 from src.calculation.calculation_wells import calculation
 from src.calculation.geometry import check_intersection_area, load_contour
 from src.preparing.dictionaries import dict_constant
-from src.preparing.preparing_data import upload_input_data, upload_gdis_data, preparing_reservoir_properties
+from src.preparing.preparing_data import upload_input_data, preparing_reservoir_properties
 from src.visualization.mapping import mesh_visualization, visualization
 from src.visualization.print_in_excel import write_optim_mesh, write_regular_mesh
 
@@ -22,11 +22,8 @@ if __name__ == '__main__':
     # Upload parameters
     dict_parameters = upload_parameters('input/parameters.yml')
 
-    # Upload files and initial data preparation_________________________________________________________________________
+    # Upload data, initial data preparation_____________________________________________________________________________
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
-
-    # Upload files and GDIS data preparation____________________________________________________________________________
-    df_input = upload_gdis_data(df_input, dict_parameters)
 
     # add logs to file
     logger.add('output/logfile.log', level='INFO', format="{message}")
