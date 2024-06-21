@@ -17,8 +17,8 @@ from src.visualization.print_in_excel import write_optim_mesh, write_regular_mes
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
 
-if __name__ == '__main__':
 
+def module_gdis():
     # Upload parameters
     dict_parameters = upload_parameters('input/parameters.yml')
 

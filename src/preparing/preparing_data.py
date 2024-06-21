@@ -24,6 +24,7 @@ def upload_input_data(dict_constant, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
+    logger.info('Upload input data')
     # Upload project wells
     df_project = preparing_project_wells(dict_parameters)
 
@@ -341,8 +342,6 @@ def preparing(dict_constant, df_input, dict_parameters):
                                                           tuple(x.coords) + tuple(y.coords)),
                                                                df_input.POINT, df_input.POINT3)))
 
-    # date = pd.to_datetime(df_input['nameDate'].iloc[0], format='%d.%m.%Y')
-
     return df_input
 
 
@@ -412,6 +411,7 @@ def geobd_gdis_data(df_input, dict_parameters):
     list_cells = gdis_sheet[
         f'L3:L{gdis_sheet['A1'].expand().last_cell.address.split('$')[-1]}']
     for row_cell in list_cells:
+        # фильтр текста ячеек по цветам
         if ((row_cell.font.color == (255, 0, 0)) or (row_cell.font.color == (0, 176, 80)) or (
                 row_cell.font.color == (0, 128, 0))):
             gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверны"
@@ -525,6 +525,7 @@ def gdis_preparing(df_gdis, input_wells, year):
         'Оценка': 'quality'
     }
 
+    # низкое качество исследования
     LOW = ["результат ненадежен", "низкая"]
 
     df_gdis.columns = dict_names_gdis.values()
