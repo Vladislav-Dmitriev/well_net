@@ -26,7 +26,7 @@ if __name__ == '__main__':
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
 
     # add logs to file
-    logger.add('output/logfile.log', level='INFO', format="{message}")
+    logger.add('output/logfile.log', level='ERROR', format="{time} {level} {message}")
     logger.info("Starting calculation")
     # path to file with properties for current object
     logger.info("Checking for properties")

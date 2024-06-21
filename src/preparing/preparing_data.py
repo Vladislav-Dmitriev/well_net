@@ -30,13 +30,14 @@ def upload_input_data(dict_constant, dict_parameters):
     # Upload exception list wells
     list_exception = get_exception_wells(dict_parameters, 'Исключения')
 
+    # Get path to application folder
     application_path = get_path()
     logger.info("Data type definition")
 
     # с новой выгрузкой NGT 'utf-8' не всегда может считать, поэтому добавил try/except
     first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
                               sheet_name='Фонд', nrows=1)
-
+    # check type of database
     if first_row.loc[0][0] == '№ скважины':
 
         logger.info("Preparing NGT data")
@@ -45,7 +46,10 @@ def upload_input_data(dict_constant, dict_parameters):
                            skiprows=[1],
                            sheet_name='Фонд')
         df = df.dropna(subset=['№ скважины'])
-        df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])  # предобработка данных из NGT
+        # preprocessing NGT data
+        logger.info("Preprocessing NGT data")
+        df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])
+        logger.info("General preparing data")
         df_input = preparing(dict_constant, df_input, dict_parameters)
         # добавление DataFrame проектных скважин
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
@@ -53,7 +57,7 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input['num_of_research'] = 1
         # учет ГДИС
         df_input = ngt_gdis_data(df_input, dict_parameters)
-
+    # check type of database
     elif first_row.loc[0][0] == 'NSKV':
 
         logger.info("Preparing GeoBD data")
@@ -70,7 +74,7 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input['num_of_research'] = 1
         # учет ГДИС
         df_input = geobd_gdis_data(df_input, dict_parameters)
-
+    # wrong type of database
     else:
         print('Формат загруженного файла не подходит для модуля')
         sys.exit()

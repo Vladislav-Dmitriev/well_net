@@ -2,9 +2,14 @@
 /.idea/
 /files/
 /conf_files/
-/Опорная сетка.docx
 /output/
+/input
 /contours/
 /main.exe
 /main.spec
 __pycache__
+Опорная сеть.exe
+requirements.txt
+/src/test.py
+/src/untitled.py
+/src/visualization/qtsample.ui
