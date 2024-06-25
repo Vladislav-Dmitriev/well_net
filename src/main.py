@@ -19,18 +19,21 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 if __name__ == '__main__':
 
+    # path to application
+    application_path = get_path()
+    # add logs to file
+    logger.add(f'{application_path}/output/logfile.log', level='DEBUG', format="{time} {level} {message}", rotation='10KB')
+    logger.info("Starting calculation")
+
     # Upload parameters
-    dict_parameters = upload_parameters('input/parameters.yml')
+    dict_parameters = upload_parameters(f'{application_path}/input/parameters.yml')
 
     # Upload data, initial data preparation_____________________________________________________________________________
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
 
-    # add logs to file
-    logger.add('output/logfile.log', level='ERROR', format="{time} {level} {message}")
-    logger.info("Starting calculation")
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = 'input/reservoir_properties.json'
+    path_property = f'{application_path}/input/reservoir_properties.json'
     logger.info(f"path: {path_property}")
 
     # Upload and print reservoir_properties.yml
@@ -38,7 +41,6 @@ if __name__ == '__main__':
 
     # path to folder with contours
     logger.info("CHECKING FOR CONTOURS")
-    application_path = get_path()
     logger.info(f"path: {application_path}")
     logger.info("check the content of contours")
 

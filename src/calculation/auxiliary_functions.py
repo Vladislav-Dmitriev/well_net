@@ -11,6 +11,7 @@ from scipy.optimize import fsolve
 from tqdm import tqdm
 
 
+@logger.catch(level='DEBUG')
 def unpack_status(dict_constant):
     """
     Распаковка параметров из словаря, для удобства использования в коде
@@ -21,6 +22,7 @@ def unpack_status(dict_constant):
         dict_constant.get("INJ_MARKER"), dict_constant.get("INJ_STATUS"), dict_constant.get("DELETE_STATUS")
 
 
+@logger.catch(level='DEBUG')
 def get_property(path):
     """
     Считывание параметров из yaml-файла в словарь
@@ -32,6 +34,7 @@ def get_property(path):
     return reservoir_properties
 
 
+@logger.catch(level='DEBUG')
 def wc_func(x, water_cut, const, S_o_init, S_w_init, Corey_w, Corey_o):
     """
     Функция зависимости обводненности от водонасыщенности
@@ -47,6 +50,7 @@ def wc_func(x, water_cut, const, S_o_init, S_w_init, Corey_w, Corey_o):
     return -water_cut + (1 / (1 + const * (1 - x - S_o_init) ** Corey_o / (x - S_w_init) ** Corey_w))
 
 
+@logger.catch(level='DEBUG')
 def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     """
     Рассчет коэффициента для формулы по вычислению времени исследования скважины
@@ -165,6 +169,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     return [time_coef, mu, ct, phi, k, gas_viscocity, pressure, num_default, len(list_obj)]
 
 
+@logger.catch(level='DEBUG')
 def dict_keys(list_r, contour_name):
     """
     :param list_r: список коэффициентов для умножения радиуса
@@ -176,6 +181,7 @@ def dict_keys(list_r, contour_name):
     return dict_result
 
 
+@logger.catch(level='DEBUG')
 def upload_parameters(path):
     """
     Функция загрузки заданных пользователем параметров
@@ -184,6 +190,16 @@ def upload_parameters(path):
     """
     with open(path, encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
+
+    # коэффициенты кратного увеличения радиуса исследования
+    mult_coef = dict_parameters['mult_coef']
+    mult_coef = mult_coef.split(',')
+    try:
+        mult_coef = [float(x) for x in mult_coef]
+        dict_parameters['mult_coef'] = mult_coef
+    except ValueError:
+        dict_parameters['mult_coef'] = 1
+        logger.info('Wrong type of radius mult coefficients. Default mult coef is 1')
 
     # дата последнего проведенного ГДИС
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
@@ -219,6 +235,7 @@ def upload_parameters(path):
     return dict_parameters
 
 
+@logger.catch(level='DEBUG')
 def get_path():
     """
     :return: Функция возвращает путь, по которому находится exe файл
@@ -233,6 +250,7 @@ def get_path():
         raise Exception('Executable file path not found')
 
 
+@logger.catch(level='DEBUG')
 def clean_work_horizon(df, count_of_hor):
     """
     Удаляет из DataFrame скважины с числом объектов работы больше заданного пользователем

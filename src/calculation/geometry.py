@@ -1,9 +1,11 @@
 import geopandas as gpd
 import numpy as np
+from loguru import logger
 import pandas as pd
 from shapely.geometry import LineString, Point, Polygon
 
 
+@logger.catch(level='DEBUG')
 def get_polygon_well(R_well, type_well, *coordinates):
     """
     Создание зоны вокруг скважины с заданным радиусом
@@ -24,6 +26,7 @@ def get_polygon_well(R_well, type_well, *coordinates):
         raise NameError(f'Wrong well type: {type_well}. Allowed values: vertical or horizontal')
 
 
+@logger.catch(level='DEBUG')
 def check_intersection_area(area, df_points, percent, calc_option):
     """
     Проверка входят ли скважины из df_point в зону другой скважины area
@@ -53,6 +56,7 @@ def check_intersection_area(area, df_points, percent, calc_option):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
+@logger.catch(level='DEBUG')
 def check_intersection_point(point, df_areas, percent, calc_option):
     """
     Функция позволяет узнать, перечесение со сколькими зонами имеет определенная скважина
@@ -79,6 +83,7 @@ def check_intersection_point(point, df_areas, percent, calc_option):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
+@logger.catch(level='DEBUG')
 def intersect_number(df_prod, df_inj_piez, percent, calc_option):
     """
     Функция добавляет в DataFrame столбец 'intersection', в него записываются
@@ -108,6 +113,7 @@ def intersect_number(df_prod, df_inj_piez, percent, calc_option):
     return df_prod, df_inj_piez
 
 
+@logger.catch(level='DEBUG')
 def optimization(df_prod, df_inj_piez):
     """
     Выделяется список нагнетательных/пьезометров из DataFrame продуктивных,
@@ -153,6 +159,7 @@ def optimization(df_prod, df_inj_piez):
     return list_inj_piez_wells
 
 
+@logger.catch(level='DEBUG')
 def add_shapely_types(df_input, mean_rad, coeff):
     """
     Добавление в DataFrame столбца с площадью охвата скважин, в зависимости от среднего радиуса охвата по контуру
@@ -179,6 +186,7 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
+@logger.catch(level='DEBUG')
 def load_contour(contour_path):
     """
     Загрузка файла с координатами контура и построение многоугольника

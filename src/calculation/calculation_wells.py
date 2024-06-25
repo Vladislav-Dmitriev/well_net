@@ -10,6 +10,7 @@ from .geometry import intersect_number, optimization, check_intersection_area, a
 from .regular_mesh_intersections import calc_regular_mesh
 
 
+@logger.catch(level='DEBUG')
 def calculation(polygon, df_in_contour, contour_name, path_property, list_exception, dict_parameters):
     """
     Основная функция расчета
@@ -118,6 +119,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     return dict_result
 
 
+@logger.catch(level='DEBUG')
 def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обрабатывает DataFrame из пьезометров, подающийся на вход
@@ -152,6 +154,7 @@ def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent, calc_option):
     return isolated_wells, df_piez_wells, hor_prod_wells, df_result
 
 
+@logger.catch(level='DEBUG')
 def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame нагнетательных скважин
@@ -191,6 +194,7 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent, c
     return isolated_wells, hor_prod_wells, df_inj_wells, df_result
 
 
+@logger.catch(level='DEBUG')
 def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame одиночных скважин
@@ -263,6 +267,7 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
     return clean_wells, hor_prod_wells, df_result
 
 
+@logger.catch(level='DEBUG')
 def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
                  horizon, mean_rad, coeff, key, obj_square, path_property, list_exception, dict_parameters):
     """
@@ -352,6 +357,7 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
     return df_result
 
 
+@logger.catch(level='DEBUG')
 def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, horizon,
                  obj_square, min_time_research, max_time_research, calc_option, limit_research_time,
                  df_piez_wells, df_prod_wells, df_inj_wells, df_result, df_necessarily_wells):
@@ -484,6 +490,7 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     return df_result
 
 
+@logger.catch(level='DEBUG')
 def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff, calc_option):
     """
     Функция получения скважин в слепой зоне при k > 1.5 (k*R)
@@ -511,6 +518,7 @@ def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff, calc_option)
     return list_invisible_wells
 
 
+@logger.catch(level='DEBUG')
 def separation_gdis(df_invisible):
     """
     Функция разделения скважин в слепых зонах на 2 года

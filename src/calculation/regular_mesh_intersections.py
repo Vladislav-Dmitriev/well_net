@@ -5,11 +5,13 @@ import pandas as pd
 from shapely.ops import cascaded_union
 from shapely.ops import unary_union
 from tqdm import tqdm
+from loguru import logger
 
 from src.calculation.auxiliary_functions import get_property, get_time_coef
 from src.calculation.geometry import check_intersection_area
 
 
+@logger.catch(level='DEBUG')
 def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
                       horizon, path_property, dict_parameters, obj_square, mean_rad, coeff, list_exception):
     """

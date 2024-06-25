@@ -14,6 +14,7 @@ from src.calculation.auxiliary_functions import get_path, clean_work_horizon, un
 from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
+@logger.catch
 def upload_input_data(dict_constant, dict_parameters):
     """
     Считывание файла с исключенными скважинами, затем загрузка данных,
@@ -86,6 +87,7 @@ def upload_input_data(dict_constant, dict_parameters):
     return df_input, list_exception
 
 
+@logger.catch
 def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     """
     Подготовка данных ГеоБД
@@ -168,6 +170,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     return df_input
 
 
+@logger.catch
 def preparing_project_wells(dict_parameters):
     """
     Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
@@ -240,6 +243,7 @@ def preparing_project_wells(dict_parameters):
     return df_project
 
 
+@logger.catch
 def preparing(dict_constant, df_input, dict_parameters):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
@@ -350,6 +354,7 @@ def preparing(dict_constant, df_input, dict_parameters):
     return df_input
 
 
+@logger.catch
 def preprocessing_NGT(df_input, min_length_horWell):
     """
     Подготовка данных из NGT
@@ -403,6 +408,7 @@ def preprocessing_NGT(df_input, min_length_horWell):
     return df_input
 
 
+@logger.catch(level='DEBUG')
 def geobd_gdis_data(df_input, dict_parameters):
     """
     Функция обработки данных ГДИС из выгрузки ГеоБД
@@ -410,33 +416,46 @@ def geobd_gdis_data(df_input, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
+    logger.info('Upload GeoBD GDIS table')
+    # open excel file with data and choose sheet with required name
     app1 = xw.App(visible=False)
     gdis_wb = xw.Book(os.path.join(get_path(), "input", dict_parameters['data_file']))
     gdis_sheet = gdis_wb.sheets['ГДИС']
+    # create list with names of cells in column Pпл на ВНК
     list_cells = gdis_sheet[
         f'L3:L{gdis_sheet['A1'].expand().last_cell.address.split('$')[-1]}']
-    for row_cell in list_cells:
-        if ((row_cell.font.color == (255, 0, 0)) or (row_cell.font.color == (0, 176, 80)) or (
-                row_cell.font.color == (0, 128, 0))):
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверны"
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (0, 128, 0)
-        else:
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат ненадежен"
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
-            gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (255, 0, 0)
-    gdis_wb.save()
+    # check that first cell in correct format
+    if gdis_sheet['A1'].value == '№ п/п':
+        for row_cell in list_cells:
+            if ((row_cell.font.color == (255, 0, 0)) or (row_cell.font.color == (0, 176, 80)) or (
+                    row_cell.font.color == (0, 128, 0))):
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверны"
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (0, 128, 0)
+            else:
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат ненадежен"
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = (255, 0, 0)
+        gdis_wb.save()
+    else:
+        # clearing sheet
+        gdis_sheet.clear()
+        gdis_wb.save()
+    # close excel file
     app1.kill()
 
     try:
+        # read data from sheet with pandas
         df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']), skiprows=[1],
                                 sheet_name='ГДИС')
+        # check empty dataframe
         if df_gdis.empty:
             return df_input
     except ValueError:
+        # wrong type of data error and return origin dataframe
         logger.info('Sheet with name "ГДИС" not found in data file')
         return df_input
-
+    # check parameter of date last GDIS
     if not (dict_parameters['gdis_option'] is None):
         dict_rename = {
             'Скважина': 'Скважина',
@@ -468,10 +487,11 @@ def geobd_gdis_data(df_input, dict_parameters):
         return df_input
 
     else:
-        logger.info('Incorrect date of GDIS')
+        logger.info('Incorrect data of GDIS GeoBD')
         return df_input
 
 
+@logger.catch(level='DEBUG')
 def ngt_gdis_data(df_input, dict_parameters):
     """
     Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
@@ -509,6 +529,7 @@ def ngt_gdis_data(df_input, dict_parameters):
         return df_input
 
 
+@logger.catch(level='DEBUG')
 def gdis_preparing(df_gdis, input_wells, year):
     """
     Функция очищает загруженные данные ГДИС от скважин, на которых
@@ -554,6 +575,7 @@ def gdis_preparing(df_gdis, input_wells, year):
     return df_gdis
 
 
+@logger.catch(level='DEBUG')
 def drop_wells_by_gdis(input_row, gdis_objects):
     """
     Функция удаляет объекты для каждой скважины, если по ним проводились ГДИС
@@ -571,6 +593,7 @@ def drop_wells_by_gdis(input_row, gdis_objects):
     return input_row
 
 
+@logger.catch(level='DEBUG')
 def preparing_reservoir_properties(dict_parameters, path):
     """
     Подготовка PVT свойств из справочника PVT и далее запись в .json файл
@@ -676,6 +699,7 @@ def preparing_reservoir_properties(dict_parameters, path):
     pass
 
 
+@logger.catch(level='DEBUG')
 def get_exception_wells(dict_parameters, sheet):
     """
     Загрузка скважин для исключения из расчета или скважин обязательных для включения в ОС в зависимости от имени листа

@@ -1,11 +1,14 @@
 import geopandas as gpd
 import pandas as pd
 import xlwings as xw
+from loguru import logger
 from tqdm import tqdm
 
 from src.calculation.geometry import check_intersection_area
+from src.calculation.auxiliary_functions import get_path
 
 
+@logger.catch(level='DEBUG')
 def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
     """
     Запись результатов расчета регулярной сетки в Excel
@@ -63,7 +66,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
-
+    # create new excel file for results
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
 
@@ -128,12 +131,13 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
 
-    new_wb.save("output/out_file_mesh.xlsx")
+    new_wb.save(f"{get_path()}/output/out_file_mesh.xlsx")
     # End print
     app1.kill()
     pass
 
 
+@logger.catch(level='DEBUG')
 def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
     """
     Для записи результата расчетов в Excel подается словарь
@@ -255,12 +259,13 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
     new_wb.sheets.add("report")
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
-    new_wb.save("output/out_file_geometry.xlsx")
+    new_wb.save(f"{get_path()}/output/out_file_geometry.xlsx")
     # End print
     app1.kill()
     pass
 
 
+@logger.catch
 def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
