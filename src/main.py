@@ -46,7 +46,6 @@ if __name__ == '__main__':
 
     # get path and names of contour files with coordinates
     contours_path = application_path + "\\input"
-    # contours_content = os.listdir(path=contours_path)
     contours_content = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
 
     well_out_contour = set(df_input.wellName.values)
@@ -54,10 +53,13 @@ if __name__ == '__main__':
     list_wells_in_contour = []
 
     if contours_content:
+        # calculation well inside contour
         logger.info(f"contours: {len(contours_content)}")
         for contour in contours_content:
+            # parse file name
             contour_name = contour.replace(".txt", "")
             contour_path = contours_path + f"\\{contour}"
+            # load contour coordinates to polygon
             polygon = load_contour(contour_path)
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
             wells_in_contour = set(check_intersection_area(polygon, df_points,
@@ -79,7 +81,7 @@ if __name__ == '__main__':
 
     if not df_out_contour.empty:
         contour_name = 'out_contour'
-        # расчет для скважин вне контура
+        # calculation wells out contour
         dict_result.update(calculation(polygon, df_out_contour, contour_name, path_property,
                                        list_exception, dict_parameters))
 
@@ -88,14 +90,14 @@ if __name__ == '__main__':
         # Map drawing for optimize mesh scenario
         df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
         visualization(df_input_prod, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
-        # Start print in Excel
+        # Start writing result to Excel file
         write_optim_mesh(df_input, dict_result, dict_parameters['percent'],
                          dict_parameters['calc_option'], **dict_constant)
     else:
         # Map drawing for regular mesh scenario
         mesh_visualization(df_input, dict_result, list_exception,
                            dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
-        # Start print in Excel
+        # Start writing result to Excel file
         write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'],
                            **dict_constant)
 

@@ -330,8 +330,8 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
     """
     logger.info("Clean pictures folder")
     application_path = get_path()
+    # clean folder with previous calculation result pictures
     clean_pictures_folder(f'{application_path}/output/regular_mesh/')
-
     logger.info('Begin plotting for 2 scenario')
     for key, value in tqdm(dict_mesh.items(), "Iterate by keys", position=0, leave=True, colour='white'):
         mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])

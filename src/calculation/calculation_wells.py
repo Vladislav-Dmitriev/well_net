@@ -503,6 +503,7 @@ def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff, calc_option)
     :return: возвращает список скважин для дообследования и DataFrame с обновленным столбцом пересечений
     """
     logger.info("Search invisible wells")
+    # copy values from intersection column
     df_recalc['intersection_kR'] = df_recalc['intersection']
     df_recalc['intersection'] = 0
     df_recalc['AREA'] = 0
@@ -527,12 +528,13 @@ def separation_gdis(df_invisible):
     """
     logger.info("Separation invisible wells")
     df_invisible = gpd.GeoDataFrame(df_invisible, geometry='GEOMETRY')
+    # add column with distance from nearest well
     df_invisible['dist_from_0'] = list(map(lambda x: x.distance(df_invisible['GEOMETRY'].iloc[0]),
                                            df_invisible['GEOMETRY']))
     df_invisible.sort_values(by=['dist_from_0'], ascending=True)
     list_separation = list(set(df_invisible.wellName.explode().unique()))
     list_first_year = []
-
+    # separate dataframe on two parts
     for i in tqdm(range(0, len(list_separation), 2), "Separation", position=0, leave=True,
                   colour='white', ncols=80):
         list_first_year += [list_separation[i]]
