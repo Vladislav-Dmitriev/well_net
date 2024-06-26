@@ -13,3 +13,7 @@ requirements.txt
 /src/test.py
 /src/untitled.py
 /src/visualization/qtsample.ui
+/src/build/
+/src/dist/
+/src/main.spec
+/Опорная_сеть.exe
