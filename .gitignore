@@ -14,3 +14,7 @@ src/visualization/output/
 __pycache__
 /src/test.py
 /Опорная сеть.exe
+/src/build/
+/src/dist/
+/src/main.spec
+/Опорная_сеть.exe
