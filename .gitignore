@@ -1,20 +1,10 @@
-src/visualization/qtsample.ui
-src/untitled.py
-src/visualization/output/
 /venv/
 /.idea/
 /files/
 /conf_files/
 /Опорная сетка.docx
 /output/
-/input/
 /contours/
 /main.exe
 /main.spec
 __pycache__
-/src/test.py
-/Опорная сеть.exe
-/src/build/
-/src/dist/
-/src/main.spec
-/Опорная_сеть.exe

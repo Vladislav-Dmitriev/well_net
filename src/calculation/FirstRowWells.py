@@ -4,8 +4,10 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from loguru import logger
 
 
+@logger.catch(level='DEBUG')
 def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     """
     Проверка пересечений между скважинами в исходном массиве, для исключения перекрываемых скважин второго ряда
@@ -46,6 +48,7 @@ def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     return list_dropWell
 
 
+@logger.catch(level='DEBUG')
 def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                                verticalWellAngle, MaxOverlapPercent,
                                angle_horizontalT1, angle_horizontalT3):
@@ -226,6 +229,7 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
     return listNamesFisrtRowWells
 
 
+@logger.catch(level='DEBUG')
 def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
                 angle_horizontalT1, angle_horizontalT3, max_distance):
     """
