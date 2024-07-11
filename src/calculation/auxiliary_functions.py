@@ -259,7 +259,7 @@ def clean_work_horizon(df, count_of_hor):
     :param count_of_hor: максимальное кол-во объектов работы скважины, задается пользователем
     :return: DataFrame со скважинами, число объектов работы которых не превышает заданного пользователем кол-ва
     """
-    if (not count_of_hor is None) and (count_of_hor > 0):
+    if (not count_of_hor is None) and (count_of_hor > 0) and (count_of_hor != ''):
         df['horizon_count'] = df['workHorizon'].apply(lambda x: len(set(x.replace(" ", "").split(","))))
         df = df[df['horizon_count'] <= count_of_hor]
         df.drop(columns=['horizon_count'], axis=1, inplace=True)
