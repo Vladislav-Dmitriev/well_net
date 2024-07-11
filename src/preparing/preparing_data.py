@@ -328,12 +328,12 @@ def preparing(dict_constant, df_input, dict_parameters):
             ~((df_input['gasStatus'] == 'нефтяная') & (df_input['oilRate'] > dict_parameters['limit_oilrate']))]
 
     # delete production wells with fluid rate less than fluid_rate in parameters
-    if not (dict_parameters['limit_oilrate'] is None):
+    if not (dict_parameters['fluid_rate'] is None):
         df_input = df_input[
             ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
                     df_input.fluidRate <= dict_parameters['fluid_rate']))]
     # delete production wells with water cut less
-    if not (dict_parameters['limit_oilrate'] is None):
+    if not (dict_parameters['water_cut'] is None):
         df_input = df_input[
             ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
                     df_input.water_cut <= dict_parameters['water_cut']))]
@@ -487,7 +487,6 @@ def geobd_gdis_data(df_input, dict_parameters):
             'Качество исследования': 'Оценка',
         }
 
-        df_gdis = df_gdis[df_gdis['Качество исследования'] == 'результат достоверны']
         df_gdis = df_gdis.fillna(0)
         df_gdis = df_gdis[df_gdis['Общее время исслед.'] > 24].reset_index(drop=True)
         df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(

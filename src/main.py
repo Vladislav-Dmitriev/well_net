@@ -17,17 +17,17 @@ from src.visualization.print_in_excel import write_optim_mesh, write_regular_mes
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
 
-if __name__ == '__main__':
 
+def module_gdis(dict_parameters):
     # path to application
     application_path = get_path()
     # add logs to file
-    logger.add(f'{application_path}/output/logfile.log', level='DEBUG', format="{time} {level} {message}", rotation='10KB')
+    logger.add(f'{application_path}/output/logfile.log', level='DEBUG', format="{time} {level} {message}", rotation='100KB')
     logger.info("Starting calculation")
+    logger.info(f"Parameters: {dict_parameters}")
 
     # Upload parameters
-    dict_parameters = upload_parameters(f'{application_path}/input/parameters.yml')
-
+    # dict_parameters = upload_parameters(f'{application_path}/input/parameters.yml')
     # Upload data, initial data preparation_____________________________________________________________________________
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
 
