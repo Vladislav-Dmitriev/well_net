@@ -41,8 +41,8 @@ class ValidatorData(TypedDict):
         if '.xlsx' in data_file:
             return data_file
         else:
-            # logger.info(f'Wrong input file format: {data_file}')
-            raise Exception('Wrong input file format')
+            logger.info(f'Wrong input file format: {data_file}')
+            raise ValueError('Wrong input file format')
 
     # selected scenario
     @field_validator('calculation_scenario')
@@ -61,7 +61,7 @@ class ValidatorData(TypedDict):
             pd.to_datetime(gdis_option, format='%d.%m.%Y')
             return gdis_option
         except ValueError:
-            # logger.info("Incorrect GDIS date format")
+            logger.info("Incorrect GDIS date format")
             raise ValueError('Enter correct format of GDIS date')
 
     # check calc_option status
@@ -83,29 +83,29 @@ class ValidatorData(TypedDict):
             if (percent_val >= 0) and (percent_val <= 100):
                 return percent_val
             else:
-                # logger.info('Value is out of bounds (0, 100)')
+                logger.info('Value is out of bounds (0, 100)')
                 raise ValueError('Enter a numeric value in the range 0-100')
         except ValueError:
-            # logger.info('Percent is not in range of acceptable values')
+            logger.info('Percent is not in range of acceptable values')
             raise ValueError('Enter a numeric value in the range 0-100')
 
     @field_validator('str_to_float_empty', 'horizon_count', 'fluid_rate', 'limit_oilrate', 'min_research_time',
                      'max_research_time')
-    def str_empty_to_float(cls, str_to_float_empty: str):
+    def str_to_empty_or_float(cls, str_to_float_empty: str):
         try:
             str_to_float_empty = float(str_to_float_empty)
             if str_to_float_empty >= 0:
                 return str_to_float_empty
             else:
-                # logger.info('Value must be positive')
+                logger.info('Value must be positive')
                 raise ValueError('Value must be positive')
-        except ValueError:
+        except ValidationError:
             if str_to_float_empty.strip() == '':
                 str_to_float_empty = str_to_float_empty.strip()
                 return str_to_float_empty
             else:
-                # logger.info('Value must be positive')
-                raise ValueError('Value must be positive')
+                logger.info('Value must be positive')
+                raise ValidationError('Value must be positive')
 
     @field_validator('water_cut')
     def watercut_to_float(cls, water_cut: str) -> float:
@@ -114,13 +114,13 @@ class ValidatorData(TypedDict):
             if (water_cut >= 0) and (water_cut <= 100):
                 return water_cut
             else:
-                # logger.info('Value is out of bounds 0-100')
+                logger.info('Value is out of bounds 0-100')
                 raise ValueError('Enter a numeric value in the range 0-100')
         except ValueError:
             if water_cut == '':
                 return water_cut
             else:
-                # logger.info('Percent is not in range of acceptable values')
+                logger.info('Percent is not in range of acceptable values')
                 raise ValueError('Enter a numeric value in the range 0-100')
 
     # check mult coefficients
@@ -134,7 +134,7 @@ class ValidatorData(TypedDict):
             else:
                 raise TypeError('Wrong type of coefficients')
         except TypeError:
-            # logger.info(f'Wrong type of coefficients')
+            logger.info(f'Wrong type of coefficients')
             raise TypeError('Wrong type of coefficients')
 
     # validation of limit radius coefficient
@@ -146,10 +146,10 @@ class ValidatorData(TypedDict):
             if float_params > 0:
                 return float_params
             else:
-                # logger.info('Value must be positive')
+                logger.info('Value must be positive')
                 raise ValueError('Value must be positive')
         except TypeError:
-            # logger.info(f'Wrong type of parameter {float_params}')
+            logger.info(f'Wrong type of parameter {float_params}')
             raise TypeError(f'Wrong type of parameter {float_params}')
 
     # validation count of years for separation GDIS

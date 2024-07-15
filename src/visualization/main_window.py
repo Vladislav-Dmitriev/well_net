@@ -36,8 +36,11 @@ class MainWindow(QtWidgets.QMainWindow):
             dict_errors = exc.errors()[0]
             wrong_param = dict_errors['loc'][0]
             error_message = dict_errors['msg'].split(',')[-1]
-            # print(f'Incorrect input parameter: {wrong_param}. {error_message}')
-            print(exc)
+            print(f'Incorrect input parameter: {wrong_param}. {error_message}')
+            error_widget = QtWidgets.QMessageBox(self, error_message)
+            error_widget.setWindowTitle('Ошибка в значении вводимого параметра')
+            error_widget.setText(f'Incorrect input parameter: {wrong_param}. {error_message}')
+            error_widget.show()
 
     def buttons(self):
         # begin calculation button
@@ -207,12 +210,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 combobox.currentTextChanged.connect(self.combobox_y_n4)
                 continue
 
-class Modal(QtWidgets.QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # self.setWindowModality(Qt.WindowModal)
-        # self.setModal(True)
-        self.resize(200, 200)
+
+class ErrorWindow(QtWidgets.QMessageBox):
+    def __init__(self, message, parent=QtWidgets.QWidget):
+        super().__init__()
+        self.setWindowTitle('Ошибка в параметрах')
+        self.setText(message)
+        self.resize(400, 200)
+        self.show()
 
 
 if __name__ == '__main__':
