@@ -22,7 +22,8 @@ def module_gdis(dict_parameters):
     # path to application
     application_path = get_path()
     # add logs to file
-    logger.add(f'{application_path}/output/logfile.log', level='DEBUG', format="{time} {level} {message}", rotation='100KB')
+    logger.add(f'{application_path}\output\logfile.log', level='DEBUG', format="{time} {level} {message}",
+               rotation='100KB')
     logger.info("Starting calculation")
     logger.info(f"Parameters: {dict_parameters}")
 
@@ -33,10 +34,10 @@ def module_gdis(dict_parameters):
 
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = f'{application_path}/input/reservoir_properties.json'
+    path_property = f'{application_path}\input\properties_reservoir.json'
     logger.info(f"path: {path_property}")
 
-    # Upload and print reservoir_properties.yml
+    # Upload and print properties_reservoir.yml
     preparing_reservoir_properties(dict_parameters, path_property)
 
     # path to folder with contours

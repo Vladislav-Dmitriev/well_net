@@ -131,7 +131,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
 
-    new_wb.save(f"{get_path()}//output//out_file_mesh.xlsx")
+    new_wb.save(f"{get_path()}\\output\\out_file_mesh.xlsx")
     # End print
     app1.kill()
     pass

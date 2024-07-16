@@ -1,4 +1,5 @@
 import sys
+import os
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 
@@ -6,6 +7,7 @@ from qtsample import Ui_MainWindow
 from src.main import module_gdis
 from src.preparing.validate_widget_data import ValidatorData
 from pydantic import TypeAdapter, ValidationError
+from src.calculation.auxiliary_functions import get_path
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -19,7 +21,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param = self.get_dict_qtreewidget()
         self.buttons()
         self.item_clicked()
+        self.menu_()
         self.show()
+
+    def menu_(self):
+        self.ui.readme_txt.triggered.connect(lambda: os.startfile(f'{get_path()}//README.txt'))
 
     def validate(self, dict_params):
         list_rename = ['data_file', 'calculation_scenario', 'gdis_option', 'calc_option', 'percent',
@@ -37,10 +43,10 @@ class MainWindow(QtWidgets.QMainWindow):
             wrong_param = dict_errors['loc'][0]
             error_message = dict_errors['msg'].split(',')[-1]
             print(f'Incorrect input parameter: {wrong_param}. {error_message}')
-            error_widget = QtWidgets.QMessageBox(self, error_message)
-            error_widget.setWindowTitle('Ошибка в значении вводимого параметра')
-            error_widget.setText(f'Incorrect input parameter: {wrong_param}. {error_message}')
-            error_widget.show()
+            self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message}')
+
+    def message_box(self, message):
+        QtWidgets.QMessageBox.about(self, 'Ошибка в значении введенного параметра', message)
 
     def buttons(self):
         # begin calculation button
@@ -56,7 +62,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         # make only one column of QTreeWidget is editable, items without child
         if column == 1 and item.childCount() == 0:
-            item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+            item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable | QtCore.Qt.ItemFlag.ItemIsUserCheckable |
+                          QtCore.Qt.ItemFlag.ItemIsSelectable)
             self.ui.treeWidget.editItem(item, column)
 
     def item_clicked(self):
@@ -209,15 +216,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
                 combobox.currentTextChanged.connect(self.combobox_y_n4)
                 continue
-
-
-class ErrorWindow(QtWidgets.QMessageBox):
-    def __init__(self, message, parent=QtWidgets.QWidget):
-        super().__init__()
-        self.setWindowTitle('Ошибка в параметрах')
-        self.setText(message)
-        self.resize(400, 200)
-        self.show()
 
 
 if __name__ == '__main__':
