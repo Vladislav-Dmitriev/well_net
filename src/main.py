@@ -22,7 +22,8 @@ if __name__ == '__main__':
     # path to application
     application_path = get_path()
     # add logs to file
-    logger.add(f'{application_path}/output/logfile.log', level='DEBUG', format="{time} {level} {message}", rotation='10KB')
+    logger.add(f'{application_path}/output/logfile.log', level='DEBUG',
+               format="{time} {level} {message}", rotation='100KB')
     logger.info("Starting calculation")
 
     # Upload parameters
