@@ -6,7 +6,7 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from src.calculation.auxiliary_functions import upload_parameters, get_path
+from src.calculation.auxiliary_functions import upload_parameters, get_path, delete_logfiles
 from src.calculation.calculation_wells import calculation
 from src.calculation.geometry import check_intersection_area, load_contour
 from src.preparing.dictionaries import dict_constant
@@ -21,20 +21,22 @@ if __name__ == '__main__':
 
     # path to application
     application_path = get_path()
+    # delete previous logfiles
+    delete_logfiles(f'{application_path}\\output\\')
     # add logs to file
-    logger.add(f'{application_path}/output/logfile.log', level='DEBUG',
+    logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG',
                format="{time} {level} {message}", rotation='100KB')
     logger.info("Starting calculation")
 
     # Upload parameters
-    dict_parameters = upload_parameters(f'{application_path}/input/parameters.yml')
+    dict_parameters = upload_parameters(f'{application_path}\\input\\parameters.yml')
 
     # Upload data, initial data preparation_____________________________________________________________________________
     df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
 
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = f'{application_path}/input/reservoir_properties.json'
+    path_property = f'{application_path}\\input\\reservoir_properties.json'
     logger.info(f"path: {path_property}")
 
     # Upload and print reservoir_properties.yml

@@ -270,6 +270,19 @@ def clean_work_horizon(df, count_of_hor):
 
 
 @logger.catch(level='DEBUG')
+def delete_logfiles(mypath):
+    """
+    Удаление логфайлов предыдущих расчетов по указанному пути
+    :param mypath: абсолютный путь к папке с логфайлами
+    :return:
+    """
+    list_logfiles = [f for f in os.listdir(path=mypath) if f.endswith('.log')]
+    for logfile in list_logfiles:
+        os.remove(f'{mypath}{logfile}')
+    pass
+
+
+@logger.catch(level='DEBUG')
 def rgb_to_ycc(r, g, b):
     """
     Перевод цвета из RGB в YCbCr

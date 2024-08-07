@@ -10,7 +10,7 @@ from dateutil.parser import parse as parseDate
 from loguru import logger
 from shapely.geometry import Point, LineString
 
-from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status, rgb_to_ycc, to_ycc, color_dist, min_color_diff
+from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
 from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
