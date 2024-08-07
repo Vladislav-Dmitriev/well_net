@@ -268,6 +268,12 @@ def clean_work_horizon(df, count_of_hor):
         logger.info('Value of well`s horizon count was left as a default')
         return df
 
+@logger.catch(level='DEBUG')
+def delete_logfiles(mypath):
+    list_logfiles = [f for f in os.listdir(path=mypath) if f.endswith('.log')]
+    for logfile in list_logfiles:
+        os.remove(f'{mypath}{logfile}')
+
 
 @logger.catch(level='DEBUG')
 def rgb_to_ycc(r, g, b):

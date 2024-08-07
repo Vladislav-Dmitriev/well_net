@@ -26,24 +26,30 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def menu_(self):
         self.ui.readme_txt.triggered.connect(lambda: os.startfile(f'{get_path()}//README.txt'))
+        self.ui.reference.triggered.connect(lambda: os.startfile(f'{get_path()}//Методичка ОС.docx'))
+        self.ui.exit.triggered.connect(QtCore.QCoreApplication.instance().quit)
 
-    def validate(self, dict_params):
+    def validate(self, dict_params, dict_previous):
         list_rename = ['data_file', 'calculation_scenario', 'gdis_option', 'calc_option', 'percent',
                        'horizon_count', 'mult_coef', 'limit_radius_coef', 'min_length_horWell', 'water_cut',
                        'fluid_rate', 'mean_oilrate_option', 'percent_oilrate', 'limit_oilrate', 'limit_research_time',
                        'min_research_time', 'max_research_time', 'option_percent', 'list_order_fond', 'percent_piez',
                        'percent_inj', 'percent_prod', 'separation_by_years', 'max_distance', 'verticalWellAngle',
                        'MaxOverlapPercent', 'angle_horizontalT1', 'angle_horizontalT3']
+        list_visible_names = list(dict_params.keys())
         dict_params = dict(zip(list_rename, list(dict_params.values())))
         try:
-            # print(self.ta.validate_python(dict_params))
             return self.ta.validate_python(dict_params)
         except ValidationError as exc:
             dict_errors = exc.errors()[0]
-            wrong_param = dict_errors['loc'][0]
+            wrong_param_index = list_rename.index(dict_errors['loc'][0])
+            wrong_param = list_visible_names[wrong_param_index]
             error_message = dict_errors['msg'].split(',')[-1]
             print(f'Incorrect input parameter: {wrong_param}. {error_message}')
-            self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message}')
+            self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message.strip().capitalize()}')
+            current_item = self.ui.treeWidget.findItems(wrong_param, QtCore.Qt.MatchFlag.MatchContains | QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+            # возвращение предыдущего значения ячейки при неверно введенном формате параметра
+            current_item.setText(1, dict_previous[wrong_param])
 
     def message_box(self, message):
         QtWidgets.QMessageBox.about(self, 'Ошибка в значении введенного параметра', message)
@@ -51,7 +57,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def buttons(self):
         # begin calculation button
         self.ui.calculate.clicked.connect(lambda: module_gdis(self.validate(self.dict_param)))
-        self.ui.download_previous.clicked.connect(lambda: print(self.validate(self.dict_param)))
+        self.ui.download_previous.clicked.connect(lambda: QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите файл с результатами предыдущих расчетов", f'{get_path()}\\output'))
 
     def editable_column(self, item, column):
         """
@@ -96,9 +102,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param['Распред-ие ГДИС скв. по годам'] = value
         self.update_dict()
 
-    def combobox_y_n(self, value):
+    def combobox_coverage_traj_hw(self, value):
         """
-        Изменяет значение в словаре параметров по ключу при изменении занчения combobox
+        Изменяет значение в словаре параметров по ключу при изменении значения combobox
         :param value: значение виджета combobox после изменения
         :return: обновленное значение словаря параметров по ключу item, где находится текущий combobox
         """
@@ -106,9 +112,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param['Критерий охвата траектории ГС'] = value
         self.update_dict()
 
-    def combobox_y_n2(self, value):
+    def combobox_average_flowrate(self, value):
         """
-        Изменяет значение в словаре параметров по ключу при изменении занчения combobox
+        Изменяет значение в словаре параметров по ключу при изменении значения combobox
         :param value: значение виджета combobox после изменения
         :return: обновленное значение словаря параметров по ключу item, где находится текущий combobox
         """
@@ -116,7 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param['Учет Q ср. по объекту'] = value
         self.update_dict()
 
-    def combobox_y_n3(self, value):
+    def combobox_time_boundaries(self, value):
         """
         Изменяет значение в словаре параметров по ключу при изменении занчения combobox
         :param value: значение виджета combobox после изменения
@@ -126,9 +132,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param['Учет границ исслед. ННС/ГС'] = value
         self.update_dict()
 
-    def combobox_y_n4(self, value):
+    def combobox_criteria_y_n(self, value):
         """
-        Изменяет значение в словаре параметров по ключу при изменении занчения combobox
+        Изменяет значение в словаре параметров по ключу при изменении значения combobox
         :param value: значение виджета combobox после изменения
         :return: обновленное значение словаря параметров по ключу item, где находится текущий combobox
         """
@@ -141,8 +147,11 @@ class MainWindow(QtWidgets.QMainWindow):
         Обвовление всех значений словаря параметров, тк один из item-ов был изменен
         :return: обновленный словарь значений параметров
         """
+        # копирования словаря на случай, если будет введено неверное значение
+        # какого-либо параметра - возвращается предыдущее значение
+        dict_previous = self.dict_param.copy()
         self.dict_param.update(self.get_dict_qtreewidget())
-        self.validate(self.dict_param)
+        self.validate(self.dict_param, dict_previous)
 
     def get_dict_qtreewidget(self):
         """
@@ -195,26 +204,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_y_n)
+                combobox.currentTextChanged.connect(self.combobox_coverage_traj_hw)
                 continue
 
             elif name == 'Учет Q ср. по объекту':
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_y_n2)
+                combobox.currentTextChanged.connect(self.combobox_average_flowrate)
                 continue
             elif name == 'Учет границ исслед. ННС/ГС':
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_y_n3)
+                combobox.currentTextChanged.connect(self.combobox_time_boundaries)
                 continue
             else:
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_y_n4)
+                combobox.currentTextChanged.connect(self.combobox_criteria_y_n)
                 continue
 
 

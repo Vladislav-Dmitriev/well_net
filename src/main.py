@@ -6,7 +6,7 @@ import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from src.calculation.auxiliary_functions import upload_parameters, get_path
+from src.calculation.auxiliary_functions import get_path, delete_logfiles
 from src.calculation.calculation_wells import calculation
 from src.calculation.geometry import check_intersection_area, load_contour
 from src.preparing.dictionaries import dict_constant
@@ -21,8 +21,10 @@ pd.options.mode.chained_assignment = None  # default='warn'
 def module_gdis(dict_parameters):
     # path to application
     application_path = get_path()
+    # delete previous logfiles
+    delete_logfiles(f'{application_path}\\output\\')
     # add logs to file
-    logger.add(f'{application_path}\output\logfile.log', level='DEBUG', format="{time} {level} {message}",
+    logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG', format="{time} {level} {message}",
                rotation='100KB')
     logger.info("Starting calculation")
     logger.info(f"Parameters: {dict_parameters}")
@@ -34,7 +36,7 @@ def module_gdis(dict_parameters):
 
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = f'{application_path}\input\properties_reservoir.json'
+    path_property = f'{application_path}\\input\\properties_reservoir.json'
     logger.info(f"path: {path_property}")
 
     # Upload and print properties_reservoir.yml
