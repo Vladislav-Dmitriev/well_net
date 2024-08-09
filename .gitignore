@@ -14,3 +14,7 @@ __pycache__
 /src/dist/
 /src/build/
 /input/
+/src/visualization/qtsample2.ui
+/Методичка ОС.docx
+/src/my_database.db
+/src/test.py
