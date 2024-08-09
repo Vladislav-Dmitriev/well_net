@@ -136,7 +136,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                     plt.savefig(
-                        f'output/optimize_mesh/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -146,7 +146,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                     plt.savefig(
-                        f'output/optimize_mesh/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -299,7 +299,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                              proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                 plt.savefig(
-                    f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')

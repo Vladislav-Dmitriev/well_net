@@ -493,7 +493,7 @@ def geobd_gdis_data(df_input, dict_parameters):
         df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(
             lambda x: x if parseDate(str(x), dayfirst=True).year > 1950 else 0)
         df_gdis = df_gdis[df_gdis['Дата испытания'] != 0]
-        df_gdis['Дата окончания'] = pd.to_datetime(df_gdis['Дата испытания']) + df_gdis['Общее время исслед.'].apply(
+        df_gdis['Дата окончания'] = pd.to_datetime(df_gdis['Дата испытания'], format='%d.%m.%Y') + df_gdis['Общее время исслед.'].apply(
             lambda x: timedelta(hours=x))
         df_gdis = df_gdis[
             ['Скважина', 'Пласт ОИС', 'Вид исследования', 'Дата испытания', 'Дата окончания', 'Качество исследования']]

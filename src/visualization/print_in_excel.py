@@ -265,7 +265,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
     pass
 
 
-@logger.catch
+@logger.catch(level='DEBUG')
 def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
@@ -302,9 +302,10 @@ def get_report(dict_result):
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
                            colour='white', ncols=80):
         df = value[0]
-        df = df[df['fond'] != 'ПРОЕКТ']
-        if df.empty:
+        if df.empty or df[df['fond'] != 'ПРОЕКТ'].empty:
             continue
+        df = df[df['fond'] != 'ПРОЕКТ']
+
         dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]

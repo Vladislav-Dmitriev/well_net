@@ -8,7 +8,7 @@ from loguru import logger
 
 from src.calculation.auxiliary_functions import upload_parameters, get_path, delete_logfiles
 from src.calculation.calculation_wells import calculation
-from src.calculation.geometry import check_intersection_area, load_contour
+from src.calculation.geometry import check_intersection_area, get_contours_content
 from src.preparing.dictionaries import dict_constant
 from src.preparing.preparing_data import upload_input_data, preparing_reservoir_properties
 from src.visualization.mapping import mesh_visualization, visualization
@@ -48,38 +48,33 @@ if __name__ == '__main__':
     logger.info("check the content of contours")
 
     # get path and names of contour files with coordinates
-    contours_path = application_path + "\\input"
-    contours_content = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
+    contours_path = application_path + "\\input\\"
+    dict_contours = get_contours_content(contours_path)
 
     well_out_contour = set(df_input.wellName.values)
     dict_result = {}
     list_wells_in_contour = []
 
-    if contours_content:
+    if dict_contours.keys():
         # calculation well inside contour
-        logger.info(f"contours: {len(contours_content)}")
-        for contour in contours_content:
-            # parse file name
-            contour_name = contour.replace(".txt", "")
-            contour_path = contours_path + f"\\{contour}"
-            # load contour coordinates to polygon
-            polygon = load_contour(contour_path)
+        logger.info(f"contours: {len(dict_contours)}")
+        for contour in dict_contours.keys():
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(check_intersection_area(polygon, df_points,
+            wells_in_contour = set(check_intersection_area(dict_contours[contour], df_points,
                                                            dict_parameters['percent'], calc_option=True))
             list_wells_in_contour += [wells_in_contour]
             df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
             if df_in_contour.empty:
                 continue
 
-            dict_result.update(calculation(polygon, df_in_contour, contour_name, path_property,
+            dict_result.update(calculation(dict_contours[contour], df_in_contour, contour, path_property,
                                            list_exception, dict_parameters))
             well_out_contour = well_out_contour.difference(wells_in_contour)
 
     else:
         logger.info("No contours!")
 
-    polygon = None
+    polygon = None  # no contours
     df_out_contour = df_input[df_input.wellName.isin(well_out_contour)]
 
     if not df_out_contour.empty:

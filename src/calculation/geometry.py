@@ -1,3 +1,4 @@
+import os
 import geopandas as gpd
 import numpy as np
 from loguru import logger
@@ -187,17 +188,30 @@ def add_shapely_types(df_input, mean_rad, coeff):
 
 
 @logger.catch(level='DEBUG')
-def load_contour(contour_path):
+def get_contours_content(contours_path):
     """
-    Загрузка файла с координатами контура и построение многоугольника
-    :param contour_path: Путь к файлу с координатами контура
-    :return: Возвращается многоугольник GeoPandas на основе координат из файла
+    Получение многоугольников контуров, заданных пользователем
+    :param contours_path: абсолютный путь к .txt файлу с координатами контуров
+    :return: словарь с многоугольниками, построенными из координат контруров, ключами словаря будут названия файлов
     """
-    columns_name = ['coordinateX', 'coordinateY']
-    df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
-    df_contour = df_contour[df_contour['coordinateX'] != '/']
-    gdf_contour = gpd.GeoDataFrame(df_contour)
-    list_of_coord = [[x, y] for x, y in zip(gdf_contour.coordinateX, gdf_contour.coordinateY)]
-    polygon = Polygon(list_of_coord)
+    list_of_files = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
+    dict_contours = {}
 
-    return polygon
+    for current_file in list_of_files:
+        lines = open(f'{contours_path}{current_file}', 'r').readlines()[1::] + ['/']
+        list_of_coord = []
+        num_of_contour = 0
+        for line in lines:
+            try:
+                float(line.replace(f'\n', '').split(' ')[0])
+                list_of_coord = list_of_coord + [line.replace(f'\n', '').split(' ')]
+            except ValueError:
+                if list_of_coord[0] != list_of_coord[-1]:
+                    list_of_coord = []
+                    continue
+                list_of_coord = [[float(x) for x in row] for row in list_of_coord]
+                num_of_contour += 1
+                dict_contours[f'{current_file.replace('.txt', '')} контур №{num_of_contour}'] = Polygon(list_of_coord)
+                list_of_coord = []
+
+    return dict_contours

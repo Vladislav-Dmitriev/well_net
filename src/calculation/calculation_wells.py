@@ -31,10 +31,12 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
         logger.info(f'Current horizon: {horizon}')
-        # для каждого объекта определяется свой df_horizon_input
+        # для каждого объекта определяется свой df_horizon
         df_horizon = df_in_contour[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                      df_in_contour.workHorizon))]
+        if df_horizon[df_horizon['fond'] != 'ПРОЕКТ'].empty:
+            continue
         df_proj_wells = df_horizon[df_horizon['fond'] == 'ПРОЕКТ']
 
         # расчет среднего и минимального радиуса первого окружения по объекту
@@ -44,7 +46,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                                            dict_parameters['angle_horizontalT1'],
                                            dict_parameters['angle_horizontalT3'],
                                            dict_parameters['max_distance'])
-        logger.info(f'Research radius for horizon {horizon} calculated')
+        logger.info(f'Research radius for horizon {horizon} calculated: {mean_rad}')
 
         for key, coeff in zip(dict_result, dict_parameters['mult_coef']):
             # площадь многоугольника построенного по крайним скважинам, попавшим на расчет
