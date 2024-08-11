@@ -77,15 +77,15 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
 
-        if value[0].empty:
-            continue
-        else:
-            new_wb.sheets.add(f"{name}")
+        logger.info(f'Create new sheet in Excel with name: {name}')
+        new_wb.sheets.add(f"{name}")
 
         sht = new_wb.sheets(f"{name}")
 
         df = value[0]
         polygon = value[1]
+
+        logger.info('Check contour availability')
         # если контур не задан, то берутся все скважины из df_input кроме скважин в df_result
         if polygon is None:
             df_in_contour = df_input.copy()
@@ -122,16 +122,18 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
 
         df = pd.concat([df, df_research, df_not_wellnet], ignore_index=True, sort=False)
         df.columns = dict_rename.values()
+        logger.info('Writing result data to excel sheet')
         sht.range('A1').options().value = pd.DataFrame(df)
 
+    logger.info('Getting report table')
     df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
         xw.Sheet["report"].delete()
     new_wb.sheets.add("report")
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
-
-    new_wb.save(f"{get_path()}\\output\\out_file_mesh.xlsx")
+    logger.info('Saving results in excel file')
+    new_wb.save(f"{get_path()}//output//out_file_mesh.xlsx")
     # End print
     app1.kill()
     pass
@@ -209,14 +211,13 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
 
-        if value[0].empty:
-            continue
-        else:
-            new_wb.sheets.add(f"{name}")
+        logger.info(f'Create new sheet in Excel with name: {name}')
+        new_wb.sheets.add(f"{name}")
 
         sht = new_wb.sheets(f"{name}")
         df = value[0].copy()
         polygon = value[1]
+        logger.info('Check contour availability')
         if polygon is None:
             df_in_contour = df_main.copy()
         else:
@@ -252,20 +253,23 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
             lambda x: 'Вне опорной сети' if (x.wellNet != x.wellNet) or (x.wellName in list_proj) else x.wellNet,
             axis=1)
         df.columns = dict_rename_columns.values()
+        logger.info('Writing result data to excel sheet')
         sht.range('A1').options().value = df
+    logger.info('Getting report table')
     df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
         xw.Sheet["report"].delete()
     new_wb.sheets.add("report")
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
+    logger.info('Saving results in excel file')
     new_wb.save(f"{get_path()}//output//out_file_geometry.xlsx")
     # End print
     app1.kill()
     pass
 
 
-@logger.catch
+@logger.catch(level='DEBUG')
 def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
@@ -303,8 +307,7 @@ def get_report(dict_result):
                            colour='white', ncols=80):
         df = value[0]
         df = df[df['fond'] != 'ПРОЕКТ']
-        if df.empty:
-            continue
+
         dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
         dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]

@@ -166,6 +166,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     df_result['current_horizon'] = horizon
     # время исследования в сут через min расстояние
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist'] * df_result['time_coef'])
+    df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'research_time'] = 0
 
     # отбрасывание скважин по времени исследования, если оно больше максимального
     if ((dict_parameters['limit_research_time']) and (not dict_parameters['min_research_time'] is None)
