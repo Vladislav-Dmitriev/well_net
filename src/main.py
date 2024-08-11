@@ -7,7 +7,7 @@ from loguru import logger
 
 from src.calculation.auxiliary_functions import upload_parameters, get_path, delete_logfiles
 from src.calculation.calculation_wells import calculation
-from src.calculation.geometry import check_intersection_area, get_contours_content, get_contours
+from src.calculation.geometry import check_intersection_area, get_contours
 from src.preparing.dictionaries import dict_constant
 from src.preparing.preparing_data import upload_input_data, preparing_reservoir_properties
 from src.visualization.mapping import mesh_visualization, visualization
