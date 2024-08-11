@@ -35,6 +35,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
         df_horizon = df_in_contour[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                      df_in_contour.workHorizon))]
+        # условие на пропуск итерации, если все скважины текущего объекта в контуре - проектные
         if df_horizon[df_horizon['fond'] != 'ПРОЕКТ'].empty:
             continue
         df_proj_wells = df_horizon[df_horizon['fond'] == 'ПРОЕКТ']
@@ -346,6 +347,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
             pass
     else:
         logger.info('Incorrect value of separation_by_years parameter or limit_radius_coeff')
+
+    df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'research_time'] = 0
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:

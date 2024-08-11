@@ -37,18 +37,17 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
     """
     # удаление старых графиков
     application_path = get_path()
-    clean_pictures_folder(f'{application_path}/output/optimize_mesh/')
+    clean_pictures_folder(f'{application_path}\\output\\optimize_mesh\\')
 
     logger.info('Begin plotting for 1 scenario')
     for key, value in dict_result.items():
-        mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
-        contour_name = list(key.replace(' = ', ', ').split(', '))[0]
+        mult_coef = float(list(key.replace('=', ', ').split(', '))[-1])
+        contour_name = list(key.replace(' = ', ', ').split(' k'))[0]
         logger.info(f'Plot for {contour_name} with k = {mult_coef}')
 
         polygon = value[1]
         df_result = value[0]
-        if df_result.empty:
-            continue
+
         list_objects = df_result.current_horizon.explode().unique()
         # list_objects = ['НП2-3']
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='white'):
@@ -64,13 +63,13 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
             df_nonresearch_proj = hor_prod_wells[(hor_prod_wells['fond'] == 'ПРОЕКТ') & (
                 ~hor_prod_wells['wellName'].isin(list(df_research_project['wellName'].explode().unique())))]
 
-            try:
+            if polygon is not None:
                 contour_prod_wells = hor_prod_wells[hor_prod_wells.wellName.isin(
                     set(check_intersection_area(polygon, hor_prod_wells, percent, calc_option=True)))]
                 df_nonresearch_proj = contour_prod_wells[(contour_prod_wells['fond'] == 'ПРОЕКТ') & (
                     ~contour_prod_wells['wellName'].isin(list(df_research_project['wellName'].explode().unique())))]
 
-            except TypeError:
+            else:
                 # из всего загруженного добывающего фонда отбираются скважины из столбца пересечений df_result, а также
                 # идет отбор по текущему объекту расчета
                 contour_prod_wells = hor_prod_wells[
@@ -136,7 +135,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                     plt.savefig(
-                        f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}\\output/optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -146,7 +145,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                     plt.savefig(
-                        f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -309,7 +308,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                              proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                 plt.savefig(
-                    f'{application_path}/output/optimize_mesh/{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -331,15 +330,13 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
     logger.info("Clean pictures folder")
     application_path = get_path()
     # clean folder with previous calculation result pictures
-    clean_pictures_folder(f'{application_path}/output/regular_mesh/')
+    clean_pictures_folder(f'{application_path}\\output\\regular_mesh\\')
     logger.info('Begin plotting for 2 scenario')
     for key, value in tqdm(dict_mesh.items(), "Iterate by keys", position=0, leave=True, colour='white'):
         mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
         contour_name = list(key.replace(' = ', ', ').split(', '))[0]
         df_result = value[0]
         polygon = value[1]
-        if df_result.empty:
-            continue
         list_objects = df_result[
             df_result['fond'] != 'ПРОЕКТ'].current_horizon.explode().unique()  # all objects of oilfield
         for obj in tqdm(list_objects, "Meshing for objects", position=0, leave=True, colour='white'):
@@ -520,7 +517,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, piez_exception_point, proj_point,
                              proj_point_nonresearch, exception_wells])
                 plt.savefig(
-                    f'{application_path}/output/regular_mesh/{str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
+                    f'{application_path}\\output\\regular_mesh\\{str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, out_contour, (k = {mult_coef})')
@@ -530,7 +527,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, piez_exception_point, proj_point,
                              proj_point_nonresearch, exception_wells])
                 plt.savefig(
-                    f'{application_path}/output/regular_mesh/{str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\regular_mesh\\{str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, {contour_name}, (k = {mult_coef})')

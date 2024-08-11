@@ -64,7 +64,7 @@ if __name__ == '__main__':
                                                            dict_parameters['percent'], calc_option=True))
             list_wells_in_contour += [wells_in_contour]
             df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
-            if df_in_contour.empty:
+            if df_in_contour[df_in_contour['fond'] != 'ПРОЕКТ'].empty:
                 continue
 
             dict_result.update(calculation(dict_contours[contour], df_in_contour, contour, path_property,

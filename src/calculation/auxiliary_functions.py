@@ -176,7 +176,7 @@ def dict_keys(list_r, contour_name):
     :param contour_name: имя контура
     :return: словарь с ключами из коэффициентов и имени текущего контура
     """
-    list_keys = [f'{contour_name}, k = {x}' for x in list_r]
+    list_keys = [f'{contour_name} k={x}' for x in list_r]
     dict_result = dict.fromkeys(list_keys, [pd.DataFrame(), None])
     return dict_result
 
