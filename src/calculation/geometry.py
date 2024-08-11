@@ -188,7 +188,7 @@ def add_shapely_types(df_input, mean_rad, coeff):
 
 
 @logger.catch(level='DEBUG')
-def get_contours_content(contours_path):
+def get_contours(contours_path):
     """
     Получение многоугольников контуров, заданных пользователем
     :param contours_path: абсолютный путь к .txt файлу с координатами контуров
@@ -198,20 +198,10 @@ def get_contours_content(contours_path):
     dict_contours = {}
 
     for current_file in list_of_files:
-        lines = open(f'{contours_path}{current_file}', 'r').readlines()[1::] + ['/']
-        list_of_coord = []
-        num_of_contour = 0
-        for line in lines:
-            try:
-                float(line.replace(f'\n', '').split(' ')[0])
-                list_of_coord = list_of_coord + [line.replace(f'\n', '').split(' ')]
-            except ValueError:
-                if list_of_coord[0] != list_of_coord[-1]:
-                    list_of_coord = []
-                    continue
-                list_of_coord = [[float(x) for x in row] for row in list_of_coord]
-                num_of_contour += 1
-                dict_contours[f'{current_file.replace('.txt', '')} контур №{num_of_contour}'] = Polygon(list_of_coord)
-                list_of_coord = []
+        with open(f'{contours_path}{current_file}', 'r') as file:
+            data = list(filter(None, file.read().split('/')))
+            for i in range(len(data)):
+                contour = [[float(y) for y in x.split(' ')] for x in list(filter(None, data[i].split('\n')))]
+                dict_contours[f'{current_file.replace('.txt', '')} контур №{i+1}'] = Polygon(contour)
 
     return dict_contours
