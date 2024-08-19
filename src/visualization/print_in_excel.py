@@ -9,7 +9,7 @@ from src.calculation.auxiliary_functions import get_path
 
 
 @logger.catch(level='DEBUG')
-def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
+def write_regular_mesh(df_input, dict_result, percent, calc_option):
     """
     Запись результатов расчета регулярной сетки в Excel
     :param dict_constant: словарь со статусами скважин
@@ -143,7 +143,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
 
 
 # @logger.catch(level='DEBUG')
-def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
+def write_optim_mesh(df_input, dict_result, percent, calc_option):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе

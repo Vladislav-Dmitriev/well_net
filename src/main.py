@@ -88,15 +88,13 @@ if __name__ == '__main__':
         df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
         visualization(df_input_prod, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start writing result to Excel file
-        write_optim_mesh(df_input, dict_result, dict_parameters['percent'],
-                         dict_parameters['calc_option'], **dict_constant)
+        write_optim_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
     else:
         # Map drawing for regular mesh scenario
         mesh_visualization(df_input, dict_result, list_exception,
                            dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start writing result to Excel file
-        write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'],
-                           **dict_constant)
+        write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
 
     logger.info("End of calculation")
 
