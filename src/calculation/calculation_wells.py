@@ -348,7 +348,8 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
     else:
         logger.info('Incorrect value of separation_by_years parameter or limit_radius_coeff')
 
-    df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'research_time'] = 0
+    # зануление времени исследования пьезометров
+    # df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'research_time'] = 0
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:

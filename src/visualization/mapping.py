@@ -333,8 +333,8 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
     clean_pictures_folder(f'{application_path}\\output\\regular_mesh\\')
     logger.info('Begin plotting for 2 scenario')
     for key, value in tqdm(dict_mesh.items(), "Iterate by keys", position=0, leave=True, colour='white'):
-        mult_coef = float(list(key.replace(' = ', ', ').split(', '))[2])
-        contour_name = list(key.replace(' = ', ', ').split(', '))[0]
+        mult_coef = float(list(key.replace('=', ', ').split(', '))[-1])
+        contour_name = list(key.replace(' = ', ', ').split(' k'))[0]
         df_result = value[0]
         polygon = value[1]
         list_objects = df_result[
@@ -365,12 +365,12 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
             gdf_result_obj = gdf_result_obj[gdf_result_obj['fond'] != 'ПРОЕКТ']
             # выделение исследуемых скважин в контуре, если контура нет, то берутся все, кроме ОС
-            try:
+            if polygon is not None:
                 gdf_research = gdf_research[gdf_research.wellName.isin(
                     list(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
                 gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
                     ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
-            except TypeError:
+            else:
                 logger.info('Mapping out contour')
                 gdf_research = gdf_research[gdf_research['wellName'].isin(list(
                     set(gdf_result_obj[

@@ -1,3 +1,5 @@
+import json
+import sqlite3 as sql
 import geopandas as gpd
 import pandas as pd
 import xlwings as xw
@@ -9,10 +11,10 @@ from src.calculation.auxiliary_functions import get_path
 
 
 @logger.catch(level='DEBUG')
-def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
+def write_regular_mesh(df_input, dict_result, percent, calc_option, path_database):
     """
     Запись результатов расчета регулярной сетки в Excel
-    :param dict_constant: словарь со статусами скважин
+    :param path_database: путь для сохранения базы данных с результатами
     :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param percent: процент длины ГС для включения в зону охвата
     :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
@@ -66,6 +68,12 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
+    # create database for result tables
+    if path_database == '':
+        db_result = sql.connect(f'{get_path()}\\output\\wellnet_result.db')
+    else:
+        db_result = sql.connect(path_database)
+
     # create new excel file for results
     app1 = xw.App(visible=False)
     new_wb = xw.Book()
@@ -124,6 +132,8 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
         df.columns = dict_rename.values()
         logger.info('Writing result data to excel sheet')
         sht.range('A1').options().value = pd.DataFrame(df)
+        df['Дата'] = pd.to_datetime(df['Дата'])
+        df.to_sql(name=name.replace('-', '/'), con=db_result, if_exists='replace')
 
     logger.info('Getting report table')
     df_report = get_report(dict_result)
@@ -133,21 +143,24 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
     logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}//output//out_file_mesh.xlsx")
+    new_wb.save(f"{get_path()}\\output\\out_file_mesh.xlsx")
     # End print
     app1.kill()
+    df_report.to_sql(name='report', con=db_result, if_exists='replace')
+    db_result.commit()
+    db_result.close()
     pass
 
 
 @logger.catch(level='DEBUG')
-def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constant):
+def write_optim_mesh(df_input, dict_result, percent, calc_option, path_database):
     """
     Для записи результата расчетов в Excel подается словарь
     Для каждого ключа создается отдельный лист в документе
+    :param path_database: путь для сохранения базы данных с результатами
     :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
     :param percent: процент длины ГС для включения в зону охвата для сценария с опорной сеткой
-    :param dict_constant: словарь со статусами скважин
     :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
     """
@@ -199,6 +212,12 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
         'wellNet': 'Статус по опорной сети'
     }
+    # create database for result tables
+    if path_database == '':
+        db_result = sql.connect(f'{get_path()}\\output\\wellnet_result.db')
+    else:
+        db_result = sql.connect(path_database)
+
     df_main = df_input.copy()
     df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
     app1 = xw.App(visible=False)
@@ -255,6 +274,9 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
         df.columns = dict_rename_columns.values()
         logger.info('Writing result data to excel sheet')
         sht.range('A1').options().value = df
+        df['Дата'] = pd.to_datetime(df['Дата'])
+        df.to_sql(name=name, con=db_result, if_exists='replace')
+
     logger.info('Getting report table')
     df_report = get_report(dict_result)
     if "report" in new_wb.sheets:
@@ -263,9 +285,13 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
     logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}//output//out_file_geometry.xlsx")
+    new_wb.save(f"{get_path()}\\output\\out_file_geometry.xlsx")
     # End print
     app1.kill()
+    df_report.to_sql(name='report', con=db_result, if_exists='replace')
+    db_result.commit()
+    db_result.close()
+
     pass
 
 
