@@ -73,6 +73,9 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, **dict_const
     for key, value in tqdm(dict_result.items(), "Write regular mesh to excel file", position=0, leave=True,
                            colour='white', ncols=80):
         name = str(key).replace("/", " ")
+        # reduce name of Excel sheet to 31 characters if it's too long
+        if len(name) > 31:
+            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
 
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
@@ -207,6 +210,9 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, **dict_constan
     for key, value in tqdm(dict_result.items(), "Write optimal mesh to excel file", position=0, leave=True,
                            colour='white', ncols=80):
         name = str(key).replace("/", " ")
+        # reduce name of Excel sheet to 31 characters if it's too long
+        if len(name) > 31:
+            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
 
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()

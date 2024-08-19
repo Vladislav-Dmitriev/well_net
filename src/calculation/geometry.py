@@ -202,6 +202,6 @@ def get_contours(contours_path):
             data = list(filter(None, file.read().split('/')))
             for i in range(len(data)):
                 contour = [[float(y) for y in x.split(' ')] for x in list(filter(None, data[i].split('\n')))]
-                dict_contours[f'{current_file.replace('.txt', '')} контур №{i+1}'] = Polygon(contour)
+                dict_contours[f'{current_file.replace('.txt', '')} контур№{i+1}'] = Polygon(contour)
 
     return dict_contours
