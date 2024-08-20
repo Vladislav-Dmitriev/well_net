@@ -135,7 +135,7 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
                     plt.savefig(
-                        f'{application_path}\\output/optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -365,7 +365,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
             gdf_result_obj = gdf_result_obj[gdf_result_obj['fond'] != 'ПРОЕКТ']
             # выделение исследуемых скважин в контуре, если контура нет, то берутся все, кроме ОС
-            if polygon is None:
+            if polygon is not None:
                 gdf_research = gdf_research[gdf_research.wellName.isin(
                     list(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
                 gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
