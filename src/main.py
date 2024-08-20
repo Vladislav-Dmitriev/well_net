@@ -23,8 +23,8 @@ def module_gdis(dict_parameters, path_database):
     # delete previous logfiles
     delete_logfiles(f'{application_path}\\output\\')
     # add logs to file
-    logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG', format="{time} {level} {message}",
-               rotation='100KB')
+    logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG',
+               format="{time} {level} {message}", rotation='100KB')
     logger.info("Starting calculation")
 
     # Upload data, initial data preparation_____________________________________________________________________________
@@ -32,7 +32,7 @@ def module_gdis(dict_parameters, path_database):
 
     # path to file with properties for current object
     logger.info("Checking for properties")
-    path_property = f'{application_path}\\input\\properties_reservoir.json'
+    path_property = f'{application_path}\\input\\reservoir_properties.json'
     logger.info(f"path: {path_property}")
 
     # Upload and print reservoir_properties.yml
