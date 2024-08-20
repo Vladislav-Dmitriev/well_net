@@ -134,8 +134,12 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     plt.legend(
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
+                    try:
+                        os.mkdir(f'{application_path}\\output\\regular_mesh\\out_contour')
+                    except OSError:
+                        pass
                     plt.savefig(
-                        f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}\\output\\optimize_mesh\\out_contour\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -144,8 +148,12 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     plt.legend(
                         handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                                  proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
+                    try:
+                        os.mkdir(f'{application_path}\\output\\regular_mesh\\{contour_name}')
+                    except OSError:
+                        pass
                     plt.savefig(
-                        f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                        f'{application_path}\\output\\optimize_mesh\\{contour_name}\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                         dpi=200)
                     plt.title(
                         f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -297,8 +305,12 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                 plt.legend(
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                              proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
+                try:
+                    os.mkdir(f'{application_path}\\output\\regular_mesh\\out_contour')
+                except OSError:
+                    pass
                 plt.savefig(
-                    f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\optimize_mesh\\out contour\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -307,8 +319,12 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                 plt.legend(
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, prod_point_exception, proj_point,
                              proj_point_nonresearch, line_1_year, line_2_year, line_3_year])
+                try:
+                    os.mkdir(f'{application_path}\\output\\regular_mesh\\{contour_name}')
+                except OSError:
+                    pass
                 plt.savefig(
-                    f'{application_path}\\output\\optimize_mesh\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\optimize_mesh\\{contour_name}\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
@@ -516,8 +532,12 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 plt.legend(
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, piez_exception_point, proj_point,
                              proj_point_nonresearch, exception_wells])
+                try:
+                    os.mkdir(f'{application_path}\\output\\regular_mesh\\out_contour')
+                except OSError:
+                    pass
                 plt.savefig(
-                    f'{application_path}\\output\\regular_mesh\\{str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
+                    f'{application_path}\\output\\regular_mesh\\out_contour\\{str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, out_contour, (k = {mult_coef})')
@@ -526,8 +546,12 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 plt.legend(
                     handles=[piez, inj, prod, necessarily, piez_point, prod_point, piez_exception_point, proj_point,
                              proj_point_nonresearch, exception_wells])
+                try:
+                    os.mkdir(f'{application_path}\\output\\regular_mesh\\{contour_name}')
+                except OSError:
+                    pass
                 plt.savefig(
-                    f'{application_path}\\output\\regular_mesh\\{str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
+                    f'{application_path}\\output\\regular_mesh\\{contour_name}\\{str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, {contour_name}, (k = {mult_coef})')
