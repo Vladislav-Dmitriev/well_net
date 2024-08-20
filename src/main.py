@@ -85,18 +85,16 @@ def module_gdis(dict_parameters, path_database):
         df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
         visualization(df_input_prod, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start writing result to Excel file
-        write_optim_mesh(df_input, dict_result, dict_parameters['percent'],
+        path_database = write_optim_mesh(df_input, dict_result, dict_parameters['percent'],
                          dict_parameters['calc_option'], path_database)
     else:
         # Map drawing for regular mesh scenario
         mesh_visualization(df_input, dict_result, list_exception,
                            dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start writing result to Excel file
-        write_regular_mesh(df_input, dict_result, dict_parameters['percent'],
+        path_database = write_regular_mesh(df_input, dict_result, dict_parameters['percent'],
                            dict_parameters['calc_option'], path_database)
 
     logger.info("End of calculation")
 
-    time.sleep(10)
-
-    pass
+    return path_database

@@ -47,6 +47,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.treeWidget.expandAll()
+        self.database_path = f'{get_path()}\\input\\wellnet_input.db'
         self.ta = TypeAdapter(ValidatorData)
         self.add_combobox()
         self.dict_param = self.get_dict_qtreewidget()
@@ -84,13 +85,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         connection.close()
 
-    def default_table_names(self):
+    def table_names(self):
         """
         Считывание из БД по умолчанию таблиц результатов расчета для добавления в ComboBox
         :return: список с именами таблиц результатов из БД по умолчанию
         """
-        path = f'{get_path()}\\input\\wellnet_input.db'
-        connection = sql.connect(path)
+        connection = sql.connect(self.database_path)
         cursor = connection.cursor()
         list_of_names = [x[0] for x in
                          cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
@@ -104,8 +104,7 @@ class MainWindow(QtWidgets.QMainWindow):
         :param value:
         :return:
         """
-        path = f'{get_path()}\\input\\wellnet_input.db'
-        connection = sql.connect(path)
+        connection = sql.connect(self.database_path)
         df = pd.read_sql_query(f'SELECT * FROM "{value}"', connection)
         df = df.drop(columns=['index'])
         df = df.fillna(0)
@@ -122,11 +121,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.reference.triggered.connect(lambda: os.startfile(f'{get_path()}//Методичка ОС.docx'))
         self.ui.exit.triggered.connect(QtCore.QCoreApplication.instance().quit)
         self.ui.open_project.triggered.connect(lambda:
-                                               QtWidgets.QFileDialog.getExistingDirectory(self,
+                                               QtWidgets.QFileDialog.getOpenFileName(self,
                                                                                           "Выберите файл с"
                                                                                           " результатами предыдущих"
                                                                                           " расчетов",
-                                                                                          f'{get_path()}\\output'))
+                                                                                          f'{get_path()}\\output',
+                                                                                     filter='Database (*.db)'))
 
     def validate(self, dict_params, dict_previous):
         """
@@ -150,7 +150,6 @@ class MainWindow(QtWidgets.QMainWindow):
             wrong_param_index = list_rename.index(dict_errors['loc'][0])
             wrong_param = list_visible_names[wrong_param_index]
             error_message = dict_errors['msg'].split(',')[-1]
-            # print(f'Incorrect input parameter: {wrong_param}. {error_message}')
             self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message.strip().capitalize()}')
             current_item = self.ui.treeWidget.findItems(wrong_param, QtCore.Qt.MatchFlag.MatchContains |
                                                         QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
@@ -179,7 +178,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # choosing directory to save database
         self.ui.choose_directory.clicked.connect(lambda:
                                                  self.ui.path_result_db.
-                                                 setText(QtWidgets.QFileDialog.getSaveFileName(self, "Директория сохранения результатов расчета", f'{get_path()}\\output\\wellnet_result.db')[0]))
+                                                 setText(QtWidgets.QFileDialog.getSaveFileName(
+                                                     self, "Директория сохранения результатов расчета",
+                                                     f'{get_path()}\\output\\wellnet_result.db',
+                                                     filter='Database (*.db)')[0]))
+
 
     def table_to_excel(self, path_to_save, list_names):
         """
@@ -252,8 +255,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.treeWidget.itemChanged.connect(self.update_dict)
 
     def combobox_scen_switch(self):
+        """
+        Удаление предыдущих item из combobox переключения сценариев расчета
+        :return:
+        """
+        # удаление текущих item из combobox
+        for i in range(self.ui.combobox_scenario.count()):
+            self.ui.combobox_scenario.removeItem(i)
 
-        list_scen = self.default_table_names()
+        list_scen = self.table_names()
         for scen in list_scen:
             self.ui.combobox_scenario.addItem(scen)
         path = f'{get_path()}\\input\\wellnet_input.db'

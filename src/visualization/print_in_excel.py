@@ -152,7 +152,8 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, path_databas
     df_report.to_sql(name='report', con=db_result, if_exists='replace')
     db_result.commit()
     db_result.close()
-    pass
+
+    return path_database
 
 
 @logger.catch(level='DEBUG')
@@ -298,7 +299,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option, path_database)
     db_result.commit()
     db_result.close()
 
-    pass
+    return path_database
 
 
 @logger.catch(level='DEBUG')
@@ -383,6 +384,10 @@ def get_report(dict_result):
                                              [100 * df.default_count.sum() / df.obj_count.sum()])
 
     df_report = pd.DataFrame.from_dict(dict_report, orient='columns')
+    # округление числовых столбцов DataFrame до 2 знаков после запятой
+    list_rounding_col = ['mean_rad', 'mean_time', 'oil_loss0', 'oil_loss1', 'oil_loss2', 'injection_loss0',
+                         'injection_loss1', 'injection_loss2', 'gas_loss0', 'gas_loss1', 'gas_loss2']
+    df_report[list_rounding_col] = df_report[list_rounding_col].round(2)
     df_report.rename(columns=dict_names_report, inplace=True)
 
     return df_report
