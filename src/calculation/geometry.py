@@ -3,7 +3,13 @@ import geopandas as gpd
 import numpy as np
 from loguru import logger
 import pandas as pd
-from shapely.geometry import LineString, Point, Polygon
+import geopandas as gpd
+from shapely.geometry import LineString, Point, Polygon, MultiPolygon
+from shapely.prepared import prep
+from shapely.ops import cascaded_union
+from shapely.ops import unary_union
+from shapely.plotting import plot_polygon
+import matplotlib.pyplot as plt
 
 
 @logger.catch(level='DEBUG')
@@ -27,7 +33,7 @@ def get_polygon_well(R_well, type_well, *coordinates):
         raise NameError(f'Wrong well type: {type_well}. Allowed values: vertical or horizontal')
 
 
-@logger.catch(level='DEBUG')
+@logger.catch(level='ERROR')
 def check_intersection_area(area, df_points, percent, calc_option):
     """
     Проверка входят ли скважины из df_point в зону другой скважины area
@@ -42,8 +48,9 @@ def check_intersection_area(area, df_points, percent, calc_option):
         если скважина попадает в нее на определенное кол-во процентов'''
         df_points = gpd.GeoDataFrame(df_points, geometry="GEOMETRY")
         df_points = df_points[(df_points["GEOMETRY"].intersects(area))]
-        df_points['part_in'] = list(map(lambda x: area.intersection(x).length / x.length if x.length != 0 else 1,
-                                        df_points["GEOMETRY"]))
+        df_points['part_in'] = list(map(lambda x:
+                                        area.intersection(x.buffer(0)).length / x.length
+                                        if x.length != 0 else 1, df_points["GEOMETRY"]))
         df_points = df_points[df_points['part_in'] >= percent / 100]
         df_points.drop(columns=['part_in'], axis=1, inplace=True)
         return df_points.wellName.values
@@ -187,7 +194,7 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
-@logger.catch(level='DEBUG')
+# @logger.catch(level='DEBUG')
 def get_contours(contours_path):
     """
     Получение многоугольников контуров, заданных пользователем
@@ -200,8 +207,31 @@ def get_contours(contours_path):
     for current_file in list_of_files:
         with open(f'{contours_path}{current_file}', 'r') as file:
             data = list(filter(None, file.read().split('/')))
+            list_polygons = []
             for i in range(len(data)):
                 contour = [[float(y) for y in x.split(' ')] for x in list(filter(None, data[i].split('\n')))]
-                dict_contours[f'{current_file.replace('.txt', '')} контур№{i+1}'] = Polygon(contour)
+                list_polygons += [Polygon(contour)]
+            exteriors = []
+            holes = []
+            for poly in list_polygons:
+                hole_status = False
+                for other in list_polygons:
+                    if other == poly:
+                        continue
+                    if other.contains(poly):
+                        hole_status = True
+                        break
+                if hole_status:
+                    holes.append(poly)
+                else:
+                    exteriors.append(poly)
+
+            multi_polygons = []
+            for exterior in exteriors:
+                interior_holes = [hole for hole in holes if exterior.contains(hole)]
+                multi_polygons.append(
+                    Polygon(exterior.exterior.coords, [hole.exterior.coords for hole in interior_holes]))
+
+            dict_contours[f'{current_file.replace('.txt', '')}'] = MultiPolygon(multi_polygons)
 
     return dict_contours

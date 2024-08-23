@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import geopandas as gpd
 import matplotlib.patches as mpatches
@@ -20,24 +21,30 @@ def clean_pictures_folder(path):
     :return: не возвращает объектов, удаляет содержимое папки
     """
     logger.info("Clean pictures folder")
-    for f in os.listdir(path):
-        os.remove(os.path.join(path, f))
+    # Перебираем все элементы в директории
+    for item in os.listdir(path):
+        item_path = os.path.join(path, item)
+        # Если элемент является папкой, удаляем его
+        if os.path.isdir(item_path):
+            shutil.rmtree(item_path)
     pass
 
 
 @logger.catch(level='DEBUG')
-def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
+def visualization(df_input, dict_result, percent, mean_oilrate_option):
     """
     Визуализация полученных результатов сценария с оптимальным охватом исследованиями добывающего фонда
     :param mean_oilrate_option: опция учета процента среднего дебита нефти по объекту
     :param percent: процент длины траектории скважины, при котором она попадает в контур
-    :param df_input_prod: DataFrame продуктивных скважин из исходного файла
+    :param df_input: DataFrame скважин из исходного файла
     :param dict_result: словарь с результатами расчета
     :return: Сохраняет график, построенный по итерируемому объекту, в указанную директорию
     """
     # удаление старых графиков
     application_path = get_path()
-    clean_pictures_folder(f'{application_path}\\output\\optimize_mesh\\')
+    clean_pictures_folder(f'{application_path}\\output\\optimize_mesh')
+    # getting production and project wells from input dataframe
+    df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
 
     logger.info('Begin plotting for 1 scenario')
     for key, value in dict_result.items():
@@ -49,7 +56,6 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
         df_result = value[0]
 
         list_objects = df_result.current_horizon.explode().unique()
-        # list_objects = ['НП2-3']
         for horizon in tqdm(list_objects, "Mapping for objects", position=0, leave=True, colour='white'):
             hor_prod_wells = df_input_prod[
                 list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
@@ -139,10 +145,9 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     except OSError:
                         pass
                     plt.savefig(
-                        f'{application_path}\\output\\optimize_mesh\\out_contour\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
-                        dpi=200)
+                        f'{application_path}\\output\\optimize_mesh\\out_contour\\Без контуров, {horizon.replace('/', '_')}, R = {int(mean_radius)}, k = {mult_coef}.png', dpi=200)
                     plt.title(
-                        f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
+                        f'Объект: {horizon.replace('/', '_')}, без контуров, R = {int(mean_radius)}, k = {mult_coef}')
 
                 else:
                     plt.legend(
@@ -153,10 +158,9 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     except OSError:
                         pass
                     plt.savefig(
-                        f'{application_path}\\output\\optimize_mesh\\{contour_name}\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
-                        dpi=200)
-                    plt.title(
-                        f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
+                        f'{application_path}\\output\\optimize_mesh\\{contour_name}\\Контур {contour_name}, {horizon.replace('/', '_')}, R = {int(mean_radius)}, k = {mult_coef}.png', dpi=200)
+                    plt.title(f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, R = {int(mean_radius)},'
+                              f' k = {mult_coef}')
                 continue
             else:
                 mean_radius = df_current_calc.iloc[0]['mean_radius']
@@ -309,11 +313,10 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     os.mkdir(f'{application_path}\\output\\regular_mesh\\out_contour')
                 except OSError:
                     pass
-                plt.savefig(
-                    f'{application_path}\\output\\optimize_mesh\\out contour\\{horizon.replace('/', '_')}, out contour, R = {int(mean_radius)}, k = {mult_coef}.png',
-                    dpi=200)
-                plt.title(
-                    f'Объект: {horizon.replace('/', '_')}, out contour, (R = {int(mean_radius)}, k = {mult_coef})')
+                plt.savefig(f'{application_path}\\output\\optimize_mesh\\out contour\\Без контуров,'
+                            f' {horizon.replace('/', '_')}, R = {int(mean_radius)}, k = {mult_coef}.png', dpi=200)
+                plt.title(f'Объект: {horizon.replace('/', '_')}, без контуров, (R = {int(mean_radius)},'
+                          f' k = {mult_coef})')
 
             else:
                 plt.legend(
@@ -323,11 +326,10 @@ def visualization(df_input_prod, dict_result, percent, mean_oilrate_option):
                     os.mkdir(f'{application_path}\\output\\regular_mesh\\{contour_name}')
                 except OSError:
                     pass
-                plt.savefig(
-                    f'{application_path}\\output\\optimize_mesh\\{contour_name}\\{horizon.replace('/', '_')}, {contour_name}, R = {int(mean_radius)}, k = {mult_coef}.png',
-                    dpi=200)
-                plt.title(
-                    f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, (R = {int(mean_radius)}, k = {mult_coef})')
+                plt.savefig(f'{application_path}\\output\\optimize_mesh\\{contour_name}\\Контур {contour_name}, '
+                            f'{horizon.replace('/', '_')}, R = {int(mean_radius)}, k = {mult_coef}.png', dpi=200)
+                plt.title(f'Объект: {horizon.replace('/', '_')}, контур: {contour_name}, R = {int(mean_radius)},'
+                          f' k = {mult_coef}')
 
     pass
 
@@ -346,7 +348,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
     logger.info("Clean pictures folder")
     application_path = get_path()
     # clean folder with previous calculation result pictures
-    clean_pictures_folder(f'{application_path}\\output\\regular_mesh\\')
+    clean_pictures_folder(f'{application_path}\\output\\regular_mesh')
     logger.info('Begin plotting for 2 scenario')
     for key, value in tqdm(dict_mesh.items(), "Iterate by keys", position=0, leave=True, colour='white'):
         mult_coef = float(list(key.replace('=', ', ').split(', '))[-1])
@@ -373,26 +375,30 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 (df_result['current_horizon'] == obj) & (
                     ~df_result['intersection'].map(str).str.contains('Исключена из ОС')) & (
                         df_result['num_of_research'] > 1)]
+            # GeoDataFrame обязательных для исследования скважин
             gdf_necessarily = gpd.GeoDataFrame(df_necessarily)
+            # перевод из pandas DataFrame в geopandas DataFrame таблицы скважин опорной сети
             gdf_result_obj = gpd.GeoDataFrame(df_result_obj)
-            # выделение проектных скважин в отдельный GeoDataFrame и удаление их из gdf_result_obj
+            # выделение проектных скважин в отдельный GeoDataFrame
             gdf_research_proj = gdf_result_obj[gdf_result_obj['fond'] == 'ПРОЕКТ']
+            # определение GeoDataFrame проектных скважин(отображаются на картинке другим маркером)
             gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
                 ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
+            # удаление проектных скважин из GeoDataFrame с опорной сетью
             gdf_result_obj = gdf_result_obj[gdf_result_obj['fond'] != 'ПРОЕКТ']
-            # выделение исследуемых скважин в контуре, если контура нет, то берутся все, кроме ОС
+            # выделение исследуемых и проектных скважин в контуре, если контура нет, то берутся все, кроме ОС
             if polygon is not None:
                 gdf_research = gdf_research[gdf_research.wellName.isin(
                     list(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
                 gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
                     ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
             else:
-                logger.info('Mapping out contour')
                 gdf_research = gdf_research[gdf_research['wellName'].isin(list(
                     set(gdf_result_obj[
                             (gdf_result_obj['current_horizon'] == obj) & (gdf_result_obj['fond'] != 'ПРОЕКТ')][
                             "intersection"].explode().unique())))]
-            # скважины, исключенные из ОС
+
+            # скважины, исключенные из ОС по текущему объекту итерации
             df_result_exception = df_result[
                 (df_result['current_horizon'] == obj) & (
                     df_result['intersection'].map(str).str.contains('Исключена из ОС'))]
@@ -400,16 +406,21 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
             df_result_exception = df_result_exception[df_result_exception['wellName'].isin(
                 list(check_intersection_area(cascaded_union(gdf_result_obj['AREA'].explode().unique()),
                                              df_result_exception, percent, True)))]
+            # перевод DataFrame исключенных из ОС скважин из pandas в geopandas
             gdf_result_exception = gpd.GeoDataFrame(df_result_exception)
-
+            # выбор из GeoDataFrame скважин, которые могут быть охвачены ОС тех, что вошли в зону исследования ОС
             gdf_research = gdf_research[
                 gdf_research['wellName'].isin(list(gdf_result_obj['intersection'].explode().unique()))]
             # если в результирующем DataFrame кол-во строк больше 0, то отсеиваются скважины с дебитом больше среднего
             # по объекту и больше максимального, заданного пользователем
+
+            # проверка на пустоту geodataframe проектных скважин и активна ли опция учета среднего дебита по объекту
             if (gdf_result_obj.shape[0] != 0) and mean_oilrate_option:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
             if gdf_result_obj.shape[0] != 0:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['limit_oilrate'].iloc[0]]
+
+            # выделение основных типов скважин з GeoDataFrame полученного в результате расчета
             gdf_piez = gdf_result_obj[df_result_obj['fond'] == 'ПЬЕЗ']
             gdf_inj = gdf_result_obj[df_result_obj['fond'] == 'НАГ']
             gdf_prod = gdf_result_obj[df_result_obj['fond'] == 'ДОБ']
@@ -537,7 +548,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                 except OSError:
                     pass
                 plt.savefig(
-                    f'{application_path}\\output\\regular_mesh\\out_contour\\{str(obj).replace('/', '_')}, out_contour, k = {mult_coef}.png',
+                    f'{application_path}\\output\\regular_mesh\\out_contour\\Без контуров, {str(obj).replace('/', '_')}, k = {mult_coef}.png',
                     dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, out_contour, (k = {mult_coef})')
@@ -550,9 +561,8 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
                     os.mkdir(f'{application_path}\\output\\regular_mesh\\{contour_name}')
                 except OSError:
                     pass
-                plt.savefig(
-                    f'{application_path}\\output\\regular_mesh\\{contour_name}\\{str(obj).replace('/', '_')}, {contour_name}, k = {mult_coef}.png',
-                    dpi=200)
+                plt.savefig(f'{application_path}\\output\\regular_mesh\\{contour_name}\\Контур {contour_name},'
+                            f' {str(obj).replace('/', '_')}, k = {mult_coef}.png', dpi=200)
                 plt.title(
                     f'Объект: {str(obj).replace('/', '_')}, {contour_name}, (k = {mult_coef})')
 

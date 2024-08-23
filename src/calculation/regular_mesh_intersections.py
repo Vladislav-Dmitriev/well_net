@@ -168,19 +168,21 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist'] * df_result['time_coef'])
     df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'research_time'] = 0
 
-    # отбрасывание скважин по времени исследования, если оно больше максимального
+    # применение условий на временные рамки исследования скважин
     if ((dict_parameters['limit_research_time']) and (not dict_parameters['min_research_time'] is None)
             and (not dict_parameters['max_research_time'] is None)):
-        df_result = df_result.loc[
-            ~((df_result['well type'] == 'vertical') & (
-                    df_result['research_time'] > dict_parameters['max_research_time']))]
-        df_result = df_result.loc[
-            ~((df_result['well type'] == 'horizontal') & (
-                    df_result['research_time'] > 2 * dict_parameters['max_research_time']))]
+        df_result['research_time'] = df_result.apply(
+            lambda x: dict_parameters['max_research_time'] if (
+                    x['well type'] == 'vertical' and x['research_time'] > dict_parameters['max_research_time']) else
+            x['research_time'], axis=1)
+        df_result['research_time'] = df_result.apply(
+            lambda x: 2 * dict_parameters['max_research_time'] if (
+                    x['well type'] == 'horizontal' and x['research_time'] > 2 * dict_parameters['max_research_time']) else
+            x['research_time'], axis=1)
         df_result['research_time'] = df_result.apply(
             lambda x: dict_parameters['min_research_time'] if (
-                    x['well type'] == 'vertical' and x['research_time'] < dict_parameters['min_research_time']) else x[
-                'research_time'], axis=1)
+                    x['well type'] == 'vertical' and x['research_time'] < dict_parameters['min_research_time']) else
+            x['research_time'], axis=1)
         df_result['research_time'] = df_result.apply(lambda x:
                                                      2 * dict_parameters['min_research_time'] if
                                                      (x['well type'] == 'horizontal' and x['research_time'] <

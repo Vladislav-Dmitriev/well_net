@@ -75,7 +75,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
         name = str(key).replace("/", " ")
         # reduce name of Excel sheet to 31 characters if it's too long
         if len(name) > 31:
-            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
+            name = name.split(' k=')[0][:31 - len(' k=' + name.split(' k=')[-1])] + ' k=' + name.split(' k=')[-1]
 
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
@@ -136,13 +136,13 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option):
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
     logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}//output//out_file_mesh.xlsx")
+    new_wb.save(f"{get_path()}//output//Регулярная сетка.xlsx")
     # End print
     app1.kill()
     pass
 
 
-# @logger.catch(level='DEBUG')
+@logger.catch(level='DEBUG')
 def write_optim_mesh(df_input, dict_result, percent, calc_option):
     """
     Для записи результата расчетов в Excel подается словарь
@@ -212,7 +212,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option):
         name = str(key).replace("/", " ")
         # reduce name of Excel sheet to 31 characters if it's too long
         if len(name) > 31:
-            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
+            name = name.split(' k=')[0][:31 - len(' k=' + name.split(' k=')[-1])] + ' k=' + name.split(' k=')[-1]
 
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
@@ -269,7 +269,7 @@ def write_optim_mesh(df_input, dict_result, percent, calc_option):
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
     logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}//output//out_file_geometry.xlsx")
+    new_wb.save(f"{get_path()}//output//Оптимальная сетка.xlsx")
     # End print
     app1.kill()
     pass

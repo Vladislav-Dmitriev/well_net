@@ -85,8 +85,7 @@ if __name__ == '__main__':
     # Results___________________________________________________________________________________________________________
     if dict_parameters['calculation_scenario'] == 'optimize':
         # Map drawing for optimize mesh scenario
-        df_input_prod = df_input.loc[(df_input['fond'] == 'ДОБ') | (df_input['fond'] == 'ПРОЕКТ')]
-        visualization(df_input_prod, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
+        visualization(df_input, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
         # Start writing result to Excel file
         write_optim_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
     else:
