@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from datetime import timedelta
+import win32com.client as win32
 
 import numpy as np
 import pandas as pd
@@ -429,6 +430,29 @@ def geobd_gdis_data(df_input, dict_parameters):
     logger.info('Upload GeoBD GDIS table')
     # open excel file with data and choose sheet with required name
     app1 = xw.App(visible=False)
+    app1.display_alerts = False  # отключение запросов и оповещений через всплывающие окна
+    try:
+        wb = app1.books.open(os.path.join(get_path(), "input", dict_parameters['data_file']))
+        # Получаем все именованные диапазоны
+        names = wb.names
+        existing_names = {}
+
+        for name in names:
+            original_name = name.name  # получение всех фильтров в файле
+            if original_name in existing_names:
+                # Если имя уже существует, добавляем суффикс и переименовываем
+                new_name = f"{original_name}_new"
+                name.name = new_name
+            else:
+                existing_names[original_name] = name
+
+        # Сохраняем изменения
+        wb.save()
+        wb.close()
+
+    except Exception as e:
+        logger.info(f'Rename excel filters error: {e}')
+
     gdis_wb = xw.Book(os.path.join(get_path(), "input", dict_parameters['data_file']))
     gdis_sheet = gdis_wb.sheets['ГДИС']
     # create list with names of cells in column Pпл на ВНК
@@ -463,6 +487,7 @@ def geobd_gdis_data(df_input, dict_parameters):
         gdis_sheet.clear()
         gdis_wb.save()
     # close excel file
+    gdis_wb.close()
     app1.kill()
 
     try:

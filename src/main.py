@@ -76,7 +76,7 @@ if __name__ == '__main__':
     polygon = None  # no contours
     df_out_contour = df_input[df_input.wellName.isin(well_out_contour)]
 
-    if not df_out_contour.empty:
+    if not df_out_contour[df_out_contour['fond'] != 'ПРОЕКТ'].empty:
         contour_name = 'out_contour'
         # calculation wells out contour
         dict_result.update(calculation(polygon, df_out_contour, contour_name, path_property,

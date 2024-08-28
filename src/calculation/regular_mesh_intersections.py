@@ -2,7 +2,6 @@ import math
 
 import numpy as np
 import pandas as pd
-from shapely.ops import cascaded_union
 from shapely.ops import unary_union
 from tqdm import tqdm
 from loguru import logger
@@ -80,19 +79,20 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                     df_fond.AREA, df_fond.wellName))
 
             df_fond['number'] = df_fond['intersection'].apply(lambda x: np.size(x))
-            df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=False)
+            df_fond = df_fond.sort_values(by=['number', 'oilRate'], axis=0, ascending=[False, True])
             list_optim = list(df_fond['wellName'].explode())
             while len(list_optim) != 0:
                 if (len(df_fond['intersection'].explode().unique()) == 1) and (
                         math.isnan(df_fond['intersection'].explode().unique()[0])):
-                    list_check_well = list_optim.copy()
+                    list_check_well += list_optim.copy()
                     break
                 list_check_well += [list_optim[0]]
                 list_exception = [list_optim[0]] + list(
                     df_fond[df_fond['wellName'] == list_optim[0]][
                         'intersection'].explode().unique())
                 list_optim = [x for x in list_optim if x not in list_exception]
-            # добавление обязательных скважин r результирующему DataFrame
+            list_check_well = list(set(list_check_well))
+            # добавление обязательных скважин к результирующему DataFrame
             df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
             df_current_result = pd.concat([df_necessarily_fond, df_current_result], axis=0, sort=False).reset_index(
                 drop=True)
@@ -108,7 +108,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
             list_polygons = list_polygons + list(
                 df_current_result.loc[~df_current_result['intersection'].map(str).str.contains('Исключена')][
                     'AREA'].explode())
-            current_area = cascaded_union(list_polygons)
+            current_area = unary_union(list_polygons)
 
             df_result = pd.concat([df_result, df_current_result], axis=0, sort=False).reset_index(drop=True)
             continue
@@ -116,7 +116,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         # функция проверки процента скважин в опорной сети от текущего фонда
         count_target = math.ceil(wellnet_percent / 100 * (df_fond.shape[0] + df_necessarily_fond.shape[0]))
         if (df_current_result.shape[0] > count_target) and (dict_parameters['option_percent']):
-            df_current_result = df_current_result.sort_values(by=['number'], axis=0, ascending=False)
+            df_current_result = df_current_result.sort_values(by=['number', 'oilRate'], axis=0, ascending=[False, True])
             list_out_wellnet = df_current_result[
                                -(df_current_result.shape[0] - count_target):].wellName.explode().unique()
             df_current_result.loc[
@@ -124,7 +124,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         # добавить недостающие скважины в ОС
         elif (df_current_result.shape[0] < count_target) and (dict_parameters['option_percent']):
             df_fond = df_fond[~df_fond['wellName'].isin(list(df_current_result['wellName'].explode().unique()))]
-            df_fond = df_fond.sort_values(by=['number'], axis=0, ascending=True)
+            df_fond = df_fond.sort_values(by=['number', 'oilRate'], axis=0, ascending=[True, True])
             df_fond = df_fond[:(count_target - df_current_result.shape[0])]
             df_current_result = pd.concat([df_current_result, df_fond], axis=0, sort=False).reset_index(drop=True)
 
@@ -132,8 +132,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         list_polygons = list_polygons + list(
             df_current_result.loc[~df_current_result['intersection'].map(str).str.contains('Исключена')][
                 'AREA'].explode())
-        current_area = cascaded_union(list_polygons)
-
+        current_area = unary_union(list_polygons)
         df_result = pd.concat([df_result, df_current_result], axis=0, sort=False).reset_index(drop=True)
 
     df_result[
@@ -225,7 +224,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:
-        list_proj_research = list(check_intersection_area(cascaded_union(
+        list_proj_research = list(check_intersection_area(unary_union(
             list(df_result.loc[~df_result['intersection'].map(str).str.contains('Исключена')]['AREA'].explode())),
             df_proj_wells, dict_parameters['percent'],
             dict_parameters['calc_option']))
