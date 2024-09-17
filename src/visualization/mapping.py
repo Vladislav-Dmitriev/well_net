@@ -1,6 +1,5 @@
 import os
 import shutil
-
 import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -335,14 +334,13 @@ def visualization(df_input, dict_result, percent, mean_oilrate_option):
 
 
 @logger.catch(level='DEBUG')
-def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrate_option):
+def mesh_visualization(df_input, dict_mesh, list_exception, dict_parameters):
     """
     Визуализация результатов, полученных в ходе сценария с построением ОС для каждого фонда по отдельности
     :param list_exception: список исключаемых скважин
-    :param mean_oilrate_option: опция учета процента среднего дебита нефти по объекту
     :param df_input: DataFrame с исходными данными
     :param dict_mesh: словарь с результатами расчета
-    :param percent: процент длины траектории скважины, при котором она попадает в контур
+    :param dict_parameters:
     :return: Сохраняется график, построенный по итерируемому объекту, в указанную директорию
     """
     logger.info("Clean pictures folder")
@@ -389,7 +387,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
             # выделение исследуемых и проектных скважин в контуре, если контура нет, то берутся все, кроме ОС
             if polygon is not None:
                 gdf_research = gdf_research[gdf_research.wellName.isin(
-                    list(check_intersection_area(polygon, gdf_research, percent, calc_option=True)))]
+                    list(check_intersection_area(polygon, gdf_research, dict_parameters['percent'], dict_parameters['calc_option'])))]
                 gdf_proj = gdf_research[(gdf_research['fond'] == 'ПРОЕКТ') & (
                     ~gdf_research['wellName'].isin(list(gdf_research_proj['wellName'].explode().unique())))]
             else:
@@ -405,7 +403,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
             # проверка на охват исключенных скважин скважинами ОС
             df_result_exception = df_result_exception[df_result_exception['wellName'].isin(
                 list(check_intersection_area(cascaded_union(gdf_result_obj['AREA'].explode().unique()),
-                                             df_result_exception, percent, True)))]
+                                             df_result_exception, dict_parameters['percent'], dict_parameters['calc_option'])))]
             # перевод DataFrame исключенных из ОС скважин из pandas в geopandas
             gdf_result_exception = gpd.GeoDataFrame(df_result_exception)
             # выбор из GeoDataFrame скважин, которые могут быть охвачены ОС тех, что вошли в зону исследования ОС
@@ -415,7 +413,7 @@ def mesh_visualization(df_input, dict_mesh, list_exception, percent, mean_oilrat
             # по объекту и больше максимального, заданного пользователем
 
             # проверка на пустоту geodataframe проектных скважин и активна ли опция учета среднего дебита по объекту
-            if (gdf_result_obj.shape[0] != 0) and mean_oilrate_option:
+            if (gdf_result_obj.shape[0] != 0) and dict_parameters['mean_oilrate_option']:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['mean_oilrate'].iloc[0]]
             if gdf_result_obj.shape[0] != 0:
                 gdf_research = gdf_research.loc[gdf_research['oilRate'] <= gdf_result_obj['limit_oilrate'].iloc[0]]

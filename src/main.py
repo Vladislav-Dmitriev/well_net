@@ -31,7 +31,7 @@ if __name__ == '__main__':
     dict_parameters = upload_parameters(f'{application_path}\\input\\parameters.yml')
 
     # Upload data, initial data preparation_____________________________________________________________________________
-    df_input, list_exception = upload_input_data(dict_constant, dict_parameters)
+    df_input, df_exceptions, list_exception = upload_input_data(dict_constant, dict_parameters)
 
     # path to file with properties for current object
     logger.info("Checking for properties")
@@ -60,7 +60,7 @@ if __name__ == '__main__':
         for contour in dict_contours.keys():
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
             wells_in_contour = set(check_intersection_area(dict_contours[contour], df_points,
-                                                           dict_parameters['percent'], calc_option=True))
+                                                           dict_parameters['percent'], dict_parameters['calc_option']))
             list_wells_in_contour += [wells_in_contour]
             df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
             if df_in_contour[df_in_contour['fond'] != 'ПРОЕКТ'].empty:
@@ -83,18 +83,18 @@ if __name__ == '__main__':
                                        list_exception, dict_parameters))
 
     # Results___________________________________________________________________________________________________________
+    '''
     if dict_parameters['calculation_scenario'] == 'optimize':
         # Map drawing for optimize mesh scenario
-        visualization(df_input, dict_result, dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
+        visualization(df_exceptions, dict_result, dict_parameters)
         # Start writing result to Excel file
-        write_optim_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
+        write_optim_mesh(df_exceptions, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
     else:
         # Map drawing for regular mesh scenario
-        mesh_visualization(df_input, dict_result, list_exception,
-                           dict_parameters['percent'], dict_parameters['mean_oilrate_option'])
+        # mesh_visualization(df_input, dict_result, list_exception, dict_parameters)
         # Start writing result to Excel file
         write_regular_mesh(df_input, dict_result, dict_parameters['percent'], dict_parameters['calc_option'])
-
+    '''
     logger.info("End of calculation")
 
     time.sleep(10)

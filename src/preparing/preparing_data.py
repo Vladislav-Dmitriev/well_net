@@ -12,6 +12,7 @@ from loguru import logger
 from shapely.geometry import Point, LineString
 
 from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
+from src.calculation.geometry import check_intersection_area
 from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
@@ -49,16 +50,15 @@ def upload_input_data(dict_constant, dict_parameters):
                            sheet_name='Фонд')
         df = df.dropna(subset=['№ скважины'])
         # preprocessing NGT data
-        logger.info("Preprocessing NGT data")
-        df_input = preprocessing_NGT(df, dict_parameters['min_length_horWell'])
+        df_input, df_exceptions = preprocessing_NGT(df, dict_parameters['min_length_horWell'])
         logger.info("General preparing data")
-        df_input = preparing(dict_constant, df_input, dict_parameters)
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
         df_input['num_of_research'] = 1
         # gdis data accounting
-        df_input = ngt_gdis_data(df_input, dict_parameters)
+        df_input, df_exceptions = ngt_gdis_data(df_input, df_exceptions, dict_parameters)
     # check type of database by values of first row
     elif first_row.loc[0][0] == 'NSKV':
 
@@ -68,14 +68,15 @@ def upload_input_data(dict_constant, dict_parameters):
                            skiprows=[1],
                            sheet_name='Фонд')
         df = df.dropna(subset=['NSKV'])
-        df_input = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
-        df_input = preparing(dict_constant, df_input, dict_parameters)
+        df_input, df_exceptions = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
+        logger.info("General preparing data")
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
-        df_input['num_of_research'] = 1
+        df_input['num_of_research'] = False
         # gdis data accounting
-        df_input = geobd_gdis_data(df_input, dict_parameters)
+        df_input, df_exceptions = geobd_gdis_data(df_input, df_exceptions, dict_parameters)
     # if wrong type of database
     else:
         print('Формат загруженного файла не подходит для модуля')
@@ -83,12 +84,12 @@ def upload_input_data(dict_constant, dict_parameters):
 
     # Upload necessarily research wells
     list_necessarily = get_exception_wells(dict_parameters, 'Приоритетные скважины')
-    df_input.loc[df_input['wellName'].isin(list_necessarily), 'num_of_research'] = 2
+    df_input.loc[df_input['wellName'].isin(list_necessarily), 'num_of_research'] = True
 
-    return df_input, list_exception
+    return df_input, df_exceptions, list_exception
 
 
-@logger.catch
+@logger.catch(level='DEBUG')
 def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     """
     Подготовка данных ГеоБД
@@ -103,82 +104,110 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
     # fill NaN cells
     df_input = df_input.fillna(0)
-    df_input = df_input[df_input.PLAST.notnull()]
-    df_input = df_input[df_input.KUST.notnull()]
-    df_input = df_input[df_input['KUST'] != 0]
-    df_input = df_input[df_input['SOST'] != 0]
+    # create DataFrame of exception wells, also add wellnet status to them
+    df_exceptions = df_input[(df_input['KUST'] == 0) | (df_input['SOST'] == 0) | (df_input['PLAST'] == 0)]
+    df_exceptions['wellNet'] = 'Исключена из расчета, отсутствует куст/пласт'
+    # delete from input DataFrame wells with no information about cluster, status, reservoir
+    df_input = df_input[(df_input['KUST'] != 0) & (df_input['SOST'] != 0) & (df_input['PLAST'] != 0)]
     df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']].astype(
         'str')
-
+    df_exceptions[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = (df_exceptions[['NSKV', 'PLAST',
+                                                                               'STATUS_DATE', 'PEREV']].astype('str'))
     # cleaning wellStatus
+    df_exceptions = pd.concat([df_exceptions, df_input.loc[df_input.SOST.map(str.lower).str.contains(DELETE_MARKER)]],
+                              axis=0, sort=False).reset_index(drop=True)
+    df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена из расчета по состоянию'
     df_input = df_input.loc[~df_input.SOST.map(str.lower).str.contains(DELETE_MARKER)]
     # check well status of tranfer on another oil reservoir
+    df_exceptions = pd.concat([df_exceptions,
+                               df_input[(df_input['PEREV'] != 'совмест.') & (df_input['PEREV'] != 'работает')]],
+                              axis=0, sort=False).reset_index(drop=True)
+    df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена из расчета, переведена/не работает'
     df_input = df_input[(df_input['PEREV'] == 'совмест.') | (df_input['PEREV'] == 'работает')]
+    #  reset indexes in DataFrames
     df_input = df_input.reset_index(drop=True)
     # add columns with oilfield name and coordinates T3 point
-    df_input['MEST'] = list(str(df_input.loc[0]['LINK']).split('='))[-1].upper()
-    df_input['X3'] = 0
-    df_input['Y3'] = 0
+
     # create list of required columns
     required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'PEREV', 'KUST', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
-    df_input = df_input[required_cols]
 
-    list_well_names = list(df_input['UWI'].explode().unique())  # list of unique well names
-    df_input = df_input.sort_values(by=['NSKV'], ascending=True)
-    df_input.reset_index(drop=True)
-    df_input['well type'] = ''
-    # iterate by well names
-    for well in list_well_names:
-        objs = list(
-            df_input[df_input['UWI'] == well].PLAST.explode().unique())  # list of unique work objects current well
-        if len(set(df_input[df_input['UWI'] == well].NSKV)) > 1:  # if in column of well names there are more than 1
-            # name but they have same geobd encoding then well is horizontal
-            df_input.loc[df_input['UWI'] == well, 'well type'] = 'horizontal'
-            # value of watercut is taken from the first wellbore
-            df_input.loc[df_input['UWI'] == well, 'VPROCOBV'] = \
-                list(df_input.loc[df_input['UWI'] == well, 'VPROCOBV'].explode())[0]
-            # T1 coordinates for horizontal well are taken from first wellbore, T3 from last wellbore
-            coord_x = list(df_input[df_input['UWI'] == well].X.explode().unique())
-            coord_y = list(df_input[df_input['UWI'] == well].Y.explode().unique())
-            df_input.loc[df_input['UWI'] == well, 'X'] = coord_x[0]
-            df_input.loc[df_input['UWI'] == well, 'X3'] = coord_x[-1]
-            df_input.loc[df_input['UWI'] == well, 'Y'] = coord_y[0]
-            df_input.loc[df_input['UWI'] == well, 'Y3'] = coord_y[-1]
-
-        else:
-            # in other variants wells will be determined as vertical
-            df_input.loc[df_input['UWI'] == well, 'well type'] = 'vertical'
-            # value of watercut is taken from the first wellbore
-            df_input.loc[df_input['UWI'] == well, 'VPROCOBV'] = \
-                list(df_input.loc[df_input['UWI'] == well, 'VPROCOBV'].explode())[0]
-            # T1 and T3 coordinates for vertical well are taken from first wellbore
-            coord_x = list(df_input[df_input['UWI'] == well].X.explode().unique())
-            coord_y = list(df_input[df_input['UWI'] == well].Y.explode().unique())
-            df_input.loc[df_input['UWI'] == well, 'X'] = coord_x[0]
-            df_input.loc[df_input['UWI'] == well, 'X3'] = coord_x[0]
-            df_input.loc[df_input['UWI'] == well, 'Y'] = coord_y[0]
-            df_input.loc[df_input['UWI'] == well, 'Y3'] = coord_y[0]
-        # writing wells object to columns PLAST separated by commas
-        df_input.loc[df_input['UWI'] == well, 'PLAST'] = df_input.apply(lambda x: ', '.join(objs), axis=1)
-    # leave only unique wells by geobd encoding column
-    df_input = df_input.drop_duplicates(subset=['UWI'])
-    df_input = df_input.reset_index(drop=True)
+    df_input = add_t3_coord_geobd(df_input, required_cols)
+    df_exceptions = add_t3_coord_geobd(df_exceptions, required_cols + ['wellNet'])
 
     df_input.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
+    df_exceptions.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
     correct_order = ['NSKV', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'KUST', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'DEBGAS', 'PRIEM', 'PRIEMGAS', 'VPROCOBV', 'SPOSOB', 'DEBCOND',
                      'well type']
 
     df_input = df_input[correct_order]
+    df_exceptions = df_exceptions[correct_order + ['wellNet']]
     df_input.columns = dict_geobd_columns.values()
+    df_exceptions.columns = {**dict_geobd_columns, **{'wellNet': 'wellNet'}}.values()
     # нужно перевести столбец приемистости по газу 'injectivity_day' в м3/сут как в NGT, а в ГеоБД этот столбец в тыс. м3/сут
     df_input['injectivity_day'] = df_input['injectivity_day'] * 1000
 
-    return df_input
+    return df_input, df_exceptions
 
 
-@logger.catch
+@logger.catch(level='DEBUG')
+def add_t3_coord_geobd(df, list_columns):
+    """
+    Подготовка DataFrame к расчету, удаление дубликатов с "_Т3" и добавление координат Т3 первого ствола для ГС
+    :param df: DataFrame для подготовки к расчету, удаление дубликатов в столбце имен и добавление столбцов с T3
+    :param list_columns: список столбцов, которые необходимо оставить для дальнейшего расчета
+    :return:
+    """
+    df['MEST'] = list(str(df.loc[0]['LINK']).split('='))[-1].upper()
+    df['X3'] = 0
+    df['Y3'] = 0
+    df = df[list_columns]
+    list_well_names = list(df['UWI'].explode().unique())  # list of unique well names
+    df = df.sort_values(by=['NSKV'], ascending=True)
+    df.reset_index(drop=True)
+    df['well type'] = ''
+    # iterate by well names
+    for well in list_well_names:
+        objs = list(
+            df[df['UWI'] == well].PLAST.explode().unique())  # list of unique work objects current well
+        if len(set(df[df['UWI'] == well].NSKV)) > 1:  # if in column of well names there are more than 1
+            # name but they have same geobd encoding then well is horizontal
+            df.loc[df['UWI'] == well, 'well type'] = 'horizontal'
+            # value of watercut is taken from the first wellbore
+            df.loc[df['UWI'] == well, 'VPROCOBV'] = \
+                list(df.loc[df['UWI'] == well, 'VPROCOBV'].explode())[0]
+            # T1 coordinates for horizontal well are taken from first wellbore, T3 from last wellbore
+            coord_x = list(df[df['UWI'] == well].X.explode().unique())
+            coord_y = list(df[df['UWI'] == well].Y.explode().unique())
+            df.loc[df['UWI'] == well, 'X'] = coord_x[0]
+            df.loc[df['UWI'] == well, 'X3'] = coord_x[-1]
+            df.loc[df['UWI'] == well, 'Y'] = coord_y[0]
+            df.loc[df['UWI'] == well, 'Y3'] = coord_y[-1]
+
+        else:
+            # in other variants wells will be determined as vertical
+            df.loc[df['UWI'] == well, 'well type'] = 'vertical'
+            # value of watercut is taken from the first wellbore
+            df.loc[df['UWI'] == well, 'VPROCOBV'] = \
+                list(df.loc[df['UWI'] == well, 'VPROCOBV'].explode())[0]
+            # T1 and T3 coordinates for vertical well are taken from first wellbore
+            coord_x = list(df[df['UWI'] == well].X.explode().unique())
+            coord_y = list(df[df['UWI'] == well].Y.explode().unique())
+            df.loc[df['UWI'] == well, 'X'] = coord_x[0]
+            df.loc[df['UWI'] == well, 'X3'] = coord_x[0]
+            df.loc[df['UWI'] == well, 'Y'] = coord_y[0]
+            df.loc[df['UWI'] == well, 'Y3'] = coord_y[0]
+        # writing wells object to columns PLAST separated by commas
+        df.loc[df['UWI'] == well, 'PLAST'] = df.apply(lambda x: ', '.join(objs), axis=1)
+    # leave only unique wells by geobd encoding column
+    df = df.drop_duplicates(subset=['UWI'])
+    df = df.reset_index(drop=True)
+
+    return df
+
+
+@logger.catch(level='DEBUG')
 def preparing_project_wells(dict_parameters):
     """
     Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
@@ -254,41 +283,37 @@ def preparing_project_wells(dict_parameters):
     return df_project
 
 
-@logger.catch
-def preparing(dict_constant, df_input, dict_parameters):
+@logger.catch(level='DEBUG')
+def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
-    :param fluid_rate: ограничение по дебиту жидкости
+    :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
+    :param dict_parameters: словарь с параметрами расчета
     :param dict_constant: словарь со статусами работы скважин
-    :param watercut: ограничение на обводненность
-    :param count_of_hor: кол-во объектов, заданное пользователем
     :param df_input: DataFrame, полученный из входного файла
     :return: Возврат DataFrame, подготовленного к расчету
     """
 
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
 
-    # cleaning null values
-    df_input = df_input[df_input.workHorizon.notnull()]
-    df_input = df_input[df_input.wellCluster.notnull()]
-    df_input = df_input.fillna(0)
-
     # transfer to string type
     df_input[['wellName', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']] = df_input[
         ['wellName', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']].astype('str')
+    df_exceptions[['wellName', 'wellStatus', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']] = df_exceptions[
+        ['wellName', 'wellStatus', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']].astype('str')
 
     df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
 
     # cleaning work horizon
-    df_input = clean_work_horizon(df_input, dict_parameters['horizon_count'])
-
-    df_input = df_input[(df_input['workMarker'] != 0) & (df_input['wellStatus'] != 0)]
-
-    # cleaning workMarker
-    df_input = df_input.loc[~df_input.workMarker.map(str.lower).str.contains(DELETE_MARKER)]
+    df_input, df_exception_by_hor = clean_work_horizon(df_input, dict_parameters['horizon_count'])
+    df_exceptions = pd.concat([df_exceptions, df_exception_by_hor], axis=0, sort=False).reset_index(drop=True)
+    df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по кол-ву пластов'
 
     # cleaning wellStatus
+    df_exceptions = pd.concat([df_exceptions, df_input[df_input.wellStatus.map(str.lower).str.contains(DELETE_MARKER)]],
+                              axis=0, sort=False).reset_index(drop=True)
+    df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена из расчета по состоянию'
     df_input = df_input[~(df_input.wellStatus.map(str.lower).str.contains(DELETE_MARKER))]
 
     # marker production wells (oil, gas, gas condensate)
@@ -325,16 +350,30 @@ def preparing(dict_constant, df_input, dict_parameters):
 
     # delete production wells with oil rate bigger than value in parameters
     if not (dict_parameters['limit_oilrate'] is None):
+        df_exceptions = pd.concat([df_exceptions, df_input[(df_input['gasStatus'] == 'нефтяная')
+                                                           & (df_input['oilRate'] > dict_parameters['limit_oilrate'])]],
+                                  axis=0, sort=False).reset_index(drop=True)
+        df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по дебиту нефти'
         df_input = df_input[
             ~((df_input['gasStatus'] == 'нефтяная') & (df_input['oilRate'] > dict_parameters['limit_oilrate']))]
 
     # delete production wells with fluid rate less than fluid_rate in parameters
     if not (dict_parameters['fluid_rate'] is None):
+        df_exceptions = pd.concat([df_exceptions, df_input[(df_input['fond'] == 'ДОБ')
+                                                           & (df_input['gasStatus'] == 'нефтяная')
+                                                           & (df_input.fluidRate <= dict_parameters['fluid_rate'])]],
+                                  axis=0, sort=False).reset_index(drop=True)
+        df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по дебиту жидкости'
         df_input = df_input[
             ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
                     df_input.fluidRate <= dict_parameters['fluid_rate']))]
     # delete production wells with water cut less
     if not (dict_parameters['water_cut'] is None):
+        df_exceptions = pd.concat([df_exceptions, df_input[(df_input['fond'] == 'ДОБ')
+                                                           & (df_input['gasStatus'] == 'нефтяная')
+                                                           & (df_input.water_cut <= dict_parameters['water_cut'])]],
+                                  axis=0, sort=False).reset_index(drop=True)
+        df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по обводненности'
         df_input = df_input[
             ~((df_input['fond'] == 'ДОБ') & (df_input['gasStatus'] == 'нефтяная') & (
                     df_input.water_cut <= dict_parameters['water_cut']))]
@@ -348,7 +387,6 @@ def preparing(dict_constant, df_input, dict_parameters):
     df_input.insert(loc=df_input.shape[1], column="POINT", value=list(map(lambda x, y: Point(x, y),
                                                                           df_input.coordinateX,
                                                                           df_input.coordinateY)))
-
     df_input.insert(loc=df_input.shape[1], column="POINT3", value=list(map(lambda x, y: Point(x, y),
                                                                            df_input.coordinateX3,
                                                                            df_input.coordinateY3)))
@@ -360,12 +398,21 @@ def preparing(dict_constant, df_input, dict_parameters):
                                                           tuple(x.coords) + tuple(y.coords)),
                                                                df_input.POINT, df_input.POINT3)))
 
-    # date = pd.to_datetime(df_input['nameDate'].iloc[0], format='%d.%m.%Y')
+    # add to exceptions dataframe columns for shapely types of coordinates
+    df_exceptions["POINT"] = df_exceptions.apply(lambda x: Point(x['coordinateX'], x['coordinateY']), axis=1)
+    df_exceptions["POINT3"] = df_exceptions.apply(lambda x: Point(x['coordinateX3'], x['coordinateY3']), axis=1)
+    df_exceptions.insert(loc=df_exceptions.shape[1], column="GEOMETRY", value=0)
+    df_exceptions["GEOMETRY"] = df_exceptions["GEOMETRY"].where(df_exceptions["well type"] != "vertical",
+                                                                list(map(lambda x: x, df_exceptions.POINT)))
+    df_exceptions["GEOMETRY"] = df_exceptions["GEOMETRY"].where(df_exceptions["well type"] != "horizontal",
+                                                                list(map(lambda x, y: LineString(
+                                                                    tuple(x.coords) + tuple(y.coords)),
+                                                                         df_exceptions.POINT, df_exceptions.POINT3)))
 
-    return df_input
+    return df_input, df_exceptions
 
 
-@logger.catch
+@logger.catch(level='DEBUG')
 def preprocessing_NGT(df_input, min_length_horWell):
     """
     Подготовка данных из NGT
@@ -379,56 +426,76 @@ def preprocessing_NGT(df_input, min_length_horWell):
     df_input.columns = dict_names_column.values()
 
     # cleaning null values
+    df_exceptions = df_input[~(df_input.workHorizon.notnull() & df_input.wellCluster.notnull())]  # create exceptions DataFrame
     df_input = df_input[df_input.workHorizon.notnull()]
     df_input = df_input[df_input.wellCluster.notnull()]
-    df_input = df_input.fillna(0)
-
-    # transfer to string type
+    df_input = df_input.fillna(0)  # fill NaN cells
+    df_exceptions['wellNet'] = 'Исключена из расчета, отсутствует куст/пласт'
+    df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0)]
+    # transfer to string type columns of calculation DataFrame
     df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
         df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
-    df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
-    df_input['oilfield'] = df_input['oilfield'].str.upper()
+    df_exceptions[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
+        df_exceptions[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
+    df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])  # column of str time to timestamp
+    df_input['oilfield'] = df_input['oilfield'].str.upper()  # uppercase of oilfield name in column
+    # create T1 and T3 coordinates for each well in nDataFrame
+    df_input = add_t3_coord_ngt(df_input, min_length_horWell)
+    df_exceptions = add_t3_coord_ngt(df_exceptions, min_length_horWell)
 
-    # create a base coordinate for each well
-    df_input.loc[df_input["coordinateXT3"] == 0, 'coordinateXT3'] = df_input.coordinateXT1
-    df_input.loc[df_input["coordinateYT3"] == 0, 'coordinateYT3'] = df_input.coordinateYT1
-    df_input.loc[df_input["coordinateXT1"] == 0, 'coordinateXT1'] = df_input.coordinateXT3
-    df_input.loc[df_input["coordinateYT1"] == 0, 'coordinateYT1'] = df_input.coordinateYT3
-    df_input["length of well T1-3"] = np.sqrt(np.power(df_input.coordinateXT3 - df_input.coordinateXT1, 2)
-                                              + np.power(df_input.coordinateYT3 - df_input.coordinateYT1, 2))
-
-    df_input["well type"] = 0
-    df_input.loc[df_input["length of well T1-3"] < min_length_horWell, "well type"] = "vertical"
-    df_input.loc[
-        df_input["length of well T1-3"] >= min_length_horWell, "well type"] = "horizontal"
-
-    df_input["coordinateX"] = 0
-    df_input["coordinateX3"] = 0
-    df_input["coordinateY"] = 0
-    df_input["coordinateY3"] = 0
-    df_input.loc[df_input["well type"] == "vertical", ['coordinateX', 'coordinateX3']] = df_input.coordinateXT1
-    df_input.loc[df_input["well type"] == "vertical", ['coordinateY', 'coordinateY3']] = df_input.coordinateYT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX'] = df_input.coordinateXT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateX3'] = df_input.coordinateXT3
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY'] = df_input.coordinateYT1
-    df_input.loc[df_input["well type"] == "horizontal", 'coordinateY3'] = df_input.coordinateYT3
-
-    df_input.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
-                  axis=1, inplace=True)
-
-    return df_input
+    return df_input, df_exceptions
 
 
 @logger.catch(level='DEBUG')
-def geobd_gdis_data(df_input, dict_parameters):
+def add_t3_coord_ngt(df, min_length_horWell):
+    """
+    Добавление координат T3 для всех скважин для возможности создания геометрии
+    :param df: DataFrame с данными по скважинам из NGT
+    :param min_length_horWell: минимальная заданная длина ГС
+    :return: DataFrame с подготовленными координатами T1 и T3
+    """
+    # create a base coordinate for each well
+    df.loc[df["coordinateXT3"] == 0, 'coordinateXT3'] = df.coordinateXT1
+    df.loc[df["coordinateYT3"] == 0, 'coordinateYT3'] = df.coordinateYT1
+    df.loc[df["coordinateXT1"] == 0, 'coordinateXT1'] = df.coordinateXT3
+    df.loc[df["coordinateYT1"] == 0, 'coordinateYT1'] = df.coordinateYT3
+    df["length of well T1-3"] = np.sqrt(np.power(df.coordinateXT3 - df.coordinateXT1, 2)
+                                        + np.power(df.coordinateYT3 - df.coordinateYT1, 2))
+
+    df["well type"] = 0
+    df.loc[df["length of well T1-3"] < min_length_horWell, "well type"] = "vertical"
+    df.loc[
+        df["length of well T1-3"] >= min_length_horWell, "well type"] = "horizontal"
+
+    df["coordinateX"] = 0
+    df["coordinateX3"] = 0
+    df["coordinateY"] = 0
+    df["coordinateY3"] = 0
+    df.loc[df["well type"] == "vertical", ['coordinateX', 'coordinateX3']] = df.coordinateXT1
+    df.loc[df["well type"] == "vertical", ['coordinateY', 'coordinateY3']] = df.coordinateYT1
+    df.loc[df["well type"] == "horizontal", 'coordinateX'] = df.coordinateXT1
+    df.loc[df["well type"] == "horizontal", 'coordinateX3'] = df.coordinateXT3
+    df.loc[df["well type"] == "horizontal", 'coordinateY'] = df.coordinateYT1
+    df.loc[df["well type"] == "horizontal", 'coordinateY3'] = df.coordinateYT3
+
+    # drop useless columns from DataFrame
+    df.drop(["length of well T1-3", "coordinateXT1", "coordinateYT1", "coordinateXT3", "coordinateYT3"],
+                  axis=1, inplace=True)
+
+    return df
+
+
+@logger.catch(level='DEBUG')
+def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
     """
     Функция обработки данных ГДИС из выгрузки ГеоБД
+    :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
     :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
     logger.info('Upload GeoBD GDIS table')
-    # open excel file with data and choose sheet with required name
+    # open Excel file with data and choose sheet with required name
     app1 = xw.App(visible=False)
     app1.display_alerts = False  # отключение запросов и оповещений через всплывающие окна
     try:
@@ -474,7 +541,7 @@ def geobd_gdis_data(df_input, dict_parameters):
     if gdis_sheet['A1'].value == '№ п/п':
         for row_cell in list_cells:
             if min_color_diff(row_cell.font.color, colors)[-1] in list_required_colors:
-                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверны"
+                gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверный"
                 gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.name = 'Times New Roman'
                 gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].font.color = row_cell.font.color
             else:
@@ -496,11 +563,11 @@ def geobd_gdis_data(df_input, dict_parameters):
                                 sheet_name='ГДИС')
         # check empty dataframe
         if df_gdis.empty:
-            return df_input
+            return df_input, df_exceptions
     except ValueError:
         # wrong type of data error and return origin dataframe
         logger.info('Sheet with name "ГДИС" not found in data file')
-        return df_input
+        return df_input, df_exceptions
     # check parameter of date last GDIS
     if not (dict_parameters['gdis_option'] is None):
         dict_rename = {
@@ -512,14 +579,14 @@ def geobd_gdis_data(df_input, dict_parameters):
             'Качество исследования': 'Оценка',
         }
 
-        df_gdis = df_gdis[df_gdis['Качество исследования'] == 'результат достоверны']
+        df_gdis = df_gdis[df_gdis['Качество исследования'] == 'результат достоверный']
         df_gdis = df_gdis.fillna(0)
         df_gdis = df_gdis[df_gdis['Общее время исслед.'] > 24].reset_index(drop=True)
         df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(
             lambda x: x if parseDate(str(x), dayfirst=True).year > 1950 else 0)
         df_gdis = df_gdis[df_gdis['Дата испытания'] != 0]
-        df_gdis['Дата окончания'] = pd.to_datetime(df_gdis['Дата испытания'], format='%d.%m.%Y') + df_gdis['Общее время исслед.'].apply(
-            lambda x: timedelta(hours=x))
+        df_gdis['Дата окончания'] = (pd.to_datetime(df_gdis['Дата испытания'], format='%d.%m.%Y')
+                                     + df_gdis['Общее время исслед.'].apply(lambda x: timedelta(hours=x)))
         df_gdis = df_gdis[
             ['Скважина', 'Пласт ОИС', 'Вид исследования', 'Дата испытания', 'Дата окончания', 'Качество исследования']]
         df_gdis.columns = dict_rename.values()
@@ -528,21 +595,25 @@ def geobd_gdis_data(df_input, dict_parameters):
         # drop wells by horizon gdis
         objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
         df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
+        df_exceptions = pd.concat([df_exceptions, df_input[df_input['workHorizon'] == '']],
+                                  axis=0, sort=False).reset_index(drop=True)
+        df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по ГДИС'
         df_input = df_input[df_input['workHorizon'] != '']
 
-        return df_input
+        return df_input, df_exceptions
 
     else:
         logger.info('Incorrect data of GDIS GeoBD')
-        return df_input
+        return df_input, df_exceptions
 
 
 @logger.catch(level='DEBUG')
-def ngt_gdis_data(df_input, dict_parameters):
+def ngt_gdis_data(df_input, df_exceptions, dict_parameters):
     """
     Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
     скважин, на которых проводились исследования начиная с введенной пользователем даты по сей день
 
+    :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
     :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
@@ -552,10 +623,10 @@ def ngt_gdis_data(df_input, dict_parameters):
         df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']),
                                 skiprows=[0], sheet_name='ГДИС')
         if df_gdis.empty:
-            return df_input
+            return df_input, df_exceptions
     except ValueError:
         logger.info('Sheet with name "ГДИС" not found in data file')
-        return df_input
+        return df_input, df_exceptions
 
     # get preparing dataframes
     if not (dict_parameters['gdis_option'] is None):
@@ -566,13 +637,16 @@ def ngt_gdis_data(df_input, dict_parameters):
         # drop wells by horizon gdis
         objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
         df_input = df_input.apply(lambda x: drop_wells_by_gdis(x, objects), axis=1)
+        df_exceptions = pd.concat([df_exceptions, df_input[df_input['workHorizon'] == '']],
+                                  axis=0, sort=False).reset_index(drop=True)
+        df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по ГДИС'
         df_input = df_input[df_input['workHorizon'] != '']
 
-        return df_input
+        return df_input, df_exceptions
 
     else:
         logger.info('Incorrect date of GDIS')
-        return df_input
+        return df_input, df_exceptions
 
 
 @logger.catch(level='DEBUG')
@@ -635,7 +709,7 @@ def drop_wells_by_gdis(input_row, gdis_objects):
     Функция удаляет объекты для каждой скважины, если по ним проводились ГДИС
 
     :param input_row: текущая строка из входного DataFrame
-    :param gdis_objects: Series из объектов на которых проводились ГДИС, индексами я вляются скважины
+    :param gdis_objects: Series из объектов на которых проводились ГДИС, индексами являются скважины
     :return: возвращает измененную строку DataFrame или ту же строку, если скважины не оказалось в gdis_object Series
     """
     # set of well objects in input dataframe
@@ -783,3 +857,67 @@ def get_exception_wells(dict_parameters, sheet):
     list_exception = list(df_exception[0].explode().unique())
 
     return list_exception
+
+
+@logger.catch(level='DEBUG')
+def fonds_for_calc(df_horizon, script, percent, cover_criteria, mean_oilrate_option, percent_oilrate):
+    """
+    Подготовка пьезометров, нагнетательных и добывающих скважин для расчета с учетом списка приоритетных к исследованию
+    :param df_horizon: DataFrame скважин выделенных на текущий объект расчета
+    :param script: сценарий расчета
+    :param percent: процент расстояния между точками T1 и T3 необходимый для включения скважины в зону исследования
+    :param cover_criteria: параметр учета процента расстояния между точками T1 и T3 скважины
+    :param mean_oilrate_option: параметр учета среднего дебита нефти по объекту
+    :param percent_oilrate: процент от среднего дебита нефти по объекту
+    :return: Подготовленные DataFrame 3 фондов, DataFrame приоритетных скважин, DataFrame скважин, охваченных
+             приоритетными и средний дебит по объекту расчета
+    """
+    df_necessarily = df_horizon[df_horizon['num_of_research']]
+    # df_horizon = df_horizon[df_horizon['num_of_research']]
+    if script == 'optimize':
+        # добавление столбца скважин, охваченных приоритетными для оптимальной сетки
+        df_necessarily['intersection'] = list(
+            map(lambda x: check_intersection_area(x, df_horizon[(df_horizon['fond'] == 'ДОБ') &
+                                                                (df_horizon['num_of_research'])],
+                                                  percent, cover_criteria), df_necessarily['AREA']))
+    else:
+        # добавление столбца скважин, охваченных приоритетными для регулярной сетки
+        df_necessarily['intersection'] = list(map(lambda x:
+                                                  check_intersection_area(x, df_horizon[df_horizon['num_of_research']],
+                                                                          percent, cover_criteria),
+                                                  df_necessarily['AREA']))
+    #  подсчет кол-ва охваченных скважин
+    df_necessarily['number'] = df_necessarily['intersection'].apply(lambda x: len(set(x)))
+    # инициализация списка скважин приоритетных к включению в ОС и охваченных ими скважины
+    list_necessarily = list(set(df_necessarily['wellName'].explode().unique()))
+    # инициализация списка скважин, охваченных приоритетными к включению в ОС
+    list_intersection_necessarily = list(set([x for x in list(df_necessarily['intersection'].explode().unique())
+                                              if x == x]))
+    # DataFrame с исключенными скважинами по результатам работы данной функции
+    df_exception = df_horizon[df_horizon['wellName'].isin(list_intersection_necessarily)]
+    df_exception['wellNet'] = 'Охвачена приоритетными скважинами'
+
+    df_prod_wells = df_horizon.loc[(df_horizon['fond'] == 'ДОБ') &
+                                   (~df_horizon['wellName'].isin(list_intersection_necessarily + list_necessarily))]
+
+    # выделение продуктивных, нагнетательных и исследуемых скважин для объекта, дебит нефти которых не превышает
+    # среднего дебита нефти по объекту
+    mean_oilrate = 0
+    if mean_oilrate_option and (df_prod_wells.shape[0] > 0):
+        mean_oilrate = df_prod_wells['oilRate'].mean()
+        df_exception = pd.concat([df_exception, df_prod_wells[
+            (df_prod_wells['oilRate'] >= mean_oilrate * percent_oilrate / 100) & (
+                    (df_prod_wells['gasStatus'] == 'нефтяная') |
+                    (df_prod_wells['gasStatus'] == 'газоконденсатная'))]], axis=0, sort=False).reset_index(drop=True)
+        df_exception.loc[df_exception['wellNet'].isnull(), 'wellNet'] = 'Исключена по среднему дебиту'
+        df_prod_wells = df_prod_wells[~((df_prod_wells['oilRate'] >= mean_oilrate * percent_oilrate / 100) &
+                                        ((df_prod_wells['gasStatus'] == 'нефтяная') |
+                                         (df_prod_wells['gasStatus'] == 'газоконденсатная')))]
+
+    # удаление из расчетного DataFrame скважин, охваченных приоритетными к исследованию
+    df_horizon = df_horizon[~df_horizon['wellName'].isin(list_intersection_necessarily + list_necessarily)]
+    #  Выделение нагнетательного и пьезометрического фондов для расчета
+    df_piez_wells = df_horizon.loc[df_horizon['fond'] == 'ПЬЕЗ']
+    df_inj_wells = df_horizon.loc[df_horizon['fond'] == 'НАГ']
+
+    return df_prod_wells, df_piez_wells, df_inj_wells, df_necessarily, df_exception, mean_oilrate

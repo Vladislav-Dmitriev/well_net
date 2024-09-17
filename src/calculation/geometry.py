@@ -153,8 +153,8 @@ def optimization(df_prod, df_inj_piez):
         #  создаем сет уникальных значений столбца с пересечениями и сортируем dataframe по кол-ву пересечений
         set_visible_wells = set(df_optim['intersection'].explode().unique())
         df_optim = df_optim.sort_values(by=['number'], ascending=True)
-        # на каждой итерации создается набор исключений, кроме итерируемой скважины,
-        # он сравнивается с набором скважин, входящих в список пересечений выше
+        # на каждой итерации создается сет охваченных скважин без текущей строки, если он совпадает полным сетом,
+        # то текущая скважина удаляется, тк охваченные ею скважины есть в пересечениях других
         for well in df_optim.wellName.values:
             set_exception = set(df_optim[df_optim['wellName'] != well]['intersection'].explode().unique())
             # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина
