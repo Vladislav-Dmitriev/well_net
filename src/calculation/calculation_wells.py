@@ -31,6 +31,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     list_objects.sort()
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80):
+        # horizon = 'НП1/0'
         logger.info(f'Current horizon: {horizon}')
         # для каждого объекта определяется свой df_horizon
         df_horizon = df_in_contour[
@@ -89,6 +90,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                 raise NameError(
                     f'Wrong marker name: {dict_parameters['calculation_scenario']}. Check parameters.yml file')
             # добавление скважин, не попавших на расчет(исключены по среднему дебиту объекта или охвачены приоритетными)
+            df_exception_calc['current_horizon'] = horizon
             df_result = pd.concat([df_result, df_exception_calc], axis=0, sort=False).reset_index(drop=True)
             df_result['mean_oilrate'] = mean_oilrate
             df_result['limit_oilrate'] = dict_parameters['limit_oilrate']
@@ -293,48 +295,47 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
         df_prod_intersection = df_prod_wells[df_prod_wells['wellName'].isin(list(
             set(df_result['intersection'].explode().unique())))]
 
-        list_invisible_wells = get_invisible_wells(df_result[df_result['num_of_research']].copy(),
+        list_invisible_wells = get_invisible_wells(df_result[~df_result['num_of_research']].copy(),
                                                    df_prod_intersection,
                                                    dict_parameters['percent'], mean_rad,
                                                    dict_parameters['limit_radius_coef'],
                                                    dict_parameters['calc_option'])  # список скважин в слепой зоне
-        if not list_invisible_wells:
-            logger.info(f'Write to result dictionary by key {key}, there are not invisible wells')
-            return df_result
-        # выделение DataFrame добывающих скважин в слепых зонах из исходного DataFrame продуктивных
-        df_prod_recalc = add_shapely_types(
-            df_prod_intersection[df_prod_intersection['wellName'].isin(list_invisible_wells)],
-            mean_rad, dict_parameters['limit_radius_coef'])
-        # обновление столбца AREA с максимально допустимым R в DataFrame скважин, попавших на первую итерацию расчета
-        df_piez_recalc = add_shapely_types(df_piez, mean_rad, dict_parameters['limit_radius_coef'])
-        df_inj_recalc = add_shapely_types(df_inj, mean_rad, dict_parameters['limit_radius_coef'])
-        df_result_invisible = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad,
-                                           coeff, horizon, obj_square, dict_parameters['min_research_time'],
-                                           dict_parameters['max_research_time'], dict_parameters['calc_option'],
-                                           dict_parameters['limit_research_time'], df_piez_recalc, df_prod_recalc,
-                                           df_inj_recalc, df_result_invisible,
-                                           pd.DataFrame(columns=df_piez_recalc.columns))
-        if dict_parameters['separation_by_years'] == 1:
-            df_result_invisible['year_of_survey'] = 1
-            df_result = pd.concat([df_result, df_result_invisible],
-                                  axis=0, sort=False).reset_index(drop=True)
-        elif dict_parameters['separation_by_years'] == 2:
-            df_first_year, df_second_year = separation_gdis(df_result_invisible)
-            df_first_year['year_of_survey'], df_second_year['year_of_survey'] = 1, 2
-            df_result = pd.concat([df_result, df_first_year, df_second_year],
-                                  axis=0, sort=False).reset_index(drop=True)
+        if list_invisible_wells:
+            # выделение DataFrame добывающих скважин в слепых зонах из исходного DataFrame продуктивных
+            df_prod_recalc = add_shapely_types(
+                df_prod_intersection[df_prod_intersection['wellName'].isin(list_invisible_wells)],
+                mean_rad, dict_parameters['limit_radius_coef'])
+            # обновление столбца AREA с максимально допустимым R в DataFrame скважин, попавших на первую итерацию расчета
+            df_piez_recalc = add_shapely_types(df_piez, mean_rad, dict_parameters['limit_radius_coef'])
+            df_inj_recalc = add_shapely_types(df_inj, mean_rad, dict_parameters['limit_radius_coef'])
+            df_result_invisible = calc_horizon(list_exception, path_property, dict_parameters['percent'], mean_rad,
+                                               coeff, horizon, obj_square, dict_parameters['min_research_time'],
+                                               dict_parameters['max_research_time'], dict_parameters['calc_option'],
+                                               dict_parameters['limit_research_time'], df_piez_recalc, df_prod_recalc,
+                                               df_inj_recalc, df_result_invisible,
+                                               pd.DataFrame(columns=df_piez_recalc.columns))
+            df_result_invisible['wellNet'] = 'Выбрана в опорную сеть'
+            if (dict_parameters['separation_by_years'] == 1) and (not df_result_invisible.empty):
+                df_result_invisible['year_of_survey'] = 1
+                df_result = pd.concat([df_result, df_result_invisible],
+                                      axis=0, sort=False).reset_index(drop=True)
+            elif (dict_parameters['separation_by_years'] == 2) and (not df_result_invisible.empty):
+                df_first_year, df_second_year = separation_gdis(df_result_invisible)
+                df_first_year['year_of_survey'], df_second_year['year_of_survey'] = 1, 2
+                df_result = pd.concat([df_result, df_first_year, df_second_year],
+                                      axis=0, sort=False).reset_index(drop=True)
+            else:
+                pass
         else:
-            pass
-    else:
-        pass
+            logger.info(f'Write to result dictionary by key {key}, there are not invisible wells')
 
     # задание статуса по опорной сети
     df_result['wellNet'] = "Выбрана в опорную сеть"
     #  списки нагнетательных и пьезометрических скважин не вошедших в опорную сеть в ходе расчета
-    list_inj_notwellnet = list(set(df_inj['wellName'].explode().unique()).
-                               difference(set(df_result[df_result['fond'] == 'НАГ']['wellName'].explode().unique())))
-    list_piez_notwellnet = list(set(df_piez['wellName'].explode().unique()).
-                                difference(set(df_result[df_result['fond'] == 'ПЬЕЗ']['wellName'].explode().unique())))
+    list_inj_notwellnet = list(set(df_inj['wellName'].explode().unique()) - set(
+        df_result.loc[df_result['fond'] == 'НАГ', 'wellName'].explode().unique()))
+    list_piez_notwellnet = list(set(df_piez['wellName'].explode().unique()) - set(
+        df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'wellName'].explode().unique()))
     # список исследуемых добывающих скважин из столбца пересечений
     list_research_prod = list(set(df_result['intersection'].explode().unique()))
     # добавление в результирующий DataFrame исключенных скважин, скважин не выбранных в ОС и исследуемых
@@ -344,7 +345,7 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
                                [x for x in df_result['intersection'].explode().unique() if x == x])]],
                           axis=0, sort=False).reset_index(drop=True)
     df_result.loc[df_result['wellName'].isin(list_piez_notwellnet + list_inj_notwellnet), 'wellNet'] =\
-        'Не выбрана в опорную сеть'
+        'Исключена из опорной сети'
     df_result.loc[df_result['intersection'].map(str).str.contains('Не охвачена'), 'wellNet'] =\
         'В списке исключений'
     df_result.loc[df_result['wellName'].isin(list_research_prod), 'wellNet'] = 'Охвачена исследованиями'
@@ -359,8 +360,9 @@ def calc_contour(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_r
                                                           dict_parameters['calc_option']))
         df_proj_wells.loc[df_proj_wells['wellName'].isin(list_proj_research), 'wellNet'] = 'Охвачена исследованиями'
         df_proj_wells.loc[df_proj_wells['wellNet'].isnull(), 'wellNet'] = 'Не охвачена исследованиями'
-        df_proj_wells['current_horizon'] = horizon
         df_result = pd.concat([df_result, df_proj_wells], axis=0, sort=False).reset_index(drop=True)
+
+    df_result['current_horizon'] = horizon  # добавления столбца объектов для понимания, по какому идет расчет
 
     return df_result
 
@@ -438,7 +440,6 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     df_result['percent_of_default'] = list(map(lambda x: 100 * x[7] / x[8], df_result['time_coef/objects']))  # процент
     # объектов со свойствами по умолчанию
     df_result.drop(['time_coef/objects'], axis=1, inplace=True)
-    df_result['current_horizon'] = horizon  # добавления столбца объектов для понимания, по какому идет расчет
     df_result['research_time'] = (df_result['min_dist'] * df_result['min_dist']
                                   * df_result['time_coef'])  # время исследования в сут через min расстояние
 
@@ -477,18 +478,14 @@ def calc_horizon(list_prod_exception, path_property, percent, mean_rad, coeff, h
     # процент скважин в опорной сети из скважин на объекте по каждому типу
     df_result['percent_piez_wells'] = 0
     if piez_count != 0:
-        df_result['percent_piez_wells'] = 100 * df_result[
-            (df_result['fond'] == 'ПЬЕЗ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
-            0] / piez_count
+        df_result['percent_piez_wells'] = 100 * df_result[(df_result['fond'] == 'ПЬЕЗ')].shape[0] / piez_count
     df_result['percent_inj_wells'] = 0
     if inj_count != 0:
-        df_result['percent_inj_wells'] = 100 * df_result[
-            (df_result['fond'] == 'НАГ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
-            0] / inj_count
+        df_result['percent_inj_wells'] = 100 * df_result[(df_result['fond'] == 'НАГ')].shape[0] / inj_count
     df_result['percent_prod_wells'] = 0
     if prod_count != 0:
         df_result['percent_prod_wells'] = 100 * df_result[
-            (df_result['fond'] == 'ДОБ') & (~df_result['intersection'].map(str).str.contains('Исключена'))].shape[
+            (df_result['fond'] == 'ДОБ') & (~df_result['intersection'].map(str).str.contains('Не охвачена'))].shape[
             0] / prod_count
     df_result['percent_gas_wells'] = 0
     if gas_prod_count != 0:

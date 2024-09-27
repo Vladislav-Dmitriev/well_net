@@ -424,14 +424,13 @@ def preprocessing_NGT(df_input, min_length_horWell):
 
     # rename columns
     df_input.columns = dict_names_column.values()
-
-    # cleaning null values
-    df_exceptions = df_input[~(df_input.workHorizon.notnull() & df_input.wellCluster.notnull())]  # create exceptions DataFrame
-    df_input = df_input[df_input.workHorizon.notnull()]
-    df_input = df_input[df_input.wellCluster.notnull()]
     df_input = df_input.fillna(0)  # fill NaN cells
+    # create exceptions DataFrame
+    df_exceptions = df_input[(df_input['workHorizon'] == 0) | (df_input['wellCluster'] == 0)]
     df_exceptions['wellNet'] = 'Исключена из расчета, отсутствует куст/пласт'
+    # cleaning null values
     df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0)]
+
     # transfer to string type columns of calculation DataFrame
     df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
         df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
@@ -873,19 +872,25 @@ def fonds_for_calc(df_horizon, script, percent, cover_criteria, mean_oilrate_opt
              приоритетными и средний дебит по объекту расчета
     """
     df_necessarily = df_horizon[df_horizon['num_of_research']]
-    # df_horizon = df_horizon[df_horizon['num_of_research']]
     if script == 'optimize':
         # добавление столбца скважин, охваченных приоритетными для оптимальной сетки
         df_necessarily['intersection'] = list(
-            map(lambda x: check_intersection_area(x, df_horizon[(df_horizon['fond'] == 'ДОБ') &
-                                                                (df_horizon['num_of_research'])],
-                                                  percent, cover_criteria), df_necessarily['AREA']))
+            map(lambda x, y: check_intersection_area(x, df_horizon[(df_horizon['fond'] == 'ДОБ') &
+                                                                   (df_horizon['num_of_research']) & (
+                                                                               df_horizon['wellName'] != y)],
+                                                     percent, cover_criteria), df_necessarily['AREA'],
+                df_necessarily['wellName']))
     else:
         # добавление столбца скважин, охваченных приоритетными для регулярной сетки
-        df_necessarily['intersection'] = list(map(lambda x:
-                                                  check_intersection_area(x, df_horizon[df_horizon['num_of_research']],
+        df_necessarily['intersection'] = list(map(lambda x, y:
+                                                  check_intersection_area(x, df_horizon[
+                                                      (df_horizon['num_of_research']) & (df_horizon['wellName'] != y)],
                                                                           percent, cover_criteria),
-                                                  df_necessarily['AREA']))
+                                                  df_necessarily['AREA'], df_necessarily['wellName']))
+    if not df_necessarily.empty:
+        # скважины охватывают сами себя, поэтому для дальнейших расчетов, необходимо удалить из столбца пересечений лишние
+        df_necessarily['intersection'] = df_necessarily.apply(
+            lambda x: [y for y in x['intersection'] if y != x['wellName']], axis=1)
     #  подсчет кол-ва охваченных скважин
     df_necessarily['number'] = df_necessarily['intersection'].apply(lambda x: len(set(x)))
     # инициализация списка скважин приоритетных к включению в ОС и охваченных ими скважины
@@ -910,7 +915,7 @@ def fonds_for_calc(df_horizon, script, percent, cover_criteria, mean_oilrate_opt
                     (df_prod_wells['gasStatus'] == 'нефтяная') |
                     (df_prod_wells['gasStatus'] == 'газоконденсатная'))]], axis=0, sort=False).reset_index(drop=True)
         df_exception.loc[df_exception['wellNet'].isnull(), 'wellNet'] = 'Исключена по среднему дебиту'
-        df_prod_wells = df_prod_wells[~((df_prod_wells['oilRate'] >= mean_oilrate * percent_oilrate / 100) &
+        df_prod_wells = df_prod_wells[~((df_prod_wells['oilRate'] > mean_oilrate * percent_oilrate / 100) &
                                         ((df_prod_wells['gasStatus'] == 'нефтяная') |
                                          (df_prod_wells['gasStatus'] == 'газоконденсатная')))]
 

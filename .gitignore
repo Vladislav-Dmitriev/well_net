@@ -17,3 +17,5 @@ requirements.txt
 /src/dist/
 /src/main.spec
 /Опорная_сеть.exe
+/src/visualization/qtsample2.ui
+/Методичка ОС.docx

@@ -115,7 +115,9 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         count_target = math.ceil(wellnet_percent / 100 * (df_fond.shape[0] + df_necessarily_fond.shape[0]))
         if (df_current_result.shape[0] > count_target) and (dict_parameters['option_percent']):
             # сортировка части DataFrame без обязательных скважин по возрастанию дебита нефти и убыванию пересечений
-            df_current_result.loc[~df_current_result['num_of_research']] = df_current_result.loc[~df_current_result['num_of_research']].sort_values(by=['number', 'oilRate'], axis=0, ascending=[False, True])
+            df_current_result.loc[~df_current_result['num_of_research']] = df_current_result.loc[
+                ~df_current_result['num_of_research']].sort_values(by=['number', 'oilRate'], axis=0,
+                                                                   ascending=[False, True])
             list_out_wellnet = df_current_result[
                                -(df_current_result.shape[0] - count_target):].wellName.explode().unique()
             df_current_result['wellNet'] = 'Выбрана в опорную сеть'
@@ -127,6 +129,8 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
             df_fond = df_fond.sort_values(by=['number', 'oilRate'], axis=0, ascending=[True, True])
             df_fond = df_fond[:(count_target - df_current_result.shape[0])]
             df_current_result = pd.concat([df_current_result, df_fond], axis=0, sort=False).reset_index(drop=True)
+            df_current_result['wellNet'] = 'Выбрана в опорную сеть'
+        else:
             df_current_result['wellNet'] = 'Выбрана в опорную сеть'
 
         # увеличение площади многоугольника по мере итерации по фондам
@@ -230,21 +234,18 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     df_result['year_of_survey'] = 0
 
     # присоединение к таблице результатов скважин из списка исключений и охваченных зоной исследования предыдущего фонда
-    list_covered_piez = list(set(df_piez['wellName'].explode().unique())
-                             - set(df_result[df_result['fond'] == 'ПЬЕЗ']['wellName'].explode().unique()))
-    list_covered_inj = list(set(df_inj['wellName'].explode().unique())
-                            - set(df_result[df_result['fond'] == 'НАГ']['wellName'].explode().unique()))
-    list_covered_prod = list(set(df_prod['wellName'].explode().unique())
-                             - set(df_result[df_result['fond'] == 'ДОБ']['wellName'].explode().unique()))
-    df_result = pd.concat([df_result, df_piez[df_piez['wellName'].isin(list_covered_piez)],
-                           df_inj[df_inj['wellName'].isin(list_covered_inj)],
-                           df_prod[df_prod['wellName'].isin(list_covered_prod)],
+    list_covered_wells = list(
+        df_result[df_result['wellNet'] == 'Выбрана в опорную сеть']['intersection'].explode().unique())
+    df_result = pd.concat([df_result, df_piez[df_piez['wellName'].isin(list_covered_wells)],
+                           df_inj[df_inj['wellName'].isin(list_covered_wells)],
+                           df_prod[df_prod['wellName'].isin(list_covered_wells)],
                            df_regular_exceptions], axis=0, sort=False).reset_index(drop=True)
     df_result.loc[df_result['wellNet'].isnull(), 'wellNet'] = 'Охвачена исследованиями'
+    df_result.loc[df_result['current_horizon'].isnull(), 'current_horizon'] = horizon
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:
         list_proj_research = list(check_intersection_area(unary_union(
-            list(df_result.loc[~df_result['intersection'].map(str).str.contains('Исключена')]['AREA'].explode())),
+            list(df_result.loc[df_result['wellNet'] == 'Выбрана в опорную сеть']['AREA'].explode())),
             df_proj_wells, dict_parameters['percent'],
             dict_parameters['calc_option']))
         df_proj_wells.loc[df_proj_wells['wellName'].isin(list_proj_research), 'wellNet'] = 'Охвачена исследованиями'
