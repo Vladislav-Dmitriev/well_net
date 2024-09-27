@@ -89,7 +89,7 @@ if __name__ == '__main__':
                                        list_exception, dict_parameters))
 
     # Results___________________________________________________________________________________________________________
-    # plot_results(dict_result, df_exceptions, dict_parameters)
+    plot_results(dict_result, df_exceptions, dict_parameters)
     results_to_excel(dict_result, dict_parameters)
     logger.info("End of calculation")
 
