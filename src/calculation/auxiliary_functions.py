@@ -192,14 +192,14 @@ def upload_parameters(path):
         dict_parameters = yaml.safe_load(f)
 
     # коэффициенты кратного увеличения радиуса исследования
-    mult_coef = dict_parameters['mult_coef']
+    mult_coef = str(dict_parameters['mult_coef'])
     mult_coef = mult_coef.split(',')
     try:
         mult_coef = [float(x) for x in mult_coef]
         dict_parameters['mult_coef'] = mult_coef
     except ValueError:
         dict_parameters['mult_coef'] = 1
-        logger.info('Wrong type of radius mult coefficients. Default mult coef is 1')
+        logger.info('Wrong type of radius mult coefficients. Default mult coefficient is 1')
 
     # дата последнего проведенного ГДИС
     year = dict_parameters['gdis_option']  # how many years ago gdis was made
@@ -259,14 +259,17 @@ def clean_work_horizon(df, count_of_hor):
     :param count_of_hor: максимальное кол-во объектов работы скважины, задается пользователем
     :return: DataFrame со скважинами, число объектов работы которых не превышает заданного пользователем кол-ва
     """
+    df_exception = pd.DataFrame()
     if (not count_of_hor is None) and (count_of_hor > 0) and (count_of_hor != ''):
         df['horizon_count'] = df['workHorizon'].apply(lambda x: len(set(x.replace(" ", "").split(","))))
+        df_exception = pd.concat([df_exception, df[df['horizon_count'] >= count_of_hor]],
+                                 axis=0, sort=False).reset_index(drop=True)
         df = df[df['horizon_count'] <= count_of_hor]
         df.drop(columns=['horizon_count'], axis=1, inplace=True)
-        return df
+        return df, df_exception
     else:
         logger.info('Value of well`s horizon count was left as a default')
-        return df
+        return df, df_exception
 
 @logger.catch(level='DEBUG')
 def delete_logfiles(mypath):

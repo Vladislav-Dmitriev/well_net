@@ -1,5 +1,6 @@
 import json
 import sqlite3 as sql
+import os
 import geopandas as gpd
 import pandas as pd
 import xlwings as xw
@@ -11,16 +12,20 @@ from src.calculation.auxiliary_functions import get_path
 
 
 @logger.catch(level='DEBUG')
-def write_regular_mesh(df_input, dict_result, percent, calc_option, path_database):
+def results_to_excel(dict_result, dict_parameters, path_database):
     """
-    Запись результатов расчета регулярной сетки в Excel
+    Запись результатов расчета в Excel файл
     :param path_database: путь для сохранения базы данных с результатами
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param percent: процент длины ГС для включения в зону охвата
-    :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
+    :param dict_parameters: словарь с параметрами расчета
     :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
     :return: функция сохраняет файл в указанную директорию
     """
+    if dict_parameters['calculation_scenario'] == 'optimize':
+        script_folder = os.path.join(get_path(), 'output', 'Оптимальная сетка')
+        saving_path = os.path.join(get_path(), 'output', 'Оптимальная сетка', 'Оптимальная сетка.xlsx')
+    else:
+        script_folder = os.path.join(get_path(), 'output', 'Регулярная сетка')
+        saving_path = os.path.join(get_path(), 'output', 'Регулярная сетка', 'Регулярная сетка.xlsx')
     dict_rename = {
         'wellName': '№ скважины',
         'nameDate': 'Дата',
@@ -83,7 +88,7 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, path_databas
         name = str(key).replace("/", " ")
         # reduce name of Excel sheet to 31 characters if it's too long
         if len(name) > 31:
-            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
+            name = name.split(' k=')[0][:31 - len(' k=' + name.split(' k=')[-1])] + ' k=' + name.split(' k=')[-1]
 
         if f"{name}" in new_wb.sheets:
             xw.Sheet[f"{name}"].delete()
@@ -93,47 +98,15 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, path_databas
 
         sht = new_wb.sheets(f"{name}")
 
-        df = value[0]
-        polygon = value[1]
-
-        logger.info('Check contour availability')
-        # если контур не задан, то берутся все скважины из df_input кроме скважин в df_result
-        if polygon is None:
-            df_in_contour = df_input.copy()
-        else:
-            df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option))
-            df_in_contour = df_input[df_input.wellName.isin(wells_in_contour)]
-        # удаление лишних столбцов из df_in_contour
-        df_in_contour.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
-        # корректировка списков проектных скважин
-        list_research_proj = list(df[df['fond'] == 'ПРОЕКТ'].wellName.explode().unique())
-        list_proj = list(df_in_contour[df_in_contour['fond'] == 'ПРОЕКТ'].wellName.explode().unique())
-        list_proj = [x for x in list_proj if x not in list_research_proj]
-        df = df[df['fond'] != 'ПРОЕКТ']  # исключение проектных скважин, охваченных скважинами ОС из df_result
-        # всем скважинам в df_result добавляется маркер, означающий, что они выбраны в ОС
-        df['wellNet'] = 'Выбрана в опорную сеть'
-        list_research = list(df['intersection'].explode().unique())
-        df_in_contour = df_in_contour[~df_in_contour['wellName'].isin(list(df['wellName'].explode().unique()))]
-        # из исходного DataFrame, обрезанного контуром, если он задан, удаляются скважины, отобранные/исключенные из ОС
-        df_research = df_in_contour[
-            (df_in_contour['wellName'].isin(list_research)) | (df_in_contour['wellName'].isin(list_research_proj))]
-        df_research['wellNet'] = 'Исследуемый фонд'
-        df_not_wellnet = df_in_contour[(~df_in_contour['wellName'].isin(list_research)) &
-                                       (~df_in_contour['wellName'].isin(list_research_proj)) &
-                                       (~df_in_contour['wellName'].isin(list(df.wellName.explode().unique())))]
-        df_not_wellnet['wellNet'] = 'Вне опорной сети'
-
-        df.drop(
-            columns=['POINT', 'POINT3', 'GEOMETRY', 'AREA', 'limit_oilrate', 'gasStatus', 'min_dist'],
-            axis=1, inplace=True)
-        df["intersection"] = list(
+        df = value[0].copy()
+        df['num_of_research'] = df['num_of_research'].apply(lambda x: int(x) + 1)
+        df.drop(columns=['POINT3', 'POINT', 'GEOMETRY', 'limit_oilrate', 'min_dist', 'gasStatus', 'AREA'],
+                axis=1, inplace=True)
+        df = df[dict_rename.keys()]
+        df['intersection'] = df['intersection'].fillna('')
+        df['intersection'] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.loc[df['intersection'].str.contains('Исключена'), 'wellNet'] = 'Исключена из ОС'
-
-        df = pd.concat([df, df_research, df_not_wellnet], ignore_index=True, sort=False)
         df.columns = dict_rename.values()
-        logger.info('Writing result data to excel sheet')
         sht.range('A1').options().value = pd.DataFrame(df)
         df['Дата'] = pd.to_datetime(df['Дата'])
         df.to_sql(name=name.replace('-', '/'), con=db_result, if_exists='replace')
@@ -146,153 +119,13 @@ def write_regular_mesh(df_input, dict_result, percent, calc_option, path_databas
     sht = new_wb.sheets("report")
     sht.range('A1').options().value = df_report
     logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}\\output\\out_file_mesh.xlsx")
-    # End print
-    app1.kill()
-    df_report.to_sql(name='report', con=db_result, if_exists='replace')
-    db_result.commit()
-    db_result.close()
 
-    return path_database
+    try:
+        os.mkdir(script_folder)
+    except OSError:
 
-
-@logger.catch(level='DEBUG')
-def write_optim_mesh(df_input, dict_result, percent, calc_option, path_database):
-    """
-    Для записи результата расчетов в Excel подается словарь
-    Для каждого ключа создается отдельный лист в документе
-    :param path_database: путь для сохранения базы данных с результатами
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param df_input: исходный DataFrame скважин, очищенный от некорректных данных
-    :param percent: процент длины ГС для включения в зону охвата для сценария с опорной сеткой
-    :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
-    :return: функция сохраняет файл в указанную директорию
-    """
-    # result dict rename columns in russian
-    dict_rename_columns = {
-        'wellName': '№ скважины',
-        'nameDate': 'Дата',
-        'workMarker': 'Характер работы',
-        'wellStatus': 'Состояние',
-        'oilfield': 'Месторождение',
-        'workHorizon': 'Объекты работы',
-        'wellCluster': 'Куст',
-        'coordinateX': 'Координата X',
-        'coordinateX3': 'Координата забоя Х (по траектории)',
-        'coordinateY': 'Координата Y',
-        'coordinateY3': 'Координата забоя Y (по траектории)',
-        'oilRate': 'Дебит нефти (ТР), т/сут',
-        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
-        'gasRate': 'Дебит природного газа, тыс.м3/сут',
-        'injectivity': 'Приемистость (ТР), м3/сут',
-        'injectivity_day': 'Приемистость (по суточным), м3/сут',
-        'water_cut': 'Обводненность (ТР), % (объём)',
-        'exploitation': 'Способ эксплуатации',
-        'condRate': 'Дебит конденсата газа, т/сут',
-        'well type': 'Тип скважины',
-        'fond': 'Фонд скважины',
-        'num_of_research': 'Количество исследований в год',
-        'intersection': 'Пересечения со скважинами',
-        'number': 'Кол-во пересечений',
-        'mean_radius': 'Средний радиус по объекту, м',
-        'time_coef': 'Коэффициент для расчет времени исследования',
-        'k': 'Проницаемость, мД',
-        'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
-        'pressure': 'Начальное пластовое давление (карты изобар), атм',
-        'default_count': 'Объектов по умолчанию',
-        'obj_count': 'Объектов всего',
-        'percent_of_default': 'Процент объектов со свойствами по умолчанию',
-        'current_horizon': 'Объект расчета',
-        'research_time': 'Время исследования, сут',
-        'oil_loss': 'Потери нефти, т',
-        'gas_loss': 'Потери газа, тыс. м3',
-        'injection_loss': 'Потери закачки, м3',
-        'coverage_percentage': 'Процент охвата площади объекта',
-        'percent_piez_wells': 'Доля пьезометров в опорной сети',
-        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
-        'percent_prod_wells': 'Доля добывающих в опорной сети',
-        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
-        'year_of_survey': 'Год исследования',
-        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
-        'wellNet': 'Статус по опорной сети'
-    }
-    # create database for result tables
-    if path_database == '':
-        db_result = sql.connect(f'{get_path()}\\output\\wellnet_result.db')
-    else:
-        db_result = sql.connect(path_database)
-
-    df_main = df_input.copy()
-    df_main.drop(columns=['POINT', 'POINT3', 'GEOMETRY', 'gasStatus'], axis=1, inplace=True)
-    app1 = xw.App(visible=False)
-    new_wb = xw.Book()
-
-    for key, value in tqdm(dict_result.items(), "Write optimal mesh to excel file", position=0, leave=True,
-                           colour='white', ncols=80):
-        name = str(key).replace("/", " ")
-        # reduce name of Excel sheet to 31 characters if it's too long
-        if len(name) > 31:
-            name = name.split('контур№')[0][:17] + 'контур№' + name.split('контур№')[1]
-
-        if f"{name}" in new_wb.sheets:
-            xw.Sheet[f"{name}"].delete()
-
-        logger.info(f'Create new sheet in Excel with name: {name}')
-        new_wb.sheets.add(f"{name}")
-
-        sht = new_wb.sheets(f"{name}")
-        df = value[0].copy()
-        polygon = value[1]
-        logger.info('Check contour availability')
-        if polygon is None:
-            df_in_contour = df_main.copy()
-        else:
-            df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
-            wells_in_contour = set(check_intersection_area(polygon, df_points, percent, calc_option))
-            df_in_contour = df_main[df_main.wellName.isin(wells_in_contour)]
-        # распределение проектных скважин на охваченные исследованием и неохваченные
-        list_research_proj = list(
-            df[df['fond'] == 'ПРОЕКТ']['wellName'].explode().unique())  # список охваченных проектных скважин
-        list_proj = list(df_in_contour[df_in_contour['fond'] == 'ПРОЕКТ']['wellName'].explode().unique())
-        list_proj = [x for x in list_proj if x not in list_research_proj]
-        df_research_proj = df_in_contour[df_in_contour['wellName'].isin(list_research_proj)]
-        df_research_proj['wellNet'] = 'Исследуемый фонд'
-        # df_not_research_proj = df_in_contour[df_in_contour['wellName'].isin(list_proj)]
-        # df_not_research_proj['wellNet'] = 'Вне опорной сети'
-
-        df = df[df['fond'] != 'ПРОЕКТ']  # убираем проектные скважины из результирующего DataFrame
-        df["intersection"] = list(
-            map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df.drop(columns=['min_dist', 'POINT', 'POINT3', 'GEOMETRY', 'AREA',
-                         'gasStatus', 'limit_oilrate'], axis=1, inplace=True)
-        df.insert(loc=df.shape[1], column='wellNet', value='Выбрана в опорную сеть')
-
-        list_wellnet = list(df['wellName'].explode().unique())  # список исследуемых скважин
-        list_research = list(df['intersection'].explode().unique())  # список скважин, охваченных исследованием
-        df_not_wellnet = df_in_contour[~df_in_contour['wellName'].isin(list_wellnet)]  # скважины не попали в сеть
-
-        df = pd.concat([df, df_research_proj, df_not_wellnet], ignore_index=True, sort=False)
-        df['wellNet'] = df.apply(
-            lambda x: 'Исследуемый фонд' if (x.wellName in list_research) else x.wellNet,
-            axis=1)
-        df['wellNet'] = df.apply(
-            lambda x: 'Вне опорной сети' if (x.wellNet != x.wellNet) or (x.wellName in list_proj) else x.wellNet,
-            axis=1)
-        df.columns = dict_rename_columns.values()
-        logger.info('Writing result data to excel sheet')
-        sht.range('A1').options().value = df
-        df['Дата'] = pd.to_datetime(df['Дата'])
-        df.to_sql(name=name, con=db_result, if_exists='replace')
-
-    logger.info('Getting report table')
-    df_report = get_report(dict_result)
-    if "report" in new_wb.sheets:
-        xw.Sheet["report"].delete()
-    new_wb.sheets.add("report")
-    sht = new_wb.sheets("report")
-    sht.range('A1').options().value = df_report
-    logger.info('Saving results in excel file')
-    new_wb.save(f"{get_path()}\\output\\out_file_geometry.xlsx")
+        pass
+    new_wb.save(saving_path)
     # End print
     app1.kill()
     df_report.to_sql(name='report', con=db_result, if_exists='replace')
@@ -307,7 +140,6 @@ def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
     :param dict_result: словарь с результатами расчетов по всем объектам
-    :param dict_constant: словарь со статусами скважин
     :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом увеличения радиуса
     """
     dict_names_report = {'contour_k': 'Сценарий',
@@ -339,7 +171,7 @@ def get_report(dict_result):
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
                            colour='white', ncols=80):
         df = value[0]
-        df = df[df['fond'] != 'ПРОЕКТ']
+        df = df[df['wellNet'] != 'Выбрана в опорную сеть']
 
         dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
