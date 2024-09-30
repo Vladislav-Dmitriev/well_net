@@ -11,8 +11,8 @@ from dateutil.parser import parse as parseDate
 from loguru import logger
 from shapely.geometry import Point, LineString
 
-from src.calculation.auxiliary_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
-from src.calculation.geometry import check_intersection_area
+from src.calculation.support_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
+from src.calculation.shapely_geometry import check_intersection_area
 from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
 
 
@@ -51,7 +51,7 @@ def upload_input_data(dict_constant, dict_parameters):
         df = df.dropna(subset=['№ скважины'])
         # preprocessing NGT data
         df_input, df_exceptions = preprocessing_NGT(df, dict_parameters['min_length_horWell'])
-        logger.info("General preparing data")
+        logger.info("General input_output data")
         df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
@@ -69,7 +69,7 @@ def upload_input_data(dict_constant, dict_parameters):
                            sheet_name='Фонд')
         df = df.dropna(subset=['NSKV'])
         df_input, df_exceptions = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
-        logger.info("General preparing data")
+        logger.info("General input_output data")
         df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
@@ -627,7 +627,7 @@ def ngt_gdis_data(df_input, df_exceptions, dict_parameters):
         logger.info('Sheet with name "ГДИС" not found in data file')
         return df_input, df_exceptions
 
-    # get preparing dataframes
+    # get input_output dataframes
     if not (dict_parameters['gdis_option'] is None):
 
         df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]

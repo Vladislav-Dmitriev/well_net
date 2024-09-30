@@ -7,7 +7,7 @@
 
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from mplwidget import MplWidget
+from mpl_widget import MplWidget
 
 
 class Ui_MainWindow(object):

@@ -8,10 +8,10 @@
 /main.exe
 /main.spec
 __pycache__
-/src/visualization/qtsample.ui
+/src/gui/qtsample.ui
 /src/main.spec
 /Опорная_сеть.exe
-/src/visualization/qtsample2.ui
+/src/gui/qtsample2.ui
 /Методичка ОС.docx
 /src/dist/
 /src/build/

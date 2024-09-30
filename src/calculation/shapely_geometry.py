@@ -1,15 +1,8 @@
 import os
-import geopandas as gpd
 import numpy as np
 from loguru import logger
-import pandas as pd
 import geopandas as gpd
 from shapely.geometry import LineString, Point, Polygon, MultiPolygon
-from shapely.prepared import prep
-from shapely.ops import cascaded_union
-from shapely.ops import unary_union
-from shapely.plotting import plot_polygon
-import matplotlib.pyplot as plt
 
 
 @logger.catch(level='DEBUG')
@@ -121,52 +114,6 @@ def intersect_number(df_prod, df_inj_piez, percent, calc_option):
 
 
 @logger.catch(level='DEBUG')
-def optimization(df_prod, df_inj_piez):
-    """
-    Выделяется список нагнетательных/пьезометров из DataFrame продуктивных,
-    имеющих 1 пересечение. Оптимизация заключается в переопределении
-    списка нагн/пьез. с помощью исключения скважин, входящих
-    как в список пересечений, так и в список исключений, из df_optim
-    :param df_prod: DataFrame добывающих скважин
-    :param df_inj_piez: DataFrame нагнетательных/пьезометров
-    :return: Возвращает обновленный список нагнетательных/пьезометров
-    """
-    list_inj_piez_wells = []
-    # выделяем из столбца пересечений DataFrame продуктивных скважин строки, где добывающие охвачены только 1
-    # пьезометром, и включаем эти пьезометры в список
-    list_inj_piez_wells += list(df_prod[df_prod['number'] == 1]['intersection'].explode().unique())
-    # по выделенному списку пьезометров из DataFrame пьезометрических скважин выделяем добывающие, которые охвачены ими
-    list_prod_wells = df_inj_piez[
-        df_inj_piez['wellName'].isin(list_inj_piez_wells)]['intersection'].explode().unique()
-    # создаем dataframe оптимизации из DataFrame пьезометров, исключая те пьезометры, которые единственные охватывают
-    # одну из добывающих скважин, их в любом случае включаем в опорную сеть
-    df_optim = df_inj_piez[~df_inj_piez['wellName'].isin(list_inj_piez_wells)]
-    # из столбца пересечений DataFrame оптимизации удаляются все добывающие, которые охвачены только 1 пьезометром
-    df_optim.intersection = list(
-        map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim['intersection']))
-    # добавление столбца с кол-вом пересечений
-    df_optim.number = list(map(lambda x: len(x), df_optim['intersection']))
-    # отсеиваются одиночные скважины, не имеющие пересечений
-    df_optim = df_optim[df_optim['number'] > 0]
-    # в df_optim остались скважины с ненулевыми пересечениями
-    if not df_optim.empty:
-        #  создаем сет уникальных значений столбца с пересечениями и сортируем dataframe по кол-ву пересечений
-        set_visible_wells = set(df_optim['intersection'].explode().unique())
-        df_optim = df_optim.sort_values(by=['number'], ascending=True)
-        # на каждой итерации создается сет охваченных скважин без текущей строки, если он совпадает полным сетом,
-        # то текущая скважина удаляется, тк охваченные ею скважины есть в пересечениях других
-        for well in df_optim.wellName.values:
-            set_exception = set(df_optim[df_optim['wellName'] != well]['intersection'].explode().unique())
-            # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина
-            # и добавляется к списку нагн./пьез.
-            if set_exception == set_visible_wells:
-                df_optim = df_optim[df_optim.wellName != well]
-        list_inj_piez_wells += list(df_optim.wellName.values)
-
-    return list_inj_piez_wells
-
-
-@logger.catch(level='DEBUG')
 def add_shapely_types(df_input, mean_rad, coeff):
     """
     Добавление в DataFrame столбца с площадью охвата скважин, в зависимости от среднего радиуса охвата по контуру
@@ -193,7 +140,7 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
-# @logger.catch(level='DEBUG')
+@logger.catch(level='DEBUG')
 def get_contours(contours_path):
     """
     Получение многоугольников контуров, заданных пользователем

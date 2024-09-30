@@ -9,7 +9,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-from src.preparing.preparing_data import get_path
+from src.input_output.preparing_data import get_path
 
 
 class App(QtWidgets.QMainWindow):

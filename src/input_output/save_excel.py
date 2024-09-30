@@ -1,14 +1,10 @@
-import json
 import sqlite3 as sql
 import os
-import geopandas as gpd
 import pandas as pd
 import xlwings as xw
 from loguru import logger
 from tqdm import tqdm
-
-from src.calculation.geometry import check_intersection_area
-from src.calculation.auxiliary_functions import get_path
+from src.calculation.support_functions import get_path
 
 
 @logger.catch(level='DEBUG')

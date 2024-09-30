@@ -8,8 +8,8 @@ from loguru import logger
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 
-from src.calculation.geometry import check_intersection_area
-from src.calculation.auxiliary_functions import get_path
+from src.calculation.shapely_geometry import check_intersection_area
+from src.calculation.support_functions import get_path
 
 
 @logger.catch(level='DEBUG')

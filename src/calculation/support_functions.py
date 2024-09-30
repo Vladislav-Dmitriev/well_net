@@ -2,7 +2,6 @@ import json
 import math
 import os
 import sys
-
 import numpy as np
 import pandas as pd
 import yaml
@@ -262,7 +261,7 @@ def clean_work_horizon(df, count_of_hor):
     df_exception = pd.DataFrame()
     if (not count_of_hor is None) and (count_of_hor > 0) and (count_of_hor != ''):
         df['horizon_count'] = df['workHorizon'].apply(lambda x: len(set(x.replace(" ", "").split(","))))
-        df_exception = pd.concat([df_exception, df[df['horizon_count'] >= count_of_hor]],
+        df_exception = pd.concat([df_exception, df[df['horizon_count'] > count_of_hor]],
                                  axis=0, sort=False).reset_index(drop=True)
         df = df[df['horizon_count'] <= count_of_hor]
         df.drop(columns=['horizon_count'], axis=1, inplace=True)
@@ -270,12 +269,6 @@ def clean_work_horizon(df, count_of_hor):
     else:
         logger.info('Value of well`s horizon count was left as a default')
         return df, df_exception
-
-@logger.catch(level='DEBUG')
-def delete_logfiles(mypath):
-    list_logfiles = [f for f in os.listdir(path=mypath) if f.endswith('.log')]
-    for logfile in list_logfiles:
-        os.remove(f'{mypath}{logfile}')
 
 
 @logger.catch(level='DEBUG')

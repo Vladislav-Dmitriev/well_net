@@ -1,17 +1,16 @@
-import time
 import warnings
 
 import geopandas as gpd
 import pandas as pd
 from loguru import logger
 
-from src.calculation.auxiliary_functions import get_path, delete_logfiles
+from src.calculation.support_functions import get_path, delete_logfiles
 from src.calculation.calculation_wells import calculation
-from src.calculation.geometry import check_intersection_area, get_contours
-from src.preparing.dictionaries import dict_constant
-from src.preparing.preparing_data import upload_input_data, preparing_reservoir_properties
-from src.visualization.mapping import plot_results
-from src.visualization.print_in_excel import results_to_excel
+from src.calculation.shapely_geometry import check_intersection_area, get_contours
+from src.input_output.dictionaries import dict_constant
+from src.input_output.preparing_data import upload_input_data, preparing_reservoir_properties
+from src.gui.plot_design import plot_results
+from src.input_output.save_excel import results_to_excel
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -86,7 +85,7 @@ def module_gdis(dict_parameters, path_database):
 
     # Results___________________________________________________________________________________________________________
     plot_results(dict_result, df_exceptions, dict_parameters)
-    results_to_excel(dict_result, dict_parameters)
+    results_to_excel(dict_result, dict_parameters, path_database)
     logger.info("End of calculation")
 
     return path_database

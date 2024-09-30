@@ -4,13 +4,13 @@ import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
 
-from PyQt6 import QtWidgets, QtCore, QtGui
+from PyQt6 import QtWidgets, QtCore
 
 from qtsample import Ui_MainWindow
 from src.main import module_gdis
-from src.preparing.validate_widget_data import ValidatorData
+from src.gui.validate_widget_data import ValidatorData
 from pydantic import TypeAdapter, ValidationError
-from src.calculation.auxiliary_functions import get_path
+from src.calculation.support_functions import get_path
 
 
 class DataframeToTable(QtCore.QAbstractTableModel):
@@ -157,9 +157,11 @@ class MainWindow(QtWidgets.QMainWindow):
             current_item.setText(1, dict_previous[wrong_param])
 
     def message_box(self, message):
+
         QtWidgets.QMessageBox.about(self, 'Ошибка в значении введенного параметра', message)
 
     def buttons(self):
+
         # begin calculation button
         self.ui.calculate.clicked.connect(lambda: module_gdis(self.validate(self.dict_param, self.dict_param),
                                                               self.ui.path_result_db.text()))

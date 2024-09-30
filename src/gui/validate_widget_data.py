@@ -89,7 +89,19 @@ class ValidatorData(TypedDict):
             logger.info('Percent is not in range of acceptable values')
             raise ValueError('Enter a numeric value in the range 0-100')
 
-    @field_validator('str_to_float_empty', 'horizon_count', 'fluid_rate', 'limit_oilrate', 'min_research_time',
+    @field_validator('horizon_count')
+    def horizon_count_to_int(cls, horizon_count: str) -> float:
+        try:
+            float(horizon_count)
+            if str(horizon_count).isdigit():
+                return float(horizon_count)
+            else:
+                raise ValueError('Value must be positive integer')
+        except ValueError:
+            logger.info('Value must be positive integer')
+            raise ValueError('Value must be positive integer')
+
+    @field_validator('str_to_float_empty', 'fluid_rate', 'limit_oilrate', 'min_research_time',
                      'max_research_time')
     def str_to_empty_or_float(cls, str_to_float_empty: str):
         try:
