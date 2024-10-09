@@ -1,5 +1,4 @@
 from PyQt6.QtWidgets import *
-from PyQt6.uic import loadUi
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import (NavigationToolbar2QT as NavigationToolbar)
 from matplotlib.figure import Figure

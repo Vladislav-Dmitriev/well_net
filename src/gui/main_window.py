@@ -3,14 +3,38 @@ import os
 import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
-
-from PyQt6 import QtWidgets, QtCore
-
+from datetime import datetime
+from loguru import logger
+from PyQt6 import QtWidgets, QtCore, QtGui
 from qtsample import Ui_MainWindow
 from src.main import module_gdis
-from src.gui.validate_widget_data import ValidatorData
-from pydantic import TypeAdapter, ValidationError
+from src.gui.validate_widget_data import ValidateData, ValidatePath
+from pydantic import ValidationError
 from src.calculation.support_functions import get_path
+
+
+class LogWindow(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle('Выполнение расчета')
+        self.setGeometry(100, 100, 600, 400)
+
+        self.log_text = QtWidgets.QTextEdit(self)
+        self.log_text.setReadOnly(True)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.log_text)
+        self.setLayout(layout)
+
+    def append_log(self, message):
+        """
+        Add text to the log
+        :param message:
+        :return:
+        """
+        self.log_text.append(message)
+        self.log_text.ensureCursorVisible()
 
 
 class DataframeToTable(QtCore.QAbstractTableModel):
@@ -41,17 +65,36 @@ class DataframeToTable(QtCore.QAbstractTableModel):
         return None
 
 
+class FileDirectWidget(QtWidgets.QWidget):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.line_edit = QtWidgets.QLineEdit(self)
+        self.button_path = QtWidgets.QPushButton("...", self)
+        self.button_path.setMaximumWidth(30)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.addWidget(self.line_edit)
+        layout.addWidget(self.button_path)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+        self.line_edit.setText(os.path.join(get_path(), 'input', 'Фонд_Новопортовское.xlsx'))
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.treeWidget.expandAll()
-        self.database_path = f'{get_path()}\\input\\wellnet_input.db'
-        self.ta = TypeAdapter(ValidatorData)
+        self.filedir_widget()
         self.add_combobox()
-        self.dict_param = self.get_dict_qtreewidget()
         self.set_default_params()
+        self.dict_param = self.get_dict_qtreewidget()
+        self.filedir_actions()
+        self.combobox_actions()
+        self.database_path = f'{get_path()}\\output\\wellnet_default.db'
         self.combobox_scen_switch()
         self.buttons()
         self.item_clicked()
@@ -63,77 +106,70 @@ class MainWindow(QtWidgets.QMainWindow):
         Загрузка параметров из базы данных по умолчанию
         :return: виджет со значениями параметров расчета
         """
-        path = f'{get_path()}\\input\\wellnet_input.db'
+        path = f'{get_path()}\\output\\wellnet_default.db'
         connection = sql.connect(path)
         dict_default = pd.read_sql_query("SELECT * FROM parameters", connection).to_dict(orient='records')[0]
         list_boolean_params = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту',
                                'Учет границ исслед. ННС/ГС', 'Учет % от каждого фонда']
         list_combobox_items = ['Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
+        list_custom_items = ['Файл с данными']
 
         iterator = QtWidgets.QTreeWidgetItemIterator(self.ui.treeWidget)
         while iterator.value():
             item = iterator.value()
             if item.childCount() == 0:
-                if (item.text(0) not in list_combobox_items) and (item.text(0) not in list_boolean_params):
-                    item.setText(1, str(dict_default[f'{item.text(0)}']))
+                if item.text(0) in list_custom_items:
+                    self.ui.treeWidget.itemWidget(item, 1).line_edit.setText(dict_default[item.text(0)])
                 elif item.text(0) in list_combobox_items:
                     self.ui.treeWidget.itemWidget(item, 1).setCurrentText(dict_default[item.text(0)])
-                else:
+                elif item.text(0) in list_boolean_params:
                     self.ui.treeWidget.itemWidget(item, 1).setCurrentText(dict_default[item.text(0)])
+                else:
+                    item.setText(1, str(dict_default[f'{item.text(0)}']))
 
             iterator += 1
 
         connection.close()
 
-    def table_names(self):
-        """
-        Считывание из БД по умолчанию таблиц результатов расчета для добавления в ComboBox
-        :return: список с именами таблиц результатов из БД по умолчанию
-        """
-        connection = sql.connect(self.database_path)
-        cursor = connection.cursor()
-        list_of_names = [x[0] for x in
-                         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
-                         x[0] != 'parameters' and x[0] != 'report']
-
-        return list_of_names
-
-    def get_result_table(self, value):
-        """
-        Загрузка и вывод таблиц в виджет
-        :param value:
-        :return:
-        """
-        connection = sql.connect(self.database_path)
-        df = pd.read_sql_query(f'SELECT * FROM "{value}"', connection)
-        df = df.drop(columns=['index'])
-        df = df.fillna(0)
-        connection.close()
-        model = DataframeToTable(df)
-        self.ui.results.setModel(model)
+        self.ui.path_result_db.setText(f'{get_path()}\\output\\{os.getlogin()}_'
+                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
 
     def menu_(self):
         """
-        Меню
-        :return:
+        :return: действия на кнопки меню
         """
         self.ui.readme_txt.triggered.connect(lambda: os.startfile(f'{get_path()}//README.txt'))
         self.ui.reference.triggered.connect(lambda: os.startfile(f'{get_path()}//Методичка ОС.docx'))
         self.ui.exit.triggered.connect(QtCore.QCoreApplication.instance().quit)
         self.ui.open_project.triggered.connect(lambda:
                                                QtWidgets.QFileDialog.getOpenFileName(self,
-                                                                                          "Выберите файл с"
-                                                                                          " результатами предыдущих"
-                                                                                          " расчетов",
-                                                                                          f'{get_path()}\\output',
+                                                                                     "Выберите файл с"
+                                                                                     " результатами предыдущих"
+                                                                                     " расчетов",
+                                                                                     f'{get_path()}\\output',
                                                                                      filter='Database (*.db)'))
+
+    def validate_path_db(self):
+        """
+        Если пользователь вводит несуществующую директорию, путь формируется автоматически.
+        :return: Заполняет поле пути сохранения базы данных после расчета
+        """
+        try:
+            path_save_db = ValidatePath(path=self.ui.path_result_db.text()).path
+            self.ui.path_result_db.setText(path_save_db)
+        except ValidationError as e:
+            self.message_box(f'Incorrect input parameter: "Сохранение результатов".'
+                             f' The parameter value will be set to default.')
+            self.ui.path_result_db.setText(f'{get_path()}\\output\\{os.getlogin()}_'
+                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
 
     def validate(self, dict_params, dict_previous):
         """
         Функция валидации параметров расчета
         :param dict_params:
-        :param dict_previous:
-        :return:
+        :param dict_previous: словарь со значениями параметров до изменения
+        :return: если введенный пользователем параметр имеет некорректное значение,
+         то возвращаются параметры из старого словаря
         """
         list_rename = ['data_file', 'calculation_scenario', 'gdis_option', 'calc_option', 'percent',
                        'horizon_count', 'mult_coef', 'limit_radius_coef', 'min_length_horWell', 'water_cut',
@@ -144,7 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         list_visible_names = list(dict_params.keys())
         dict_params = dict(zip(list_rename, list(dict_params.values())))
         try:
-            return self.ta.validate_python(dict_params)
+            return ValidateData(**dict_params).dict()
         except ValidationError as exc:
             dict_errors = exc.errors()[0]
             wrong_param_index = list_rename.index(dict_errors['loc'][0])
@@ -154,27 +190,73 @@ class MainWindow(QtWidgets.QMainWindow):
             current_item = self.ui.treeWidget.findItems(wrong_param, QtCore.Qt.MatchFlag.MatchContains |
                                                         QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
             # возвращение предыдущего значения ячейки при неверно введенном формате параметра
-            current_item.setText(1, dict_previous[wrong_param])
+            if isinstance(self.ui.treeWidget.itemWidget(current_item, 1), FileDirectWidget):
+                self.ui.treeWidget.itemWidget(current_item, 1).layout().itemAt(0).widget().setText(
+                    dict_previous[wrong_param])
+            else:
+                current_item.setText(1, dict_previous[wrong_param])
+
+    def filedir_widget(self):
+        """
+        Добавление виджета с помощью класса в item с путем к файлу данных для расчета
+        :return:
+        """
+        filedir_item = self.ui.treeWidget.findItems('Файл с данными', QtCore.Qt.MatchFlag.MatchContains |
+                                               QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+        self.ui.treeWidget.setItemWidget(filedir_item, 1, FileDirectWidget(self))
+
+    def filedir_actions(self):
+        """
+        Вызов функции валидации словаря параметров при изменении пути к файлу с данными вручную и
+        открытие диалогового окна для выбора файла с данными, показаны файлы только формата .xlsx
+        :return:
+        """
+        filedir_item = self.ui.treeWidget.findItems('Файл с данными', QtCore.Qt.MatchFlag.MatchContains |
+                                                    QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+        (self.ui.treeWidget.itemWidget(filedir_item, 1).layout().itemAt(0).widget().
+         editingFinished.connect(lambda: self.update_dict()))
+        (self.ui.treeWidget.itemWidget(filedir_item, 1).layout().itemAt(1).widget().
+         pressed.connect(lambda: self.open_filedialog(filedir_item)))
+
+    def open_filedialog(self, filedir_item):
+        """
+        Функция открытия диалогового окна для помещения пути файла с данными в виджет параметров расчета
+        :param filedir_item: item, в котором находится виджет с путем к файлу с данными
+        :return:
+        """
+        self.ui.treeWidget.itemWidget(filedir_item, 1).layout().itemAt(0).widget().setText(
+            QtWidgets.QFileDialog.getOpenFileName(self, 'Выберите файл с данными',
+                                                  f'{get_path()}\\input', filter='Excel Files(*.xlsx)')[0])
+        self.update_dict()
 
     def message_box(self, message):
-
+        """
+        :param message: текст сообщения для пользователя
+        :return: выводится окно об ошибочном вводе параметра расчета
+        """
         QtWidgets.QMessageBox.about(self, 'Ошибка в значении введенного параметра', message)
 
     def buttons(self):
-
+        """
+        :return: действия на все кнопки в окне приложения
+        """
         # begin calculation button
-        self.ui.calculate.clicked.connect(lambda: module_gdis(self.validate(self.dict_param, self.dict_param),
-                                                              self.ui.path_result_db.text()))
+        self.ui.calculate.clicked.connect(self.main_calc_function)
+
         # save current table in Excel
         self.ui.save_table.clicked.connect(lambda: self.table_to_excel(
             QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
-                                                  f'{get_path()}\\output\\well_net.xlsx',
+                                                  f'{get_path()}\\output\\{self.dict_param['Сценарий расчета']}'
+                                                  f'_{os.getlogin()}_'
+                                                  f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx',
                                                   filter='Excel (*.xlsx *.xls)'),
             [self.ui.combobox_scenario.currentText()]))
         # save all tables in Excel
         self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(
             QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
-                                                  f'{get_path()}\\output\\well_net.xlsx',
+                                                  f'{get_path()}\\output\\{self.dict_param['Сценарий расчета']}'
+                                                  f'_{os.getlogin()}_'
+                                                  f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx',
                                                   filter='Excel (*.xlsx *.xls)'),
             [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + ["report"]))
         # choosing directory to save database
@@ -182,21 +264,31 @@ class MainWindow(QtWidgets.QMainWindow):
                                                  self.ui.path_result_db.
                                                  setText(QtWidgets.QFileDialog.getSaveFileName(
                                                      self, "Директория сохранения результатов расчета",
-                                                     f'{get_path()}\\output\\wellnet_result.db',
+                                                     f'{get_path()}\\output\\{os.getlogin()}_'
+                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db',
                                                      filter='Database (*.db)')[0]))
+        # check editing finished QLineEdit with database path
+        self.ui.path_result_db.editingFinished.connect(self.validate_path_db)
 
+    def main_calc_function(self):
+        """
+        :return: вызов функции расчета опорной сетки, автоматическое изменение пути сохранения БД
+        """
+        self.database_path = self.ui.path_result_db.text()
+        module_gdis(self.validate(self.dict_param, self.dict_param), self.database_path)
+        self.combobox_scen_switch()
 
     def table_to_excel(self, path_to_save, list_names):
         """
         Сохранение таблицы/таблиц в Excel файл
         :param path_to_save: путь к БД, сформированной после расчета
-        :param list_names:
-        :return:
+        :param list_names: список имен таблиц в БД, откуда необходимо извлечь данные
+        :return: запись в Excel
         """
         if self.ui.path_result_db.text() != '':
             path = self.ui.path_result_db.text()
         else:
-            path = f'{get_path()}\\input\\wellnet_input.db'
+            path = self.database_path
         connection = sql.connect(path)
         app1 = xw.App(visible=False)
         new_wb = xw.Book()
@@ -213,12 +305,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def write_dict(self):
         """
-        Функция считывает параметры расчета из виджета и записывает их в БД
-        :return:
+        :return: считывает параметры расчета из виджета и записывает их в БД
         """
         # подключение к БД
-        path = f'{get_path()}\\output\\wellnet_result.db'
-        connection = sql.connect(path)
+        connection = sql.connect(self.database_path)
         # запись параметров расчета по умолчанию из подготовленной БД
         cursor = connection.cursor()
         cursor.execute('''DROP TABLE IF EXISTS parameters''')
@@ -248,7 +338,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def item_clicked(self):
         """
-        При нажатии на ячейку в столбце доступном для редактирования открываетсся возможность редактировать ее значение
+        При нажатии на ячейку в столбце доступном для редактирования открывается возможность редактировать ее значение
         :return: редактирование ячейки пользователем
         """
         # check clicked item of QTreeWidget
@@ -258,30 +348,52 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def combobox_scen_switch(self):
         """
-        Удаление предыдущих item из combobox переключения сценариев расчета
-        :return:
+        :return: удаление предыдущих item из combobox переключения сценариев расчета и добавление новых
         """
         # удаление текущих item из combobox
-        for i in range(self.ui.combobox_scenario.count()):
-            self.ui.combobox_scenario.removeItem(i)
+        self.ui.combobox_scenario.clear()
 
-        list_scen = self.table_names()
+        connection = sql.connect(self.database_path)
+        cursor = connection.cursor()
+        list_scen = [x[0] for x in
+                         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
+                         x[0] != 'parameters' and x[0] != 'report']
+        # add combobox items by current calculation
         for scen in list_scen:
             self.ui.combobox_scenario.addItem(scen)
-        path = f'{get_path()}\\input\\wellnet_input.db'
-        connection = sql.connect(path)
-        df = pd.read_sql_query(f'SELECT * FROM "{list_scen[0]}"', connection)
-        df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
-        df = df.drop(columns=['index'])
-        df = df.fillna(0)
-        df_report = df_report.drop(columns=['index'])
-        df_report = df_report.fillna(0)
-        connection.close()
-        model = DataframeToTable(df)
-        model_report = DataframeToTable(df_report)
-        self.ui.results.setModel(model)
-        self.ui.report.setModel(model_report)
-        self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
+
+        if list_scen:
+            df = pd.read_sql_query(f'SELECT * FROM "{list_scen[0]}"', connection)
+            df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
+            df = df.drop(columns=['index'])
+            df = df.fillna(0)
+            df_report = df_report.drop(columns=['index'])
+            df_report = df_report.fillna(0)
+            connection.close()
+            model = DataframeToTable(df)
+            model_report = DataframeToTable(df_report)
+            self.ui.results.setModel(model)
+            self.ui.results.resizeColumnsToContents()
+            self.ui.report.setModel(model_report)
+            self.ui.report.resizeColumnsToContents()
+            self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
+
+    def get_result_table(self, table_name):
+        """
+        Загрузка и вывод таблиц в виджет
+        :param table_name: имя таблицы в БД, откуда необходимо выгрузить данные
+        :return: помещает данные из таблицы в БД в виджет окна приложения
+        """
+        if table_name:
+            connection = sql.connect(self.database_path)
+            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
+            df = df.drop(columns=['index'])
+            df = df.fillna(0)
+            connection.close()
+
+            model = DataframeToTable(df)
+            self.ui.results.setModel(model)
+            self.ui.results.resizeColumnsToContents()
 
     def combobox_scenario(self, value):
         """
@@ -350,19 +462,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def get_dict_qtreewidget(self):
         """
-
-        :return:
+        Считывание всех параметров с виджета для ввода параметров
+        :return: словарь с параметрами расчета
         """
         dict_qtreewiget = {}
         list_combobox_items = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту', 'Учет границ исслед. ННС/ГС',
                                'Учет % от каждого фонда', 'Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
-        self.ui.treeWidget.update()
+        list_custom_items = ['Файл с данными']
         iterator = QtWidgets.QTreeWidgetItemIterator(self.ui.treeWidget)
         while iterator.value():
             item = iterator.value()
             if item.childCount() == 0:
                 if item.text(0) in list_combobox_items:
                     dict_qtreewiget[f'{item.text(0)}'] = self.ui.treeWidget.itemWidget(item, 1).currentText()
+                elif item.text(0) in list_custom_items:
+                    dict_qtreewiget[f'{item.text(0)}'] = (self.ui.treeWidget.itemWidget(item, 1).layout().
+                                                          itemAt(0).widget().text())
                 else:
                     dict_qtreewiget[f'{item.text(0)}'] = item.text(1)
             iterator += 1
@@ -372,7 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_combobox(self):
         """
         Добавление виджета ComboBox в Item, где есть только ограниченный выбор параметров расчета
-        :return:
+        :return: отредактированные combobox в виджете параметров
         """
         list_combobox_items = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту', 'Учет границ исслед. ННС/ГС',
                                'Учет % от каждого фонда', 'Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
@@ -384,44 +499,67 @@ class MainWindow(QtWidgets.QMainWindow):
                 combobox.addItem('Оптимальная сетка')
                 combobox.addItem('Регулярная сетка')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_scenario)
                 continue
             elif name == 'Распред-ие ГДИС скв. по годам':
                 combobox.addItem('0')
                 combobox.addItem('1')
                 combobox.addItem('2')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_gdis)
                 continue
-
             elif name == 'Критерий охвата траектории ГС':
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_coverage_traj_hw)
                 continue
-
             elif name == 'Учет Q ср. по объекту':
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_average_flowrate)
                 continue
             elif name == 'Учет границ исслед. ННС/ГС':
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_time_boundaries)
                 continue
             else:
                 combobox.addItem('Да')
                 combobox.addItem('Нет')
                 self.ui.treeWidget.setItemWidget(current_item, 1, combobox)
-                combobox.currentTextChanged.connect(self.combobox_criteria_y_n)
                 continue
+
+    def combobox_actions(self):
+        """
+        Добавление сигналов на изменение QComboBox параметров расчета
+        :return:
+        """
+        list_combobox_items = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту', 'Учет границ исслед. ННС/ГС',
+                               'Учет % от каждого фонда', 'Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
+        for name in list_combobox_items:
+            item = self.ui.treeWidget.findItems(name, QtCore.Qt.MatchFlag.MatchContains |
+                                                        QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+            if name == 'Сценарий расчета':
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+                continue
+            elif name == 'Распред-ие ГДИС скв. по годам':
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+                continue
+            elif name == 'Критерий охвата траектории ГС':
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+                continue
+            elif name == 'Учет Q ср. по объекту':
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+                continue
+            elif name == 'Учет границ исслед. ННС/ГС':
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+                continue
+            else:
+                self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
+    window.setWindowTitle('Модуль ОС')
+    window.setWindowIcon(QtGui.QIcon('Icon.png'))
+
     sys.exit(app.exec())

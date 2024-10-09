@@ -203,16 +203,7 @@ def core_optim_mesh(list_prod_exception, path_property, percent, mean_rad, coeff
                                   * df_result['time_coef'])  # время исследования в сут через min расстояние
 
     # filter and delete wells, which don't fit the parameters limit research time
-    if limit_research_time and (not min_time_research is None) and (not max_time_research is None):
-
-        df_result['research_time'] = df_result.apply(
-            lambda x: max_time_research if (
-                    x['well type'] == 'vertical' and x['research_time'] > max_time_research) else
-            x['research_time'], axis=1)
-        df_result['research_time'] = df_result.apply(
-            lambda x: 2 * max_time_research if (
-                    x['well type'] == 'horizontal' and x['research_time'] > 2 * max_time_research) else
-            x['research_time'], axis=1)
+    if limit_research_time and (min_time_research != ''):
         df_result['research_time'] = df_result.apply(
             lambda x: min_time_research if (
                     x['well type'] == 'vertical' and x['research_time'] < min_time_research) else
@@ -222,6 +213,16 @@ def core_optim_mesh(list_prod_exception, path_property, percent, mean_rad, coeff
                                                      (x['well type'] == 'horizontal' and x['research_time'] <
                                                       2 * min_time_research) else
                                                      x['research_time'], axis=1)
+
+    if limit_research_time and (max_time_research != ''):
+        df_result['research_time'] = df_result.apply(
+            lambda x: max_time_research if (
+                    x['well type'] == 'vertical' and x['research_time'] > max_time_research) else
+            x['research_time'], axis=1)
+        df_result['research_time'] = df_result.apply(
+            lambda x: 2 * max_time_research if (
+                    x['well type'] == 'horizontal' and x['research_time'] > 2 * max_time_research) else
+            x['research_time'], axis=1)
 
     df_result['oil_loss'] = 0
     df_result['gas_loss'] = 0

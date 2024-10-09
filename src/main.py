@@ -11,6 +11,7 @@ from src.input_output.dictionaries import dict_constant
 from src.input_output.preparing_data import upload_input_data, preparing_reservoir_properties
 from src.gui.plot_design import plot_results
 from src.input_output.save_excel import results_to_excel
+from src.input_output.save_database import results_to_db
 
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -22,8 +23,8 @@ def module_gdis(dict_parameters, path_database):
     # delete previous logfiles
     delete_logfiles(f'{application_path}\\output\\')
     # add logs to file
-    logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG',
-               format="{time} {level} {message}", rotation='100KB')
+    log_handler = logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG',
+                             format="{time} {level} {message}", rotation='100KB')
     logger.info("Starting calculation")
 
     # Upload data, initial data preparation_____________________________________________________________________________
@@ -84,8 +85,11 @@ def module_gdis(dict_parameters, path_database):
                                        list_exception, dict_parameters))
 
     # Results___________________________________________________________________________________________________________
-    plot_results(dict_result, df_exceptions, dict_parameters)
-    results_to_excel(dict_result, dict_parameters, path_database)
-    logger.info("End of calculation")
+    # plot_results(dict_result, df_exceptions, dict_parameters)
+    # results_to_excel(dict_result, dict_parameters, script)
+    results_to_db(dict_result, dict_parameters, path_database)
 
-    return path_database
+    logger.info("End of calculation")
+    logger.remove(log_handler)
+
+    pass
