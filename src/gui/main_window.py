@@ -4,13 +4,13 @@ import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
 from datetime import datetime
-from loguru import logger
 from PyQt6 import QtWidgets, QtCore, QtGui
-from qtsample import Ui_MainWindow
+from qtsample import UIMainWindow
 from src.main import module_gdis
 from src.gui.validate_widget_data import ValidateData, ValidatePath
 from pydantic import ValidationError
 from src.calculation.support_functions import get_path
+from src.gui.mpl_widget import MplWidget
 
 
 class LogWindow(QtWidgets.QDialog):
@@ -85,16 +85,16 @@ class FileDirectWidget(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        self.ui = UIMainWindow()
+        self.ui.setup_ui(self)
         self.ui.treeWidget.expandAll()
         self.filedir_widget()
         self.add_combobox()
+        self.database_path = f'{get_path()}\\output\\wellnet_default.db'
         self.set_default_params()
         self.dict_param = self.get_dict_qtreewidget()
         self.filedir_actions()
         self.combobox_actions()
-        self.database_path = f'{get_path()}\\output\\wellnet_default.db'
         self.combobox_scen_switch()
         self.buttons()
         self.item_clicked()
@@ -106,8 +106,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Загрузка параметров из базы данных по умолчанию
         :return: виджет со значениями параметров расчета
         """
-        path = f'{get_path()}\\output\\wellnet_default.db'
-        connection = sql.connect(path)
+        connection = sql.connect(self.database_path)
         dict_default = pd.read_sql_query("SELECT * FROM parameters", connection).to_dict(orient='records')[0]
         list_boolean_params = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту',
                                'Учет границ исслед. ННС/ГС', 'Учет % от каждого фонда']
@@ -132,7 +131,7 @@ class MainWindow(QtWidgets.QMainWindow):
         connection.close()
 
         self.ui.path_result_db.setText(f'{get_path()}\\output\\{os.getlogin()}_'
-                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
+                                       f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
 
     def menu_(self):
         """
@@ -141,13 +140,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.readme_txt.triggered.connect(lambda: os.startfile(f'{get_path()}//README.txt'))
         self.ui.reference.triggered.connect(lambda: os.startfile(f'{get_path()}//Методичка ОС.docx'))
         self.ui.exit.triggered.connect(QtCore.QCoreApplication.instance().quit)
-        self.ui.open_project.triggered.connect(lambda:
-                                               QtWidgets.QFileDialog.getOpenFileName(self,
-                                                                                     "Выберите файл с"
-                                                                                     " результатами предыдущих"
-                                                                                     " расчетов",
-                                                                                     f'{get_path()}\\output',
-                                                                                     filter='Database (*.db)'))
+        self.ui.open_project.triggered.connect(self.load_database)
+
+    def load_database(self):
+        """
+        Загрузка предыдущих расчетов вместе с параметрами
+        :return:
+        """
+        self.database_path = QtWidgets.QFileDialog.getOpenFileName(self,
+                                                                   "Выберите файл с результатами предыдущих расчетов",
+                                                                   f'{get_path()}\\output', filter='Database (*.db)')[0]
+        self.set_default_params()
+        self.combobox_scen_switch()
 
     def validate_path_db(self):
         """
@@ -156,12 +160,18 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         try:
             path_save_db = ValidatePath(path=self.ui.path_result_db.text()).path
+            # warning delete database if exist
+            if os.path.isfile(path_save_db):
+                QtWidgets.QMessageBox.about(self, 'Сохранение результатов расчета',
+                                            'Внимание! Такой файл уже существует.'
+                                            ' Измените путь сохранения результатов или предыдущие'
+                                            ' результаты будут удалены при запуске расчета')
             self.ui.path_result_db.setText(path_save_db)
-        except ValidationError as e:
+        except ValidationError:
             self.message_box(f'Incorrect input parameter: "Сохранение результатов".'
                              f' The parameter value will be set to default.')
             self.ui.path_result_db.setText(f'{get_path()}\\output\\{os.getlogin()}_'
-                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
+                                           f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db')
 
     def validate(self, dict_params, dict_previous):
         """
@@ -186,7 +196,7 @@ class MainWindow(QtWidgets.QMainWindow):
             wrong_param_index = list_rename.index(dict_errors['loc'][0])
             wrong_param = list_visible_names[wrong_param_index]
             error_message = dict_errors['msg'].split(',')[-1]
-            self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message.strip().capitalize()}')
+            self.message_box(f'Incorrect input parameter: {wrong_param}. {error_message.capitalize()}')
             current_item = self.ui.treeWidget.findItems(wrong_param, QtCore.Qt.MatchFlag.MatchContains |
                                                         QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
             # возвращение предыдущего значения ячейки при неверно введенном формате параметра
@@ -202,7 +212,7 @@ class MainWindow(QtWidgets.QMainWindow):
         :return:
         """
         filedir_item = self.ui.treeWidget.findItems('Файл с данными', QtCore.Qt.MatchFlag.MatchContains |
-                                               QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+                                                    QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
         self.ui.treeWidget.setItemWidget(filedir_item, 1, FileDirectWidget(self))
 
     def filedir_actions(self):
@@ -275,7 +285,7 @@ class MainWindow(QtWidgets.QMainWindow):
         :return: вызов функции расчета опорной сетки, автоматическое изменение пути сохранения БД
         """
         self.database_path = self.ui.path_result_db.text()
-        module_gdis(self.validate(self.dict_param, self.dict_param), self.database_path)
+        module_gdis(self.validate(self.dict_param, self.dict_param), list(self.dict_param.keys()), self.database_path)
         self.combobox_scen_switch()
 
     def table_to_excel(self, path_to_save, list_names):
@@ -294,7 +304,7 @@ class MainWindow(QtWidgets.QMainWindow):
         new_wb = xw.Book()
         for name in list_names:
             df = pd.read_sql_query(f'SELECT * FROM "{name}"', connection)
-            df = df.drop(columns=['index'])
+            df = df.drop(columns=['index', 'polygon'])
             df = df.fillna(0)
             new_wb.sheets.add(f"{name}")
             sht = new_wb.sheets(f"{name}")
@@ -346,6 +356,48 @@ class MainWindow(QtWidgets.QMainWindow):
         # check change in item and update global dictionary of parameters
         self.ui.treeWidget.itemChanged.connect(self.update_dict)
 
+    def clear_layout(self, layout):
+        """
+        Удаление текущей картинки, чтобы разместить новую
+        :return:
+        """
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()  # Корректное удаление виджета
+            else:
+                self.clear_layout(item.layout())  # Если это layout, рекурсивно очищаем
+
+    def rounding(self, df):
+        """
+        Метод возвращает округленные значения в DataFrame
+        :param df: DataFrame сводки по сценариям или результат текущего сценария
+        :return:
+        """
+        if df.columns[0] == '№ скважины':
+            list_rounding_result = ['Координата X', 'Координата забоя Х (по траектории)', 'Координата Y',
+                                    'Координата забоя Y (по траектории)', 'Дебит нефти (ТР), т/сут',
+                                    'Дебит природного газа, тыс.м3/сут', 'Приемистость (ТР), м3/сут',
+                                    'Обводненность (ТР), % (объём)', 'Дебит конденсата газа, т/сут',
+                                    'Средний радиус по объекту, м', 'Коэффициент для расчет времени исследования',
+                                    'Проницаемость, мД', 'Начальное пластовое давление (карты изобар), атм',
+                                    'Время исследования, сут', 'Потери нефти, т', 'Потери газа, тыс. м3',
+                                    'Потери закачки, м3', 'Процент охвата площади объекта',
+                                    'Доля пьезометров в опорной сети', 'Доля нагнетательных в опорной сети',
+                                    'Доля добывающих в опорной сети', 'Доля газовых добывающих скважин в опорной сети',
+                                    'Средний дебит нефти по объекту, т/сут']
+            df[list_rounding_result] = df[list_rounding_result].round(2)
+            return df
+        else:
+            list_rounding_report = ['Средний радиус', 'Среднее время исследования', 'Потери нефти 1 год, т',
+                                    'Потери нефти 2 год, т', 'Потери нефти 3 год, т',
+                                    'Потери закачки жидкости 1 год, м3', 'Потери закачки жидкости 2 год, м3',
+                                    'Потери закачки жидкости 3 год, м3', 'Потери по добыче газа 1 год, тыс.м3',
+                                    'Потери по добыче газа 2 год, тыс.м3', 'Потери по добыче газа 3 год, тыс.м3']
+            df[list_rounding_report] = df[list_rounding_report].round(2)
+            return df
+
     def combobox_scen_switch(self):
         """
         :return: удаление предыдущих item из combobox переключения сценариев расчета и добавление новых
@@ -356,8 +408,8 @@ class MainWindow(QtWidgets.QMainWindow):
         connection = sql.connect(self.database_path)
         cursor = connection.cursor()
         list_scen = [x[0] for x in
-                         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
-                         x[0] != 'parameters' and x[0] != 'report']
+                     cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
+                     x[0] != 'parameters' and x[0] != 'report']
         # add combobox items by current calculation
         for scen in list_scen:
             self.ui.combobox_scenario.addItem(scen)
@@ -365,18 +417,32 @@ class MainWindow(QtWidgets.QMainWindow):
         if list_scen:
             df = pd.read_sql_query(f'SELECT * FROM "{list_scen[0]}"', connection)
             df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
-            df = df.drop(columns=['index'])
             df = df.fillna(0)
+            list_horizons = list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode()))
+            df = df.drop(columns=['index'])
+            for hor in list_horizons:
+                self.ui.combobox_horizon.addItem(hor)
+            self.clear_layout(self.ui.tab_2.layout())
+            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
+                                                       self.dict_param['Сценарий расчета']))
+            df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
+            df = self.rounding(df)
             df_report = df_report.drop(columns=['index'])
             df_report = df_report.fillna(0)
-            connection.close()
-            model = DataframeToTable(df)
+            df_report = self.rounding(df_report)
+            model = DataframeToTable(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
             model_report = DataframeToTable(df_report)
             self.ui.results.setModel(model)
             self.ui.results.resizeColumnsToContents()
             self.ui.report.setModel(model_report)
             self.ui.report.resizeColumnsToContents()
             self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
+            self.ui.combobox_horizon.currentTextChanged.connect(self.get_filtered_table)
+        connection.close()
 
     def get_result_table(self, table_name):
         """
@@ -387,11 +453,49 @@ class MainWindow(QtWidgets.QMainWindow):
         if table_name:
             connection = sql.connect(self.database_path)
             df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
+            connection.close()
             df = df.drop(columns=['index'])
             df = df.fillna(0)
-            connection.close()
+            df = self.rounding(df)
+            list_horizons = list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode()))
+            for hor in list_horizons:
+                self.ui.combobox_horizon.addItem(hor)
+            self.clear_layout(self.ui.tab_2.layout())
+            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
+                                                       self.dict_param['Сценарий расчета']))
+            df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
+            df = self.rounding(df)
+            model = DataframeToTable(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
+            self.ui.results.setModel(model)
+            self.ui.results.resizeColumnsToContents()
 
-            model = DataframeToTable(df)
+    def get_filtered_table(self, horizon):
+        """
+        Фильтр для таблицы результатов расчета по определенному объекту
+        :param horizon: объект, выбранный пользователем
+        :return:
+        """
+        table_name = self.ui.combobox_scenario.currentText()
+        if table_name:
+            connection = sql.connect(self.database_path)
+            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
+            connection.close()
+            df = df.drop(columns=['index'])
+            df = df.fillna(0)
+            self.clear_layout(self.ui.tab_2.layout())
+            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
+                                                       self.dict_param['Сценарий расчета']))
+            df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
+            df = self.rounding(df)
+            model = DataframeToTable(pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
             self.ui.results.setModel(model)
             self.ui.results.resizeColumnsToContents()
 
@@ -536,7 +640,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                'Учет % от каждого фонда', 'Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
         for name in list_combobox_items:
             item = self.ui.treeWidget.findItems(name, QtCore.Qt.MatchFlag.MatchContains |
-                                                        QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
+                                                QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
             if name == 'Сценарий расчета':
                 self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
                 continue

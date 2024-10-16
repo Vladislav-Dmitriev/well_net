@@ -17,7 +17,13 @@ warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-def module_gdis(dict_parameters, path_database):
+def module_gdis(dict_parameters, list_name_params, path_database):
+    """
+    :param dict_parameters:
+    :param list_name_params:
+    :param path_database:
+    :return:
+    """
     # path to application
     application_path = get_path()
     # delete previous logfiles
@@ -85,9 +91,7 @@ def module_gdis(dict_parameters, path_database):
                                        list_exception, dict_parameters))
 
     # Results___________________________________________________________________________________________________________
-    # plot_results(dict_result, df_exceptions, dict_parameters)
-    # results_to_excel(dict_result, dict_parameters, script)
-    results_to_db(dict_result, dict_parameters, path_database)
+    results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database)
 
     logger.info("End of calculation")
     logger.remove(log_handler)

@@ -27,7 +27,7 @@ class ValidateData(BaseModel):
     gdis_option: str = Field(..., description='gdis_option')
     calc_option: bool = Field(..., description='calc_option')
     percent: float = Field(..., description='percent')
-    horizon_count: float = Field(..., description='horizon_count')
+    horizon_count: int = Field(..., description='horizon_count')
     mult_coef: list = Field(..., description='mult_coef')
     limit_radius_coef: float = Field(..., description='limit_radius_coef')
     min_length_horWell: float = Field(..., description='min_length_horWell')
@@ -123,7 +123,7 @@ class ValidateData(BaseModel):
             raise ValueError('Enter a numeric value in the range 0-100')
 
     @field_validator('horizon_count', mode='before')
-    def horizon_count_to_int(cls, horizon_count: str) -> float:
+    def horizon_count_to_int(cls, horizon_count: str) -> int:
         """
         Валидация параметра кол-ва объектов работы на скважину
         :param horizon_count: строковое значение параметра кол-ва объектов работы на скважину
@@ -132,7 +132,7 @@ class ValidateData(BaseModel):
         try:
             float(horizon_count)
             if str(horizon_count).isdigit():
-                return float(horizon_count)
+                return int(horizon_count)
             else:
                 raise ValueError('Value must be positive integer')
         except ValueError:

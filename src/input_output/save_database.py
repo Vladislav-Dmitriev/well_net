@@ -1,15 +1,23 @@
+import json
 import sqlite3 as sql
+import os
+
+import numpy as np
+import shapely as spl
 import pandas as pd
 from loguru import logger
 from tqdm import tqdm
 from .save_excel import get_report
+from src.calculation.shapely_geometry import check_intersection_area
 
 
 @logger.catch(level='DEBUG')
-def results_to_db(dict_result, dict_parameters, path_database):
+def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database):
     """
     Запись результатов в базу данных
+    :param list_name_params:
     :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
+    :param df_exceptions: DataFrame исключенных из расчета скважин(возможно без объекта работы)
     :param dict_parameters: словарь с параметрами расчета
     :param path_database: путь для сохранения базы данных с результатами
     :return:
@@ -36,11 +44,13 @@ def results_to_db(dict_result, dict_parameters, path_database):
         'condRate': 'Дебит конденсата газа, т/сут',
         'well type': 'Тип скважины',
         'fond': 'Фонд скважины',
+        'GEOMETRY': 'GEOMETRY',
         'num_of_research': 'Количество исследований в год',
+        'AREA': 'AREA',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
-        'time_coef': 'Коэффициент для расчет времени исследования',
+        'time_coef': 'Коэффициент для расчета времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
         'pressure': 'Начальное пластовое давление (карты изобар), атм',
@@ -59,11 +69,18 @@ def results_to_db(dict_result, dict_parameters, path_database):
         'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
         'year_of_survey': 'Год исследования',
         'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
-        'wellNet': 'Статус по опорной сети'
+        'wellNet': 'Статус по опорной сети',
+        'polygon': 'polygon'
     }
+    # удаление БД, если уже существует
+    try:
+        os.remove(path_database)
+    except FileNotFoundError:
+        pass
+    print(os.path.isfile(path_database))
     db_result = sql.connect(path_database)
 
-    for key, value in tqdm(dict_result.items(), "Write regular mesh to excel file", position=0, leave=True,
+    for key, value in tqdm(dict_result.items(), "Write regular mesh to database", position=0, leave=True,
                            colour='white', ncols=80):
         name = str(key).replace("/", " ")
         # reduce name of Excel sheet to 31 characters if it's too long
@@ -71,13 +88,26 @@ def results_to_db(dict_result, dict_parameters, path_database):
             name = name.split(' k=')[0][:31 - len(' k=' + name.split(' k=')[-1])] + ' k=' + name.split(' k=')[-1]
 
         df = value[0].copy()
+        contour = value[1]
+        if contour is None:
+            df_excluded = df_exceptions.copy()
+        else:
+            df_excluded = df_exceptions[df_exceptions['wellName'].isin(
+                set(check_intersection_area(contour, df_exceptions, dict_parameters['percent'],
+                                            dict_parameters['calc_option'])))]
         df['num_of_research'] = df['num_of_research'].apply(lambda x: int(x) + 1)
-        df.drop(columns=['POINT3', 'POINT', 'GEOMETRY', 'limit_oilrate', 'min_dist', 'gasStatus', 'AREA'],
+        df.drop(columns=['POINT3', 'POINT', 'limit_oilrate', 'min_dist', 'gasStatus'],
                 axis=1, inplace=True)
-        df = df[dict_rename.keys()]
+        df = pd.concat([df, df_excluded], axis=0, sort=False).reset_index(drop=True)
         df['intersection'] = df['intersection'].fillna('')
         df['intersection'] = list(
             map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
+        df['AREA'] = df['AREA'].apply(lambda x: spl.to_geojson(x) if isinstance(x, spl.Polygon) else x)
+        df['GEOMETRY'] = df.apply(lambda x: json.dumps(
+            spl.geometry.mapping(x['GEOMETRY']) if x['GEOMETRY'] != np.nan else spl.LineString(
+                [[x['coordinateX'], x['coordinateY']], [x['coordinateX3'], x['coordinateY3']]]), indent=2), axis=1)
+        df['polygon'] = spl.to_geojson(contour)
+        df = df[dict_rename.keys()]
         df.columns = dict_rename.values()
         df['Дата'] = pd.to_datetime(df['Дата'])
         logger.info(f'Write to database table with name: {name}')
@@ -88,7 +118,10 @@ def results_to_db(dict_result, dict_parameters, path_database):
 
     logger.info('Writing report table to database')
     df_report.to_sql(name='report', con=db_result, if_exists='replace')
-    pd.DataFrame.from_dict(dict_parameters).to_sql(name='parameters', con=db_result, if_exists='replace')
+    df_params_sql = pd.DataFrame([{new_key: ', '.join(map(str, dict_parameters[old_key])) if isinstance(
+        dict_parameters[old_key], list) else str(dict_parameters[old_key]) for new_key, old_key in
+                                   zip(list_name_params, list(dict_parameters.keys()))}])
+    df_params_sql.to_sql(name='parameters', con=db_result, if_exists='replace')
     db_result.commit()
     db_result.close()
 

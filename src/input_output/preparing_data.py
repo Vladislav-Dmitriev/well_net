@@ -2,8 +2,6 @@ import json
 import os
 import sys
 from datetime import timedelta
-import win32com.client as win32
-
 import numpy as np
 import pandas as pd
 import xlwings as xw
@@ -106,7 +104,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_input = df_input.fillna(0)
     # create DataFrame of exception wells, also add wellnet status to them
     df_exceptions = df_input[(df_input['KUST'] == 0) | (df_input['SOST'] == 0) | (df_input['PLAST'] == 0)]
-    df_exceptions['wellNet'] = 'Исключена из расчета, отсутствует куст/пласт'
+    df_exceptions['wellNet'] = 'Исключена из расчета, куст/пласт/состояние'
     # delete from input DataFrame wells with no information about cluster, status, reservoir
     df_input = df_input[(df_input['KUST'] != 0) & (df_input['SOST'] != 0) & (df_input['PLAST'] != 0)]
     df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']].astype(
@@ -416,7 +414,6 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
 def preprocessing_NGT(df_input, min_length_horWell):
     """
     Подготовка данных из NGT
-
     :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
     :param df_input: Выгрузка данных NGT
     :return: подготовленный DataFrame выгрузки NGT, скважины разделены на ННС и ГС
@@ -427,7 +424,7 @@ def preprocessing_NGT(df_input, min_length_horWell):
     df_input = df_input.fillna(0)  # fill NaN cells
     # create exceptions DataFrame
     df_exceptions = df_input[(df_input['workHorizon'] == 0) | (df_input['wellCluster'] == 0)]
-    df_exceptions['wellNet'] = 'Исключена из расчета, отсутствует куст/пласт'
+    df_exceptions['wellNet'] = 'Исключена из расчета, куст/пласт/состояние'
     # cleaning null values
     df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0)]
 

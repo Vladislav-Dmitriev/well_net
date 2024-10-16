@@ -167,7 +167,7 @@ def get_report(dict_result):
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
                            colour='white', ncols=80):
         df = value[0]
-        df = df[df['wellNet'] != 'Выбрана в опорную сеть']
+        df = df[df['wellNet'] == 'Выбрана в опорную сеть']
 
         dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
         dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
@@ -213,9 +213,6 @@ def get_report(dict_result):
 
     df_report = pd.DataFrame.from_dict(dict_report, orient='columns')
     # округление числовых столбцов DataFrame до 2 знаков после запятой
-    list_rounding_col = ['mean_rad', 'mean_time', 'oil_loss0', 'oil_loss1', 'oil_loss2', 'injection_loss0',
-                         'injection_loss1', 'injection_loss2', 'gas_loss0', 'gas_loss1', 'gas_loss2']
-    df_report[list_rounding_col] = df_report[list_rounding_col].round(2)
     df_report.rename(columns=dict_names_report, inplace=True)
 
     return df_report
