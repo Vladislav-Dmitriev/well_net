@@ -1,4 +1,6 @@
 import os
+from tqdm import tqdm
+
 import numpy as np
 from loguru import logger
 import geopandas as gpd
@@ -149,8 +151,9 @@ def get_contours(contours_path):
     """
     list_of_files = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
     dict_contours = {}
-
-    for current_file in list_of_files:
+    logger.bind(USER=True).info("Проверка наличия контуров")
+    for current_file in tqdm(list_of_files, "Считывание контуров", position=0, leave=True,
+                                      colour='white', ncols=80):
         with open(f'{contours_path}{current_file}', 'r') as file:
             data = list(filter(None, file.read().split('/')))
             list_polygons = []

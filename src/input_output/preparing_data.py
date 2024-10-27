@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from tqdm import tqdm
 from datetime import timedelta
 import numpy as np
 import pandas as pd
@@ -26,6 +27,7 @@ def upload_input_data(dict_constant, dict_parameters):
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
     # Upload project wells
+    logger.bind(USER=True).info("Проверка наличия проектного фонда")
     df_project = preparing_project_wells(dict_parameters)
 
     # Upload exception list wells
@@ -34,13 +36,13 @@ def upload_input_data(dict_constant, dict_parameters):
     # Get path to application folder
     application_path = get_path()
     logger.info("Data type definition")
-
+    logger.bind(USER=True).info('Определение типа выгрузки')
     # read first row of file
     first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
                               sheet_name='Фонд', nrows=1)
     # check type of database by values of first row
     if first_row.loc[0][0] == '№ скважины':
-
+        logger.bind(USER=True).info('Тип выгрузки: NGT')
         logger.info("Preparing NGT data")
 
         df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
@@ -59,7 +61,7 @@ def upload_input_data(dict_constant, dict_parameters):
         df_input, df_exceptions = ngt_gdis_data(df_input, df_exceptions, dict_parameters)
     # check type of database by values of first row
     elif first_row.loc[0][0] == 'NSKV':
-
+        logger.bind(USER=True).info('Тип выгрузки: ГеоБД')
         logger.info("Preparing GeoBD data")
 
         df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
@@ -213,14 +215,17 @@ def preparing_project_wells(dict_parameters):
     :return: подготовленный DataFrame с проектными скважинами
     """
     logger.info('Preparing project wells')
+    logger.bind(USER=True).info("Чтение листа с проектными скважинами")
     # get application path to read required file
     application_path = get_path()
     try:
         df_project = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                    header=0, skiprows=[1], decimal='.', sheet_name='Проектный фонд')
         if df_project.empty:
+            logger.bind(USER=True).info("Проектные скважины отсутствуют")
             return pd.DataFrame()
     except ValueError:
+        logger.bind(USER=True).info('Лист с проектными скважинами не найден')
         logger.info('Sheet with name "Проектный фонд" not found in data file')
         return pd.DataFrame()
     # delete spaces in cells with well names and objects
@@ -236,7 +241,8 @@ def preparing_project_wells(dict_parameters):
     df_project = df_project.sort_values(by=['NSKV'], ascending=True)
     df_project.reset_index(drop=True)
     df_project['well type'] = ''
-    for well in list_well_names:
+    for well in tqdm(list_well_names, "Подготовка координат проектных скважин", position=0, leave=True,
+                     colour='white', ncols=80):
         objs = list(
             df_project[df_project['UWI'] == well].PLAST.explode().unique())  # list of unique well objects
 

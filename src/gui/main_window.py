@@ -1,40 +1,21 @@
 import sys
 import os
+import time
 import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
-from qtsample import UIMainWindow
+
+from src.gui.qtsample import UiMainWindow
 from src.main import module_gdis
 from src.gui.validate_widget_data import ValidateData, ValidatePath
 from pydantic import ValidationError
 from src.calculation.support_functions import get_path
 from src.gui.mpl_widget import MplWidget
-
-
-class LogWindow(QtWidgets.QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setWindowTitle('Выполнение расчета')
-        self.setGeometry(100, 100, 600, 400)
-
-        self.log_text = QtWidgets.QTextEdit(self)
-        self.log_text.setReadOnly(True)
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.log_text)
-        self.setLayout(layout)
-
-    def append_log(self, message):
-        """
-        Add text to the log
-        :param message:
-        :return:
-        """
-        self.log_text.append(message)
-        self.log_text.ensureCursorVisible()
+from src.gui.log_window import LogWindow, LogEmitter, TqdmProgressBar
+import threading
+from loguru import logger
 
 
 class DataframeToTable(QtCore.QAbstractTableModel):
@@ -85,21 +66,36 @@ class FileDirectWidget(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.ui = UIMainWindow()
-        self.ui.setup_ui(self)
-        self.ui.treeWidget.expandAll()
-        self.filedir_widget()
-        self.add_combobox()
-        self.database_path = f'{get_path()}\\output\\wellnet_default.db'
-        self.set_default_params()
-        self.dict_param = self.get_dict_qtreewidget()
-        self.filedir_actions()
-        self.combobox_actions()
-        self.combobox_scen_switch()
-        self.buttons()
-        self.item_clicked()
-        self.menu_()
+        self.ui = UiMainWindow()  # вызов класса основного окна с базовыми виджетами без функционала
+        self.ui.setup_ui(self)  # вызов метода класса, в котором прописано положение и иерархия всех составляющих окна
+        self.ui.treeWidget.expandAll()  # раскрытие виджета QTreeWidget, чтобы видеть все задаваемые параметры
+        self.filedir_widget()  # добавление внутрь виджета QTreeWidget в item с путем к данным QLineEdit
+        self.add_combobox()  # добавление QComboBox на те item QTreeWidget, где параметры задаются всего парой значений
+        self.database_path = f'{get_path()}\\output\\wellnet_default.db'  # актуальный путь к БД
+        self.set_default_params()  # загрузка в QTreeWidget параметров из БД
+        self.dict_param = self.get_dict_qtreewidget()  # словарь с параметрами расчета
+        self.filedir_actions()  # валидация пути к файлу + кнопка для открытия диалогового окна выбора файла
+        self.combobox_actions()  # обновление словаря с параметрами при изменении значений в одном из QComboBox
+        self.combobox_scen_switch()  # QComboBox для переключения между сценариями расчета, загрузка из БД
+        self.buttons()  # основные кнопки: расчет, результаты в Excel, выбор директории для записи в БД результатов
+        self.item_clicked()  # проверка на нажатие редактируемого item в QTreeWidget
+        self.menu_()  # основные кнопки действий меню
+        self.log_emitter = LogEmitter()  # Создаем эмиттер для логов и остановки
+        self.setup_loggers()  # добавление обработчика для отправки логов в отдельное окно пользователю
+        self.thread_log_window = None
+        self.log_window = None
+        self.thread_calculation = None  # Инициализация для потока расчета
         self.show()
+
+    def log_handler(self, message):
+        """Обработчик логов loguru, отправляющий логи через сигнал."""
+        self.log_emitter.log_signal.emit(str(message))
+
+    def setup_loggers(self):
+        logger.remove()  # Убираем стандартные обработчики
+        # Добавляем обработчик для отправки логов в GUI
+        logger.add(self.log_handler, level="INFO", filter=lambda record: "USER" in record["extra"],
+                   format="{time:DD-MM-YYYY HH:mm:ss} {message}")
 
     def set_default_params(self):
         """
@@ -251,24 +247,12 @@ class MainWindow(QtWidgets.QMainWindow):
         :return: действия на все кнопки в окне приложения
         """
         # begin calculation button
-        self.ui.calculate.clicked.connect(self.main_calc_function)
+        self.ui.calculate.clicked.connect(lambda: self.main_calc_function())
 
         # save current table in Excel
-        self.ui.save_table.clicked.connect(lambda: self.table_to_excel(
-            QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
-                                                  f'{get_path()}\\output\\{self.dict_param['Сценарий расчета']}'
-                                                  f'_{os.getlogin()}_'
-                                                  f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx',
-                                                  filter='Excel (*.xlsx *.xls)'),
-            [self.ui.combobox_scenario.currentText()]))
+        self.ui.save_table.clicked.connect(lambda: self.table_to_excel(self.ui.save_table))
         # save all tables in Excel
-        self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(
-            QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
-                                                  f'{get_path()}\\output\\{self.dict_param['Сценарий расчета']}'
-                                                  f'_{os.getlogin()}_'
-                                                  f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx',
-                                                  filter='Excel (*.xlsx *.xls)'),
-            [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + ["report"]))
+        self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(self.ui.save_all_tables))
         # choosing directory to save database
         self.ui.choose_directory.clicked.connect(lambda:
                                                  self.ui.path_result_db.
@@ -282,34 +266,94 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def main_calc_function(self):
         """
-        :return: вызов функции расчета опорной сетки, автоматическое изменение пути сохранения БД
+        Запуск окна логов и функции расчета в отдельных потоках
         """
+        self.start_log_window()
+        # Создаем поток для выполнения расчета
+        self.thread_calculation = QtCore.QThread()
         self.database_path = self.ui.path_result_db.text()
-        module_gdis(self.validate(self.dict_param, self.dict_param), list(self.dict_param.keys()), self.database_path)
-        self.combobox_scen_switch()
+        self.log_emitter.log_signal.emit("Начало расчета")
+        self.thread_calculation.run = lambda: module_gdis(self.validate(self.dict_param, self.dict_param),
+                                                          list(self.dict_param.keys()), self.database_path)
+        self.thread_calculation.start()
+        self.thread_calculation.finished.connect(self.on_calculation_finished)
+        # По завершении расчета выводим сообщение
+        self.log_emitter.log_signal.emit("Расчет завершен")
 
-    def table_to_excel(self, path_to_save, list_names):
+    def start_log_window(self):
+        """Создание и отображение окна логов"""
+        if self.log_window is None:
+            self.log_window = LogWindow(self.log_emitter)
+            self.log_window.show()
+
+    def stop_calculation(self):
+        """Метод остановки только расчета"""
+        self.log_emitter.log_signal.emit("Расчет остановлен пользователем")
+        print(6)
+        # Завершение потока расчета, если он активен
+        if self.thread_calculation and self.thread_calculation.isRunning():
+            self.thread_calculation.quit()
+        print(7)
+        # Поток завершен, главное окно остается открытым
+
+    def on_calculation_finished(self):
+        """
+        Действия после завершения расчета
+        """
+        # Разблокировка кнопки запуска расчета
+        self.setEnabled(True)
+
+    def tqdm_instance(self, *args, **kwargs):
+        """Создание экземпляра TqdmProgressBar для обновления прогресса"""
+        return TqdmProgressBar(self.log_emitter, *args, **kwargs)
+
+    def manual_progress_update(self, current_step, total_steps):
+        """Обновление прогресс-бара"""
+        if total_steps > 0:
+            progress = int((current_step / total_steps) * 100)
+            self.log_emitter.progress_signal.emit(progress)
+
+    def table_to_excel(self, button):
         """
         Сохранение таблицы/таблиц в Excel файл
-        :param path_to_save: путь к БД, сформированной после расчета
-        :param list_names: список имен таблиц в БД, откуда необходимо извлечь данные
         :return: запись в Excel
         """
-        if self.ui.path_result_db.text() != '':
-            path = self.ui.path_result_db.text()
-        else:
-            path = self.database_path
-        connection = sql.connect(path)
+        path_to_save = QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
+                                                             f'{get_path()}\\output\\{os.getlogin()}_'
+                                                             f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx',
+                                                             filter='Excel (*.xlsx *.xls)')[0]
+        if not path_to_save:
+            # Если пользователь отменил сохранение
+            return
+
+        connection = sql.connect(self.database_path)
+
         app1 = xw.App(visible=False)
         new_wb = xw.Book()
-        for name in list_names:
-            df = pd.read_sql_query(f'SELECT * FROM "{name}"', connection)
-            df = df.drop(columns=['index', 'polygon'])
+
+        if button.text() == 'Сохранить все сценарии в Excel':
+            calc_scripts = [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + [
+                "report"]
+            for script in calc_scripts:
+                df = pd.read_sql_query(f'SELECT * FROM "{script}"', connection)
+                df = df.drop(columns=['index', 'GEOMETRY', 'AREA', 'polygon'])
+                df = df.fillna(0)
+                new_wb.sheets.add(f"{script.replace('/', '_')}")
+                sht = new_wb.sheets(f"{script.replace('/', '_')}")
+                sht.range('A1').options(pd.DataFrame, index=False).value = df
+
+        else:
+            df = pd.read_sql_query(f'SELECT * FROM "{self.ui.combobox_scenario.currentText()}"', connection)
+            df = df.drop(columns=['index', 'polygon', 'AREA', 'GEOMETRY'])
             df = df.fillna(0)
-            new_wb.sheets.add(f"{name}")
-            sht = new_wb.sheets(f"{name}")
-            sht.range('A1').options().value = df
-        new_wb.save(path_to_save[0])
+            df = pd.concat(
+                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())],
+                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True)
+            new_wb.sheets.add(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
+            sht = new_wb.sheets(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
+            sht.range('A1').options(pd.DataFrame, index=False).value = df
+
+        new_wb.save(path_to_save)
         app1.kill()
         connection.close()
 

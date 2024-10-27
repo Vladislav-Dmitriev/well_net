@@ -1,4 +1,5 @@
 import warnings
+from tqdm import tqdm
 
 import geopandas as gpd
 import pandas as pd
@@ -9,8 +10,6 @@ from src.calculation.calculation_wells import calculation
 from src.calculation.shapely_geometry import check_intersection_area, get_contours
 from src.input_output.dictionaries import dict_constant
 from src.input_output.preparing_data import upload_input_data, preparing_reservoir_properties
-from src.gui.plot_design import plot_results
-from src.input_output.save_excel import results_to_excel
 from src.input_output.save_database import results_to_db
 
 warnings.filterwarnings('ignore')
@@ -19,9 +18,10 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 def module_gdis(dict_parameters, list_name_params, path_database):
     """
-    :param dict_parameters:
-    :param list_name_params:
-    :param path_database:
+    Основная функция расчета, автоматически подбирает кандидатов в опорную сетку и записывает результаты в БД
+    :param dict_parameters: словарь с параметрами расчета
+    :param list_name_params: список имен параметров для пользователя
+    :param path_database: путь к базе данных для записи в нее результатов после завершения расчета
     :return:
     """
     # path to application
@@ -30,8 +30,10 @@ def module_gdis(dict_parameters, list_name_params, path_database):
     delete_logfiles(f'{application_path}\\output\\')
     # add logs to file
     log_handler = logger.add(f'{application_path}\\output\\logfile.log', level='DEBUG',
-                             format="{time} {level} {message}", rotation='100KB')
+                             format="{time:DD-MM-YYYY HH:mm:ss} {level} {message}", rotation='200KB',
+                             filter=lambda record: "USER" not in record["extra"])
     logger.info("Starting calculation")
+    logger.bind(USER=True).info("Начало расчета")
 
     # Upload data, initial data preparation_____________________________________________________________________________
     df_input, df_exceptions, list_exception = upload_input_data(dict_constant, dict_parameters)
@@ -42,13 +44,13 @@ def module_gdis(dict_parameters, list_name_params, path_database):
     logger.info(f"path: {path_property}")
 
     # Upload and print reservoir_properties.yml
+    logger.bind(USER=True).info("Загрузка PVT-свойств из справочника")
     preparing_reservoir_properties(dict_parameters, path_property)
 
     # path to folder with contours
     logger.info("CHECKING FOR CONTOURS")
     logger.info(f"path: {application_path}")
-    logger.info("check the content of contours")
-
+    logger.info("Сheck the content of contours")
     # get path and names of contour files with coordinates
     contours_path = application_path + "\\input\\"
     dict_contours = get_contours(contours_path)
@@ -60,7 +62,7 @@ def module_gdis(dict_parameters, list_name_params, path_database):
     if dict_contours.keys():
         # calculation well inside contour
         logger.info(f"Count of contours: {len(dict_contours)}")
-        for contour in dict_contours.keys():
+        for contour in tqdm(dict_contours.keys(), "Построение опорной сетки по контурам"):
             df_points = gpd.GeoDataFrame(df_input, geometry="POINT")
             if dict_contours[contour].is_valid:
                 wells_in_contour = set(check_intersection_area(dict_contours[contour], df_points,
@@ -95,5 +97,4 @@ def module_gdis(dict_parameters, list_name_params, path_database):
 
     logger.info("End of calculation")
     logger.remove(log_handler)
-
     pass

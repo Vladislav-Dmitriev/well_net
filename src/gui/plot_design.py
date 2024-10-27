@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import shapely as spl
 from loguru import logger
 from matplotlib.lines import Line2D
-from matplotlib.ticker import MultipleLocator
+from matplotlib_scalebar.scalebar import ScaleBar
+from matplotlib.widgets import CheckButtons
 
 
 def get_color_area(fond):
@@ -123,6 +124,13 @@ def plot_results(df_result, script):
 
     fig, ax = plt.subplots(figsize=(20, 20))
     fig.set_size_inches(7, 7)
+    dict_shapes = {
+        "excluded_points": [],
+        "excluded_geometry": [],
+        "excluded_annotation": [],
+        "areas": [],
+        "areas_contour": []
+    }
     # построение контура
     if df_result.iloc[0]['polygon'] != 0:
         (gpd.GeoSeries(spl.geometry.shape(json.loads(df_result.iloc[0]['polygon']))).
@@ -131,56 +139,94 @@ def plot_results(df_result, script):
     for index, row in df_result[df_result['status'] == 'included'].iterrows():
         area_color = get_color_area(row['fond'])
         line_type, line_color = get_linetype_color(row['fond'], row['year_of_survey'])
-        gpd.GeoSeries(row['AREA']).plot(ax=ax, facecolor=area_color, alpha=0.7)
-        gpd.GeoSeries(row['AREA']).boundary.plot(ax=ax, ls=line_type, color=line_color)
+        polygon_area = row['AREA']
+        x, y = polygon_area.exterior.xy
+        polygon = ax.fill(x, y, facecolor=area_color, alpha=0.7)
+        dict_shapes['areas'].append(polygon)
+        line, = ax.plot(*polygon_area.boundary.xy, ls=line_type, color=line_color)
+        dict_shapes['areas_contour'].append(line)
 
     for index, row in df_result.drop_duplicates(subset='wellName').iterrows():
         # получение цвета геометрии в зависимости от статуса скважины и маркера точки T1 для нее
         geometry_color, marker, font_color = get_geometry_color(row['status'])
-        gpd.GeoSeries(row['GEOMETRY']).plot(ax=ax, color=geometry_color, marker='.')
-        ax.scatter(row['coordinateX'], row['coordinateY'], color=geometry_color, marker=marker)
-        ax.annotate(row['wellName'], xy=(row['coordinateX'], row['coordinateY']), xytext=(3, 3),
-                    textcoords="offset points", fontsize=6, color=font_color)
+        geometry = gpd.GeoSeries(row['GEOMETRY'])
+        line, = ax.plot(*geometry.loc[0].xy, color=geometry_color)
+        point = ax.scatter(row['coordinateX'], row['coordinateY'], color=geometry_color, marker=marker, label='All')
+        annotate = ax.annotate(row['wellName'], xy=(row['coordinateX'], row['coordinateY']), xytext=(3, 3),
+                               textcoords="offset points", fontsize=6, color=font_color)
+        if row['status'] == 'excluded':
+            dict_shapes['excluded_points'].append(point)
+            dict_shapes['excluded_geometry'].append(line)
+            dict_shapes['excluded_annotation'].append(annotate)
 
     piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
     inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
     prod = mpatches.Patch(color='black', fc='lightsalmon', label='Добыващие(с исследованием)')
-    wellnet_point = Line2D([0], [0], marker='^', color='white', label='Включены в программу ГДИС',
-                           markerfacecolor='blue', markersize=14)
-    research_wells = Line2D([0], [0], marker='.', color='white', label='Охваченные исследованиями',
-                            markerfacecolor='black', markersize=14)
-    proj_wells = Line2D([0], [0], marker='.', color='white', label='Проектный фонд',
-                        markerfacecolor='chocolate', markersize=14)
-    exception_wells = Line2D([0], [0], marker='.', color='white', label='Исключенные',
-                             markerfacecolor='gray', markersize=14)
-    contour_boundary = Line2D([0], [0], marker='_', color='saddlebrown', label='Граница контура',
-                              markerfacecolor='saddlebrown', markersize=14)
+    wellnet_point = Line2D([0], [0], marker='^', color='black', label='Включены в программу ГДИС',
+                           markerfacecolor='blue', markersize=14, linestyle='None')
+    research_wells = Line2D([0], [0], marker='.', color='black', label='Охваченные исследованиями',
+                            markerfacecolor='black', markersize=14, linestyle='None')
+    proj_wells = Line2D([0], [0], marker='.', color='black', label='Проектный фонд',
+                        markerfacecolor='chocolate', markersize=14, linestyle='None')
+    exception_wells = Line2D([0], [0], marker='.', color='black', label='Исключенные',
+                             markerfacecolor='gray', markersize=14, linestyle='None')
+    contour_boundary = Line2D([0], [0], marker='_', color='black', label='Граница контура',
+                              markerfacecolor='saddlebrown', markersize=14, linestyle='None')
     handles = [piez, inj, prod, wellnet_point, research_wells, proj_wells, exception_wells]
 
     if script == 'Оптимальная сетка':
-        line_1_year = Line2D([0], [0], color='gray', linestyle="-", lw=1, label='Исследования на текущий год')
-        line_2_year = Line2D([0], [0], color='gray', linestyle=":", lw=1, label='На 2 год')
-        line_3_year = Line2D([0], [0], color='gray', linestyle="-.", lw=1, label='На 3 год')
+        line_1_year = Line2D([0], [0], color='black', linestyle="-", lw=1, label='Исследования на текущий год')
+        line_2_year = Line2D([0], [0], color='black', linestyle=":", lw=1, label='На 2 год')
+        line_3_year = Line2D([0], [0], color='black', linestyle="-.", lw=1, label='На 3 год')
         handles += [line_1_year, line_2_year, line_3_year]
 
-    # Сохранение картинок в формате .png
-    if df_result.iloc[0]['polygon'] is None:
-        ax.legend(handles=handles, loc='upper right')
-    else:
+    # Добавление к легенде маркера с контуром
+    if df_result.iloc[0]['polygon'] != 0:
         handles += [contour_boundary]
-        ax.legend(handles=handles, loc='upper right')
-    # ax.set_position([0.1, 0.1, 0.85, 0.85])
-    # ax.set_aspect('auto')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    # ax.spines['left'].set_visible(False)
-    # ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_position(('outward', 0))  # Левую ось двигаем к левому краю
-    ax.spines['bottom'].set_position(('outward', 0))  # Нижнюю ось двигаем к нижнему краю
-    ax.xaxis.set_ticks_position('bottom')
-    ax.yaxis.set_ticks_position('left')
+    legend = ax.legend(handles=handles, loc='upper right', fancybox=True, framealpha=0.5)
 
-    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    ax.tick_params(axis='both', direction='in')
-    plt.tight_layout()
-    return fig, ax
+    def format_coord(x, y):
+        return f'x={x:.2f}, y={y:.2f}'
+
+    ax.format_coord = format_coord
+    ax.set_aspect('equal')
+    ax.set_axis_off()
+    scalebar = ScaleBar(1, location='lower left', box_alpha=0, dimension='si-length', pad=0.5)
+    ax.add_artist(scalebar)
+    ax.margins(x=0, y=-0.25)  # zoom picture before output
+    fig.tight_layout(pad=0)
+
+    checkbox_ax = fig.add_subplot(111, position=[0.01, 0.85, 0.15, 0.15], zorder=5)
+    checkbox_ax.set_axis_off()
+    checkbox_labels = ['Легенда', 'Исключенные скважины', 'Зоны исследования']
+    checkbox_activated = [True, True, True]
+    check = CheckButtons(checkbox_ax, checkbox_labels, checkbox_activated)
+
+    def toggle_legend(label):
+        """
+        Функция обработки сигналов checkbox на картинке
+        :param label: checkbox, на который нажал пользователь
+        :return: действие скрыть/показать элемент картинки, привязанный к checkbox
+        """
+        if label == 'Легенда':
+            is_visible = legend.get_visible()
+            legend.set_visible(not is_visible)  # Показать/скрыть легенду
+            fig.canvas.draw_idle()
+        elif label == 'Исключенные скважины':
+            for p, g, a in zip(dict_shapes['excluded_points'], dict_shapes['excluded_geometry'],
+                               dict_shapes['excluded_annotation']):
+                p.set_visible(not p.get_visible())
+                g.set_visible(not g.get_visible())
+                a.set_visible(not a.get_visible())
+            fig.canvas.draw_idle()
+        elif label == 'Зоны исследования':
+            for area, contour_area in zip(dict_shapes['areas'], dict_shapes['areas_contour']):
+                for poly in area:
+                    poly.set_visible(not poly.get_visible())
+                contour_area.set_visible(not contour_area.get_visible())
+            fig.canvas.draw_idle()
+        # fig.canvas.draw_idle()
+
+    check.on_clicked(toggle_legend)
+
+    return fig, ax, check

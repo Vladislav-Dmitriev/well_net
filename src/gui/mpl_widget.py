@@ -1,23 +1,19 @@
-from PyQt6.QtWidgets import *
+from PyQt6 import QtWidgets
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import (NavigationToolbar2QT as NavigationToolbar)
-import matplotlib.pyplot as plt
 from src.gui.plot_design import plot_results
 
 
-class MplWidget(QWidget):
+class MplWidget(QtWidgets.QWidget):
     def __init__(self, df_results, script, parent=None):
         super().__init__(parent)
 
-        self.my_layout = QVBoxLayout(self)
+        self.my_layout = QtWidgets.QVBoxLayout(self)
 
         # Вызов функции построения графика и получение figure и axes
-        fig, ax = plot_results(df_results, script)
-
+        self.fig, self.ax, self.check = plot_results(df_results, script)
         # Создание canvas для вывода графика
-        self.canvas = FigureCanvas(fig)
-        self.canvas.axes = ax
-
+        self.canvas = FigureCanvas(self.fig)
         # Добавление панели инструментов для взаимодействия с графиком
         self.toolbar = NavigationToolbar(self.canvas, self)
 
