@@ -1,4 +1,6 @@
 import os
+import time
+
 from tqdm import tqdm
 
 import numpy as np
@@ -143,33 +145,41 @@ def add_shapely_types(df_input, mean_rad, coeff):
 
 
 @logger.catch(level='DEBUG')
-def get_contours(contours_path):
+def get_contours(contours_path, log_user, progress_bar):
     """
     Получение многоугольников контуров, заданных пользователем
     :param contours_path: абсолютный путь к .txt файлу с координатами контуров
+    :param progress_bar: сигнал для изменения значения progress bar
+    :param log_user: сигнал для вывода логов в окно для пользователя
     :return: словарь с многоугольниками, построенными из координат контруров, ключами словаря будут названия файлов
     """
     list_of_files = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
     dict_contours = {}
-    logger.bind(USER=True).info("Проверка наличия контуров")
-    for current_file in tqdm(list_of_files, "Считывание контуров", position=0, leave=True,
-                                      colour='white', ncols=80):
+    log_user.emit("Подготовка контуров")
+    total_files_count = len(list_of_files)
+
+    for current_file in tqdm(list_of_files, "Preparing contour coordinates", position=0, leave=True,
+                             colour='white', ncols=80):
         with open(f'{contours_path}{current_file}', 'r') as file:
             data = list(filter(None, file.read().split('/')))
             list_polygons = []
+
             for i in range(len(data)):
                 contour = [[float(y) for y in x.split(' ')] for x in list(filter(None, data[i].split('\n')))]
                 list_polygons += [Polygon(contour)]
             exteriors = []
             holes = []
+
             for poly in list_polygons:
                 hole_status = False
+
                 for other in list_polygons:
                     if other == poly:
                         continue
                     if other.contains(poly):
                         hole_status = True
                         break
+
                 if hole_status:
                     holes.append(poly)
                 else:
@@ -181,6 +191,8 @@ def get_contours(contours_path):
                 multi_polygons.append(
                     Polygon(exterior.exterior.coords, [hole.exterior.coords for hole in interior_holes]))
 
-            dict_contours[f'{current_file.replace('.txt', '')}'] = MultiPolygon(multi_polygons)
+            dict_contours[f'{current_file.replace(".txt", "")}'] = MultiPolygon(multi_polygons)
+
+        progress_bar.emit(int((list_of_files.index(current_file) + 1) / total_files_count * 100))
 
     return dict_contours

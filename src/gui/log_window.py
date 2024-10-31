@@ -1,86 +1,51 @@
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtGui
 from tqdm import tqdm
 
 
-class TqdmProgressBar(tqdm):
-    def __init__(self, log_emitter, *args, **kwargs):
-        """Класс для интеграции tqdm с обновлением progress bar через сигнал"""
-        super().__init__(*args, **kwargs)
-        self.log_emitter = log_emitter  # Эмиттер для сигналов
-
-    def update(self, n=1):
-        """Переопределение метода обновления прогресса"""
-        super().update(n)  # Вызываем оригинальный метод обновления
-
-        # Передаем прогресс через сигнал
-        if self.total:
-            progress = int((self.n / self.total) * 100)  # Рассчитываем процент выполнения
-            self.log_emitter.progress_signal.emit(progress)
-
-
-class LogEmitter(QtCore.QObject):
-    log_signal = QtCore.pyqtSignal(str)
-    progress_signal = QtCore.pyqtSignal(int)
-    stop_signal = QtCore.pyqtSignal()
-
-
 class LogWindow(QtWidgets.QWidget):
-    def __init__(self, log_emitter):
+    def __init__(self, calculation_thread, main_window):
         super().__init__()
-        self.setWindowTitle("Логи расчета")
+        self.calculation_thread = calculation_thread
+        self.main_window = main_window
+        self.setWindowTitle("Выполнение расчета")
         self.setGeometry(100, 100, 600, 400)
 
-        # Текстовое поле для вывода логов
-        self.log_area = QtWidgets.QTextEdit(self)
-        self.log_area.setReadOnly(True)
-
-        # Кнопка для прерывания расчета
+        # UI components
+        self.log_area = QtWidgets.QTextEdit(readOnly=True)
+        self.progress_bar = QtWidgets.QProgressBar(maximum=100)
         self.stop_button = QtWidgets.QPushButton("Прервать расчет")
+        self.setWindowIcon(QtGui.QIcon('Icon.png'))
 
-        # Прогресс-бар
-        self.progress_bar = QtWidgets.QProgressBar(self)
-        self.progress_bar.setMaximum(100)  # Максимум 100%, будет обновляться от 0 до 100
+        # Layout
+        hbox_layout = QtWidgets.QHBoxLayout()
+        hbox_layout.addWidget(self.progress_bar)
+        hbox_layout.addWidget(self.stop_button)
 
-        # Горизонтальный макет для кнопки и спейсера
-        button_layout = QtWidgets.QHBoxLayout()
-
-        # Горизонтальный спейсер для выравнивания кнопки справа
-        button_layout.addWidget(self.progress_bar)
-        button_layout.addWidget(self.stop_button)
-
-        # Основной вертикальный макет
         layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.log_area)  # Логи сверху
-        layout.addLayout(button_layout)  # Кнопка снизу
+        layout.addWidget(self.log_area)
+        layout.addLayout(hbox_layout)
         self.setLayout(layout)
 
-        # Привязка сигналов
-        self.log_emitter = log_emitter
-        self.log_emitter.log_signal.connect(self.write_log)  # Логи поступают через сигнал
-        self.log_emitter.progress_signal.connect(self.update_progress_bar)  # Обновление прогресса
-        self.log_emitter.stop_signal.connect(self.stop_calculation)  # Остановка процесса
-
-        # При закрытии или нажатии "Прервать" вызовем stop_calculation
+        # Signals connect
+        # self.calculation_thread.log_signal.connect(self.log_area.append)
+        self.calculation_thread.progress_signal.connect(self.progress_bar.setValue)
+        self.calculation_thread.finished_signal.connect(self.on_calculation_finished)
+        self.calculation_thread.stop_signal.connect(self.stop_calculation)
         self.stop_button.clicked.connect(self.stop_calculation)
-        self.log_emitter.stop_signal.connect(self.stop_calculation)
 
-        self.show()
+    def stop_calculation(self):
+        self.log_area.append("Расчет остановлен")
+        self.calculation_thread.stop()
+        self.calculation_thread.terminate()  # Остановка расчета
+        self.stop_button.setDisabled(True)
+        self.main_window.setEnabled(True)
 
-    def write_log(self, message):
-        """Добавление логов в текстовое поле"""
-        self.log_area.append(message)
-        self.log_area.ensureCursorVisible()
-
-    def update_progress_bar(self, value):
-        """Обновление значения прогресс-бара"""
-        self.progress_bar.setValue(value)
-
-    def stop_calculation(self, process):
-        """Метод для отправки сигнала о прерывании расчета"""
-        self.log_emitter.log_signal.emit("Расчет остановлен")
-        self.log_emitter.stop_signal.emit()  # Передаем сигнал для остановки
+    def on_calculation_finished(self):
+        self.stop_button.setDisabled(True)  # Отключение кнопки после завершения
+        self.main_window.setEnabled(True)
 
     def closeEvent(self, event):
-        """Обработчик закрытия окна - отправка сигнала о прерывании расчета"""
-        self.log_emitter.stop_signal.emit()  # При закрытии окна расчет прерывается
-        event.accept()  # Закрыть окно
+        if self.stop_button.isEnabled():
+            self.stop_calculation()  # Остановка расчета при закрытии окна
+        self.main_window.setEnabled(True)
+        event.accept()

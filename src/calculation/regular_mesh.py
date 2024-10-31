@@ -12,7 +12,7 @@ from src.calculation.shapely_geometry import check_intersection_area
 
 @logger.catch(level='DEBUG')
 def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
-                      horizon, path_property, dict_parameters, obj_square, mean_rad, coeff, list_exception):
+                      horizon, path_property, dict_parameters, obj_square, mean_rad, coeff, list_exception, log_user):
     """
     Расчет регулярной сетки скважин
     :param list_exception: список скважин для исключения из ОС
@@ -31,6 +31,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     :return: результирующий DataFrame с опорными скважинами
     """
     # удаление исключенных скважин из DataFrame пьезометров, нагнетательных и добывающих
+    log_user.emit("Удаление исключенных скважин из расчета")
     df_regular_exceptions = pd.concat([df_piez_wells[df_piez_wells['wellName'].isin(list_exception)],
                                        df_inj_wells[df_inj_wells['wellName'].isin(list_exception)],
                                        df_prod_wells[df_prod_wells['wellName'].isin(list_exception)]],
@@ -56,16 +57,25 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     for fond in tqdm(dict_parameters['list_order_fond'], "Regular mesh for fond", position=0, leave=True,
                      colour='white', ncols=80):
         # выделение DataFrame на фонд (добывающий, нагнетательный, пьезометрический) и процента скважин в ОС от фонда
+        if fond == "ДОБ":
+            log_user("Построение регулярной сетки по добывающему фонду")
+        elif fond == "НАГ":
+            log_user("Построение регулярной сетки по нагнетательному фонду")
+        elif fond == "ПЬЕЗ":
+            log_user("Построение регулярной сетки по пьезометрическому фонду")
+
         df_fond = dict_fonds[fond][0]
         wellnet_percent = dict_fonds[fond][1]
         df_necessarily_fond = dict_fonds[fond][2]
 
         if df_fond.empty and df_necessarily_fond.empty:
+            log_user.emit("Отсутствуют скважины для построения регулярной сетки")
             continue
 
         # условие на очистку DataFrame, если до текущей итерации уже были отобраны опорные скважины из другого фонда
         # и охватили какую-то площадь
         if current_area != 0 and not df_fond.empty:
+            log_user.emit("Исключение из расчета скважин текущего фонда, охваченных регулярной сеткой предыдущего шага")
             df_fond = df_fond[~df_fond['wellName'].isin(list(check_intersection_area(current_area, df_fond,
                                                                                      dict_parameters['percent'],
                                                                                      dict_parameters['calc_option'])))]
@@ -113,6 +123,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
         # функция проверки процента скважин в опорной сети от текущего фонда
         count_target = math.ceil(wellnet_percent / 100 * (df_fond.shape[0] + df_necessarily_fond.shape[0]))
+        log_user.emit(f"Целевое число скважин фонда в регулярной сетке: {count_target}")
         if (df_current_result.shape[0] > count_target) and (dict_parameters['option_percent']):
             # сортировка части DataFrame без обязательных скважин по возрастанию дебита нефти и убыванию пересечений
             df_current_result.loc[~df_current_result['num_of_research']] = df_current_result.loc[
@@ -174,6 +185,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
 
     # применение условий на временные рамки исследования скважин
     if dict_parameters['limit_research_time'] and (dict_parameters['min_research_time'] != ''):
+        log_user.emit("Учет условия минимального времени исследования скважин")
         df_result['research_time'] = df_result.apply(
             lambda x: dict_parameters['min_research_time'] if (
                     x['well type'] == 'vertical' and x['research_time'] < dict_parameters['min_research_time']) else
@@ -185,6 +197,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                                                      x['research_time'], axis=1)
 
     if dict_parameters['limit_research_time'] and (dict_parameters['max_research_time'] != ''):
+        log_user.emit("Учет условия максимального времени исследования скважин")
         df_result['research_time'] = df_result.apply(
             lambda x: dict_parameters['max_research_time'] if (
                     x['well type'] == 'vertical' and x['research_time'] > dict_parameters['max_research_time']) else

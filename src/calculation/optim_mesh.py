@@ -8,10 +8,12 @@ from .shapely_geometry import intersect_number, check_intersection_area, add_sha
 
 
 @logger.catch(level='DEBUG')
-def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result, df_necessarily_wells,
-                    horizon, mean_rad, coeff, key, obj_square, path_property, list_exception, dict_parameters):
+def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
+                    df_result, df_necessarily_wells, horizon, mean_rad, coeff, key,
+                    obj_square, path_property, list_exception, dict_parameters, log_user):
     """
     Функция расчета оптимальной опорной сетки, включающая в себя все функции обработки отдельных типов скважин
+
     :param df_necessarily_wells: DataFrame скважин, обязательных для включения в ОС
     :param obj_square: площадь объекта по крайним скважинам с отступом на средний радиус исследования
     :param key: результирующего ключ словаря
@@ -28,16 +30,18 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, d
     "слепых" зон и скважин в них
     :param path_property: путь к файлу с параметрами
     средним радиусом в этом случае для построения области взаимодействия будет заданное максимальное расстояние
+    :param log_user:
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
     # удаление исключенных скважин из DataFrame пьезометров и нагнетательных
+    log_user.emit("Удаление из расчета исключенных скважин")
     df_piez_inj_exception = pd.concat([df_piez_wells[df_piez_wells['wellName'].isin(list_exception)],
                                        df_inj_wells[df_inj_wells['wellName'].isin(list_exception)]],
                                       axis=0, sort=False).reset_index(drop=True)
     df_piez_inj_exception['wellNet'] = 'В списке исключений'
     df_piez = df_piez_wells[~df_piez_wells['wellName'].isin(list_exception)]
     df_inj = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
-
+    log_user.emit("Процесс построения опорной сети")
     df_result = core_optim_mesh(list_exception, path_property, dict_parameters['percent'], mean_rad, coeff,
                                 horizon, obj_square, dict_parameters['min_research_time'],
                                 dict_parameters['max_research_time'], dict_parameters['calc_option'],
@@ -61,12 +65,14 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, d
                                                    dict_parameters['calc_option'])  # список скважин в слепой зоне
         if list_invisible_wells:
             # выделение DataFrame добывающих скважин в слепых зонах из исходного DataFrame продуктивных
+            log_user.emit("Выделение скважин для исследования в следующие года")
             df_prod_recalc = add_shapely_types(
                 df_prod_intersection[df_prod_intersection['wellName'].isin(list_invisible_wells)],
                 mean_rad, dict_parameters['limit_radius_coef'])
             # обновление столбца AREA с максимально допустимым R в DataFrame скважин, попавших на первую итерацию расчета
             df_piez_recalc = add_shapely_types(df_piez, mean_rad, dict_parameters['limit_radius_coef'])
             df_inj_recalc = add_shapely_types(df_inj, mean_rad, dict_parameters['limit_radius_coef'])
+            log_user.emit("Процесс построения опорной сети на исследование в следующие года")
             df_result_invisible = core_optim_mesh(list_exception, path_property, dict_parameters['percent'], mean_rad,
                                                   coeff, horizon, obj_square, dict_parameters['min_research_time'],
                                                   dict_parameters['max_research_time'], dict_parameters['calc_option'],
@@ -75,10 +81,12 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, d
                                                   pd.DataFrame(columns=df_piez_recalc.columns))
             df_result_invisible['wellNet'] = 'Выбрана в опорную сеть'
             if (dict_parameters['separation_by_years'] == 1) and (not df_result_invisible.empty):
+                log_user.emit("Распределение скважин для исследования на 1 год вперед")
                 df_result_invisible['year_of_survey'] = 1
                 df_result = pd.concat([df_result, df_result_invisible],
                                       axis=0, sort=False).reset_index(drop=True)
             elif (dict_parameters['separation_by_years'] == 2) and (not df_result_invisible.empty):
+                log_user.emit("Распределение скважин для исследования на 2 года вперед")
                 df_first_year, df_second_year = separation_gdis(df_result_invisible)
                 df_first_year['year_of_survey'], df_second_year['year_of_survey'] = 1, 2
                 df_result = pd.concat([df_result, df_first_year, df_second_year],
@@ -87,6 +95,7 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, d
                 pass
         else:
             logger.info(f'Write to result dictionary by key {key}, there are not invisible wells')
+            log_user.emit("Отсутствуют кандидаты для исследования в следующие года")
 
     # задание статуса по опорной сети
     df_result['wellNet'] = "Выбрана в опорную сеть"
@@ -114,7 +123,7 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, d
 
     # поиск охвата проектного фонда скважинами из ОС
     if not df_proj_wells.empty:
-        list_proj_research = list(check_intersection_area(cascaded_union(list(df_result['AREA'].explode())),
+        list_proj_research = list(check_intersection_area(unary_union(list(df_result['AREA'].explode())),
                                                           df_proj_wells, dict_parameters['percent'],
                                                           dict_parameters['calc_option']))
         df_proj_wells.loc[df_proj_wells['wellName'].isin(list_proj_research), 'wellNet'] = 'Охвачена исследованиями'

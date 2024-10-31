@@ -1,6 +1,8 @@
 import json
 import os
 import sys
+import time
+
 from tqdm import tqdm
 from datetime import timedelta
 import numpy as np
@@ -16,7 +18,7 @@ from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_co
 
 
 @logger.catch
-def upload_input_data(dict_constant, dict_parameters):
+def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
     """
     Считывание файла с исключенными скважинами, затем загрузка данных,
     их подготовка к расчету в зависимости от базы данных
@@ -26,81 +28,100 @@ def upload_input_data(dict_constant, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
+
     # Upload project wells
-    logger.bind(USER=True).info("Проверка наличия проектного фонда")
-    df_project = preparing_project_wells(dict_parameters)
+    df_project = preparing_project_wells(dict_parameters, log_user, progress_bar)
 
     # Upload exception list wells
-    list_exception = get_exception_wells(dict_parameters, 'Исключения')
+    log_user.emit("Получение списка исключенных скважин")
+    progress_bar.emit(0)
+    list_exception = get_exception_wells(dict_parameters, 'Исключения', log_user)
+    progress_bar.emit(100)
 
     # Get path to application folder
     application_path = get_path()
     logger.info("Data type definition")
-    logger.bind(USER=True).info('Определение типа выгрузки')
+    log_user.emit("Определение типа выгрузки")
+    progress_bar.emit(0)
     # read first row of file
     first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
                               sheet_name='Фонд', nrows=1)
+    progress_bar.emit(100)
     # check type of database by values of first row
     if first_row.loc[0][0] == '№ скважины':
-        logger.bind(USER=True).info('Тип выгрузки: NGT')
         logger.info("Preparing NGT data")
-
+        log_user.emit("Тип выгрузки NGT")
+        log_user.emit("Чтение данных по скважинам")
+        progress_bar.emit(0)
         df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
                            skiprows=[1],
                            sheet_name='Фонд')
+        progress_bar.emit(100)
         df = df.dropna(subset=['№ скважины'])
         # preprocessing NGT data
-        df_input, df_exceptions = preprocessing_NGT(df, dict_parameters['min_length_horWell'])
-        logger.info("General input_output data")
-        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
+        log_user.emit("Подготовка выгрузки из NGT")
+        df_input, df_exceptions = preprocessing_NGT(df, dict_parameters['min_length_horWell'], progress_bar)
+        logger.info("General preparing data")
+        log_user.emit("Подготовка данных к расчету")
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters,
+                                            log_user, progress_bar)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
         df_input['num_of_research'] = 1
         # gdis data accounting
-        df_input, df_exceptions = ngt_gdis_data(df_input, df_exceptions, dict_parameters)
+        logger.info("GDIS data accounting")
+        log_user.emit("Учет данных о проведенных исследованиях NGT")
+        df_input, df_exceptions = ngt_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_bar)
     # check type of database by values of first row
     elif first_row.loc[0][0] == 'NSKV':
-        logger.bind(USER=True).info('Тип выгрузки: ГеоБД')
         logger.info("Preparing GeoBD data")
-
+        log_user.emit("Тип выгрузки ГеоБД")
+        log_user.emit("Чтение данных по скважинам")
+        progress_bar.emit(0)
         df = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=0,
                            skiprows=[1],
                            sheet_name='Фонд')
+        progress_bar.emit(100)
         df = df.dropna(subset=['NSKV'])
-        df_input, df_exceptions = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns)
-        logger.info("General input_output data")
-        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters)
+        log_user.emit("Подготовка выгрузки из ГеоБД")
+        df_input, df_exceptions = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns, progress_bar)
+        logger.info("General preparing data")
+        log_user.emit("Подготовка данных к расчету")
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters,
+                                            log_user, progress_bar)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
         df_input['num_of_research'] = False
         # gdis data accounting
-        df_input, df_exceptions = geobd_gdis_data(df_input, df_exceptions, dict_parameters)
+        log_user.emit("Учет данных о проведенных исследованиях ГеоБД")
+        df_input, df_exceptions = geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_bar)
     # if wrong type of database
     else:
-        print('Формат загруженного файла не подходит для модуля')
+        logger.info('Wrong data format')
+        log_user.emit("Неверный формат файла загрузки")
         sys.exit()
-
     # Upload necessarily research wells
-    list_necessarily = get_exception_wells(dict_parameters, 'Приоритетные скважины')
+    list_necessarily = get_exception_wells(dict_parameters, 'Приоритетные скважины', log_user)
     df_input.loc[df_input['wellName'].isin(list_necessarily), 'num_of_research'] = True
-
     return df_input, df_exceptions, list_exception
 
 
 @logger.catch(level='DEBUG')
-def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
+def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_bar):
     """
     Подготовка данных ГеоБД
 
     :param df_input: Выгрузка данных ГеоБД
     :param dict_constant: статусы и характеры работы скважин
     :param dict_geobd_columns: список имен столбцов
+    :param progress_bar:
     :return: DataFrame с необходимыми столбцами для расчета, столбцы в правильном порядке,
     скважины разделены на ННС и ГС
     """
 
+    progress_bar.emit(0)
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
     # fill NaN cells
     df_input = df_input.fillna(0)
@@ -131,9 +152,11 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     # create list of required columns
     required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'PEREV', 'KUST', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
-
+    progress_bar.emit(25)
     df_input = add_t3_coord_geobd(df_input, required_cols)
+    progress_bar.emit(50)
     df_exceptions = add_t3_coord_geobd(df_exceptions, required_cols + ['wellNet'])
+    progress_bar.emit(75)
 
     df_input.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
     df_exceptions.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
@@ -147,6 +170,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns):
     df_exceptions.columns = {**dict_geobd_columns, **{'wellNet': 'wellNet'}}.values()
     # нужно перевести столбец приемистости по газу 'injectivity_day' в м3/сут как в NGT, а в ГеоБД этот столбец в тыс. м3/сут
     df_input['injectivity_day'] = df_input['injectivity_day'] * 1000
+    progress_bar.emit(100)
 
     return df_input, df_exceptions
 
@@ -208,26 +232,32 @@ def add_t3_coord_geobd(df, list_columns):
 
 
 @logger.catch(level='DEBUG')
-def preparing_project_wells(dict_parameters):
+def preparing_project_wells(dict_parameters, log_user, progress_bar):
     """
     Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
     :param dict_parameters: словарь с параметрами расчета
+    :param progress_bar:
+    :param log_user:
     :return: подготовленный DataFrame с проектными скважинами
     """
     logger.info('Preparing project wells')
-    logger.bind(USER=True).info("Чтение листа с проектными скважинами")
     # get application path to read required file
     application_path = get_path()
     try:
+        log_user.emit("Чтение листа с проектными скважинами")
+        progress_bar.emit(0)
         df_project = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                    header=0, skiprows=[1], decimal='.', sheet_name='Проектный фонд')
         if df_project.empty:
-            logger.bind(USER=True).info("Проектные скважины отсутствуют")
+            log_user.emit("Проектных скважин не найдено")
+            progress_bar.emit(100)
             return pd.DataFrame()
     except ValueError:
-        logger.bind(USER=True).info('Лист с проектными скважинами не найден')
+        log_user.emit("Лист с данными по проектному фонду не найден")
         logger.info('Sheet with name "Проектный фонд" not found in data file')
+        progress_bar.emit(100)
         return pd.DataFrame()
+    progress_bar.emit(100)
     # delete spaces in cells with well names and objects
     df_project['NSKV'] = df_project['NSKV'].apply(lambda x: str(x).strip())
     df_project['PLAST'] = df_project['PLAST'].apply(lambda x: str(x).strip())
@@ -238,10 +268,14 @@ def preparing_project_wells(dict_parameters):
     df_project['Y3'] = 0
 
     list_well_names = list(df_project['UWI'].explode().unique())  # list unique names of wells
+    total_wells_count = len(list_well_names)
     df_project = df_project.sort_values(by=['NSKV'], ascending=True)
     df_project.reset_index(drop=True)
     df_project['well type'] = ''
-    for well in tqdm(list_well_names, "Подготовка координат проектных скважин", position=0, leave=True,
+    log_user.emit("Подготовка координат проектных скважин")
+    progress_bar.emit(0)  # update progress bar value
+
+    for well in tqdm(list_well_names, "Preparing project wells", position=0, leave=True,
                      colour='white', ncols=80):
         objs = list(
             df_project[df_project['UWI'] == well].PLAST.explode().unique())  # list of unique well objects
@@ -261,6 +295,8 @@ def preparing_project_wells(dict_parameters):
         df_project.loc[df_project['UWI'] == well, 'Y3'] = coord_y[-1]
         # writing wells object to columns PLAST separated by commas
         df_project.loc[df_project['UWI'] == well, 'PLAST'] = df_project.apply(lambda x: ', '.join(objs), axis=1)
+        # update progress bar of cycle
+        progress_bar.emit(int((list_well_names.index(well) + 1) / total_wells_count * 100))
 
     df_project = df_project.drop_duplicates(subset=['UWI'])
     df_project.drop(columns=['UWI'], axis=1, inplace=True)
@@ -268,7 +304,6 @@ def preparing_project_wells(dict_parameters):
     df_project.columns = dict_project_columns.values()
 
     # add to input dataframe columns for shapely types of coordinates
-
     df_project.insert(loc=df_project.shape[1], column="POINT",
                       value=list(map(lambda x, y: Point(x, y), df_project.coordinateX, df_project.coordinateY)))
 
@@ -288,7 +323,7 @@ def preparing_project_wells(dict_parameters):
 
 
 @logger.catch(level='DEBUG')
-def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
+def preparing(dict_constant, df_input, df_exceptions, dict_parameters, log_user, progress_bar):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
@@ -299,27 +334,32 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
     :return: Возврат DataFrame, подготовленного к расчету
     """
 
+    progress_bar.emit(0)
     PROD_STATUS, PROD_MARKER, PIEZ_STATUS, INJ_MARKER, INJ_STATUS, DELETE_MARKER = unpack_status(dict_constant)
 
-    # transfer to string type
+    # transfer columns to string type
+    logger.info("Transfer columns to string type")
     df_input[['wellName', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']] = df_input[
         ['wellName', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']].astype('str')
     df_exceptions[['wellName', 'wellStatus', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']] = df_exceptions[
         ['wellName', 'wellStatus', 'workMarker', 'workHorizon', 'nameDate', 'wellCluster']].astype('str')
-
+    logger.info("Column date to datetime format")
     df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])
-
     # cleaning work horizon
+    logger.info("Cleaning work horizon")
     df_input, df_exception_by_hor = clean_work_horizon(df_input, dict_parameters['horizon_count'])
     df_exceptions = pd.concat([df_exceptions, df_exception_by_hor], axis=0, sort=False).reset_index(drop=True)
     df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по кол-ву пластов'
+    progress_bar.emit(25)
 
     # cleaning wellStatus
+    logger.info("Status division")
     df_exceptions = pd.concat([df_exceptions, df_input[df_input.wellStatus.map(str.lower).str.contains(DELETE_MARKER)]],
                               axis=0, sort=False).reset_index(drop=True)
     df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена из расчета по состоянию'
     df_input = df_input[~(df_input.wellStatus.map(str.lower).str.contains(DELETE_MARKER))]
 
+    logger.info("Marker production wells (oil, gas, gas condensate)")
     # marker production wells (oil, gas, gas condensate)
     df_input['fond'] = 0
     df_input.loc[(df_input.workMarker.map(str.lower).str.contains(PROD_MARKER)) & (
@@ -330,8 +370,10 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
     # marker piezometric wells
     df_input.loc[df_input.wellStatus.map(str.lower).str.contains(PIEZ_STATUS), 'fond'] = 'ПЬЕЗ'
     df_input = df_input[df_input['fond'] != 0]
+    progress_bar.emit(50)
 
     # separation production gas, oil, gas condensate wells
+    logger.info("Separation production gas, oil, gas condensate wells")
     df_input['gasStatus'] = 0
     df_input['gasStatus'] = df_input['gasStatus'].where(
         (df_input['fond'] != 'ДОБ') | (df_input['gasRate'] == 0) | (df_input['condRate'] != 0), 'газовая')
@@ -341,16 +383,19 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
         (df_input['fond'] != 'ДОБ') | (df_input['gasRate'] != 0) | (df_input['condRate'] != 0), 'нефтяная')
 
     # separation injection wells to water injection and gas injection
+    logger.info("Separation injection wells to water injection and gas injection")
     df_input['gasStatus'] = df_input['gasStatus'].where(
         (df_input['fond'] != 'НАГ') | (df_input['injectivity_day'] <= 2000), 'газонагнетательная')
     df_input['gasStatus'] = df_input['gasStatus'].where(
         (df_input['fond'] != 'НАГ') | (df_input['injectivity_day'] >= 2000), 'водонагнетательная')
 
     # separation piezometric wells
+    logger.info("Separation piezometric wells")
     df_input['gasStatus'] = df_input['gasStatus'].where(df_input['fond'] != 'ПЬЕЗ', 'пьезометрическая')
     df_input['gasStatus'] = df_input['gasStatus'].where(
         ~((df_input['fond'] == 'ПЬЕЗ') & (df_input['workMarker'].str.lower().str.contains('газ'))),
         'пьезометрическая газовая')
+    progress_bar.emit(75)
 
     # delete production wells with oil rate bigger than value in parameters
     if dict_parameters['limit_oilrate'] != '':
@@ -412,12 +457,13 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters):
                                                                 list(map(lambda x, y: LineString(
                                                                     tuple(x.coords) + tuple(y.coords)),
                                                                          df_exceptions.POINT, df_exceptions.POINT3)))
+    progress_bar.emit(100)
 
     return df_input, df_exceptions
 
 
 @logger.catch(level='DEBUG')
-def preprocessing_NGT(df_input, min_length_horWell):
+def preprocessing_NGT(df_input, min_length_horWell, progress_bar):
     """
     Подготовка данных из NGT
     :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
@@ -425,15 +471,16 @@ def preprocessing_NGT(df_input, min_length_horWell):
     :return: подготовленный DataFrame выгрузки NGT, скважины разделены на ННС и ГС
     """
 
+    progress_bar.emit(0)
     # rename columns
     df_input.columns = dict_names_column.values()
     df_input = df_input.fillna(0)  # fill NaN cells
+    progress_bar.emit(25)
     # create exceptions DataFrame
     df_exceptions = df_input[(df_input['workHorizon'] == 0) | (df_input['wellCluster'] == 0)]
     df_exceptions['wellNet'] = 'Исключена из расчета, куст/пласт/состояние'
     # cleaning null values
     df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0)]
-
     # transfer to string type columns of calculation DataFrame
     df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
         df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
@@ -441,9 +488,12 @@ def preprocessing_NGT(df_input, min_length_horWell):
         df_exceptions[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
     df_input['nameDate'] = pd.to_datetime(df_input['nameDate'])  # column of str time to timestamp
     df_input['oilfield'] = df_input['oilfield'].str.upper()  # uppercase of oilfield name in column
+    progress_bar.emit(50)
     # create T1 and T3 coordinates for each well in nDataFrame
     df_input = add_t3_coord_ngt(df_input, min_length_horWell)
+    progress_bar.emit(75)
     df_exceptions = add_t3_coord_ngt(df_exceptions, min_length_horWell)
+    progress_bar.emit(100)
 
     return df_input, df_exceptions
 
@@ -488,7 +538,7 @@ def add_t3_coord_ngt(df, min_length_horWell):
 
 
 @logger.catch(level='DEBUG')
-def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
+def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_bar):
     """
     Функция обработки данных ГДИС из выгрузки ГеоБД
     :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
@@ -496,6 +546,8 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
+
+    progress_bar.emit(0)
     logger.info('Upload GeoBD GDIS table')
     # open Excel file with data and choose sheet with required name
     app1 = xw.App(visible=False)
@@ -521,7 +573,7 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
 
     except Exception as e:
         logger.info(f'Rename excel filters error: {e}')
-
+    log_user.emit("Открытие листа с данными по исследованиям")
     gdis_wb = xw.Book(os.path.join(get_path(), "input", dict_parameters['data_file']))
     gdis_sheet = gdis_wb.sheets['ГДИС']
     # create list with names of cells in column Pпл на ВНК
@@ -538,9 +590,11 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
         ((127, 0, 255), "VIOLET"),
         ((0, 0, 0), "BLACK"),
         ((255, 255, 255), "WHITE")))
+    progress_bar.emit(33)
 
     # check that first cell in correct format
     if gdis_sheet['A1'].value == '№ п/п':
+        log_user.emit("Разделение исследований на категории достоверное/недостоверное")
         for row_cell in list_cells:
             if min_color_diff(row_cell.font.color, colors)[-1] in list_required_colors:
                 gdis_sheet[f'U{row_cell.address.split('$')[-1]}'].value = "результат достоверный"
@@ -553,11 +607,13 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
         gdis_wb.save()
     else:
         # clearing sheet
+        log_user.emit("Неверный формат таблицы с исследованиями")
         gdis_sheet.clear()
         gdis_wb.save()
     # close excel file
     gdis_wb.close()
     app1.kill()
+    progress_bar.emit(67)
 
     try:
         # read data from sheet with pandas
@@ -565,10 +621,12 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
                                 sheet_name='ГДИС')
         # check empty dataframe
         if df_gdis.empty:
+            log_user.emit("Лист с данными по исследованиям пуст")
             return df_input, df_exceptions
     except ValueError:
         # wrong type of data error and return origin dataframe
         logger.info('Sheet with name "ГДИС" not found in data file')
+        log_user.emit("Лист с данными по исследованиям не найден")
         return df_input, df_exceptions
     # check parameter of date last GDIS
     if not (dict_parameters['gdis_option'] is None):
@@ -592,6 +650,8 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
         df_gdis = df_gdis[
             ['Скважина', 'Пласт ОИС', 'Вид исследования', 'Дата испытания', 'Дата окончания', 'Качество исследования']]
         df_gdis.columns = dict_rename.values()
+
+        log_user.emit("Подготовка данных об исследованиях")
         df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
 
         # drop wells by horizon gdis
@@ -601,16 +661,17 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters):
                                   axis=0, sort=False).reset_index(drop=True)
         df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по ГДИС'
         df_input = df_input[df_input['workHorizon'] != '']
-
+        progress_bar.emit(100)
         return df_input, df_exceptions
 
     else:
         logger.info('Incorrect data of GDIS GeoBD')
+        progress_bar.emit(100)
         return df_input, df_exceptions
 
 
 @logger.catch(level='DEBUG')
-def ngt_gdis_data(df_input, df_exceptions, dict_parameters):
+def ngt_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_bar):
     """
     Загрузка данных по проведенным ГДИС на месторождении и удаление из входных данных
     скважин, на которых проводились исследования начиная с введенной пользователем даты по сей день
@@ -620,21 +681,32 @@ def ngt_gdis_data(df_input, df_exceptions, dict_parameters):
     :param dict_parameters: словарь с параметрами расчета
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
+
+    progress_bar.emit(0)
     logger.info("Upload NGT GDIS table")
+    log_user.emit("Чтение таблицы исследований из NGT")
     try:
+
         df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']),
                                 skiprows=[0], sheet_name='ГДИС')
+        progress_bar.emit(33)
         if df_gdis.empty:
+            log_user.emit("Лист с данными по исследованиям пуст")
+            progress_bar.emit(100)
             return df_input, df_exceptions
     except ValueError:
+        log_user.emit("Лист с данными по исследованиям не найден")
         logger.info('Sheet with name "ГДИС" not found in data file')
+        progress_bar.emit(100)
         return df_input, df_exceptions
 
     # get input_output dataframes
     if not (dict_parameters['gdis_option'] is None):
 
         df_gdis = df_gdis[['Скважина', 'Пласты', 'Вид исследования', 'Начальная дата', 'Дата окончания', 'Оценка']]
+        log_user.emit("Подготовка данных об исследованиях")
         df_gdis = gdis_preparing(df_gdis, df_input['wellName'], dict_parameters['gdis_option'])
+        progress_bar.emit(67)
 
         # drop wells by horizon gdis
         objects = df_gdis.groupby(['wellName'])['workHorizon'].apply(lambda x: set(x.explode()))
@@ -643,11 +715,13 @@ def ngt_gdis_data(df_input, df_exceptions, dict_parameters):
                                   axis=0, sort=False).reset_index(drop=True)
         df_exceptions.loc[df_exceptions['wellNet'].isnull(), 'wellNet'] = 'Исключена по ГДИС'
         df_input = df_input[df_input['workHorizon'] != '']
+        progress_bar.emit(100)
 
         return df_input, df_exceptions
 
     else:
         logger.info('Incorrect date of GDIS')
+        progress_bar.emit(100)
         return df_input, df_exceptions
 
 
@@ -727,7 +801,7 @@ def drop_wells_by_gdis(input_row, gdis_objects):
 
 
 @logger.catch(level='DEBUG')
-def preparing_reservoir_properties(dict_parameters, path):
+def preparing_reservoir_properties(dict_parameters, path, log_user, progress_bar):
     """
     Подготовка PVT свойств из справочника PVT и далее запись в .json файл
     для быстрого дотсупа к свойствам объектов в процессе расчета
@@ -736,18 +810,25 @@ def preparing_reservoir_properties(dict_parameters, path):
     :param path: путь к корневой папке
     :return: сохраняет словарь в корневую папку в виде json файла со свойствами месторождений
     """
+
+    progress_bar.emit(0)
     application_path = get_path()
     try:
+        log_user.emit("Чтение листа с PVT свойствами всех месторождений")
         df_property = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                     skiprows=[0],
                                     sheet_name='PVT', decimal=',')
         if df_property.empty:
             logger.info('Not found PVT properties data')
-            raise Exception('Загрузите справочник PVT свойств')
+            log_user.emit("Лист с PVT свойствами пуст. Загрузите необходимые данные и запустите расчет снова")
+            progress_bar.emit(100)
+            sys.exit()
     except ValueError:
         logger.info('Sheet with name "PVT" not found in data file')
-        raise Exception('Загрузите справочник PVT свойств')
-
+        log_user.emit("Лист с PVT свойствами не найден. Загрузите необходимые данные и запустите расчет снова")
+        progress_bar.emit(100)
+        sys.exit()
+    progress_bar.emit(20)
     dict_names_prop = {
         'Месторождение': 'oilfield',
         'Пласт OIS': 'reservoir',
@@ -772,6 +853,7 @@ def preparing_reservoir_properties(dict_parameters, path):
     # delete spaces in columns PVT dataframe
     df_property.columns = df_property.columns.str.strip()
     # choose the required columns PVT dataframe for old and new table format
+    logger.info("Rename PVT table columns")
     try:
         df_property = df_property[['Месторождение', 'Пласт OIS', 'Рпл.нач., кгс/см2          (карты изобар)',
                                    'μн. в пл. усл., сП', 'μв. в пл. усл., сП',
@@ -790,6 +872,9 @@ def preparing_reservoir_properties(dict_parameters, path):
                                    'Krwk', 'Krok', 'Кпрон']]
 
     df_property.columns = dict_names_prop.values()
+    progress_bar.emit(40)
+    logger.info("Delete spaces in all dataframe columns besides oilfield and reservoir columns")
+    log_user.emit("Подготовка данных PVT свойств месторождений")
     for i in df_property.columns:
         # delete spaces in all dataframe columns besides oilfield and reservoir columns
         df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
@@ -801,13 +886,18 @@ def preparing_reservoir_properties(dict_parameters, path):
     df_property['Sno'] = list(map(lambda x: round(1 - x, 3), df_property['Swk']))
     df_property[['oilfield', 'reservoir']] = df_property[['oilfield', 'reservoir']].astype('str')
     df_property = df_property.fillna(0)
+    progress_bar.emit(60)
+
     # create list of unique names oilfield-reservoir
+    logger.info("Create list of unique names oilfield-reservoir")
     list_oilfield_res = list(df_property['horizon'].explode().unique())
     list_properties = ['porosity', 'pressure', 'oil_compr', 'water_copmr', 'rock_compr', 'oil_visc',
                        'water_visc', 'gas_visc', 'K_wmax', 'K_omax', 'Swo', 'Swk', 'Sno',
                        'Krw_degree', 'Krw_func', 'Kro_degree', 'Kro_func', 'K_abs']
     list_oilfield = list(df_property['oilfield'].explode().unique())
+
     # writing properties in dictionary by propetry dataframe as olifield/object/properties
+    logger.info("Writing properties in dictionary by propetry dataframe as olifield/object/properties")
     dict_PVT = {}
     for oil_res in list_oilfield_res:
         oilfield = str(oil_res).split('__')[0]
@@ -818,24 +908,28 @@ def preparing_reservoir_properties(dict_parameters, path):
         for prop in list_properties:
             dict_PVT[oilfield][res][prop] = df_property[
                 (df_property['oilfield'] == oilfield) & (df_property['reservoir'] == res)][prop].values[0]
+    progress_bar.emit(80)
 
     # calculating mean properties by objects for each olifield
+    logger.info("Calculating mean properties by objects for each olifield")
     for oilfield in list_oilfield:
         dict_mean_prop = dict.fromkeys(list_properties)
         for prop in list_properties:
             dict_mean_prop[prop] = df_property[df_property['oilfield'] == oilfield][prop].mean()
         dict_PVT[oilfield]['DEFAULT_OBJ'] = dict_mean_prop
     # writing calculated properties to json file
+    logger.info("Writing calculated properties to json file")
     with open(path, 'w', encoding='UTF-8') as file:
         json_string = json.dumps(dict_PVT, default=lambda o: o.__dict__, ensure_ascii=False, sort_keys=True,
                                  indent=2)
         file.write(json_string)
+    progress_bar.emit(100)
 
     pass
 
 
 @logger.catch(level='DEBUG')
-def get_exception_wells(dict_parameters, sheet):
+def get_exception_wells(dict_parameters, sheet, log_user):
     """
     Загрузка скважин для исключения из расчета или скважин обязательных для включения в ОС в зависимости от имени листа
     в Excel
@@ -846,14 +940,19 @@ def get_exception_wells(dict_parameters, sheet):
     """
     application_path = get_path()
     try:
+        logger.info(f"Trying read sheet '{sheet}'")
+        log_user.emit(f"Чтение листа '{sheet}'")
         df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                      header=None,
                                      sheet_name=sheet)
         if df_exception.empty:
+            logger.info(f"Empty sheet '{sheet}'")
+            log_user.emit(f"Нет данных на листе '{sheet}'")
             return []
     except ValueError:
-        logger.info(f'Sheet with name {sheet} not found in data file')
+        logger.info(f"Sheet '{sheet}' not found in data file")
         return []
+
     df_exception[0] = df_exception[0].astype(str)
     # list unique well names for exception
     list_exception = list(df_exception[0].explode().unique())

@@ -1,21 +1,17 @@
 import sys
 import os
-import time
 import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
-
 from src.gui.qtsample import UiMainWindow
-from src.main import module_gdis
 from src.gui.validate_widget_data import ValidateData, ValidatePath
 from pydantic import ValidationError
 from src.calculation.support_functions import get_path
 from src.gui.mpl_widget import MplWidget
-from src.gui.log_window import LogWindow, LogEmitter, TqdmProgressBar
-import threading
-from loguru import logger
+from src.gui.log_window import LogWindow
+from src.gui.calculation_thread import CalculationThread
 
 
 class DataframeToTable(QtCore.QAbstractTableModel):
@@ -80,22 +76,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.buttons()  # основные кнопки: расчет, результаты в Excel, выбор директории для записи в БД результатов
         self.item_clicked()  # проверка на нажатие редактируемого item в QTreeWidget
         self.menu_()  # основные кнопки действий меню
-        self.log_emitter = LogEmitter()  # Создаем эмиттер для логов и остановки
-        self.setup_loggers()  # добавление обработчика для отправки логов в отдельное окно пользователю
-        self.thread_log_window = None
         self.log_window = None
-        self.thread_calculation = None  # Инициализация для потока расчета
+        self.calculation_thread = None  # Инициализация для потока расчета
         self.show()
-
-    def log_handler(self, message):
-        """Обработчик логов loguru, отправляющий логи через сигнал."""
-        self.log_emitter.log_signal.emit(str(message))
-
-    def setup_loggers(self):
-        logger.remove()  # Убираем стандартные обработчики
-        # Добавляем обработчик для отправки логов в GUI
-        logger.add(self.log_handler, level="INFO", filter=lambda record: "USER" in record["extra"],
-                   format="{time:DD-MM-YYYY HH:mm:ss} {message}")
 
     def set_default_params(self):
         """
@@ -268,50 +251,39 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Запуск окна логов и функции расчета в отдельных потоках
         """
-        self.start_log_window()
-        # Создаем поток для выполнения расчета
-        self.thread_calculation = QtCore.QThread()
+        self.setDisabled(True)
+
         self.database_path = self.ui.path_result_db.text()
-        self.log_emitter.log_signal.emit("Начало расчета")
-        self.thread_calculation.run = lambda: module_gdis(self.validate(self.dict_param, self.dict_param),
-                                                          list(self.dict_param.keys()), self.database_path)
-        self.thread_calculation.start()
-        self.thread_calculation.finished.connect(self.on_calculation_finished)
-        # По завершении расчета выводим сообщение
-        self.log_emitter.log_signal.emit("Расчет завершен")
 
-    def start_log_window(self):
-        """Создание и отображение окна логов"""
-        if self.log_window is None:
-            self.log_window = LogWindow(self.log_emitter)
-            self.log_window.show()
+        # Создание и запуск потока
+        self.calculation_thread = CalculationThread(self.validate(self.dict_param, self.dict_param),
+                                                    list(self.dict_param.keys()), self.database_path)
 
-    def stop_calculation(self):
-        """Метод остановки только расчета"""
-        self.log_emitter.log_signal.emit("Расчет остановлен пользователем")
-        print(6)
-        # Завершение потока расчета, если он активен
-        if self.thread_calculation and self.thread_calculation.isRunning():
-            self.thread_calculation.quit()
-        print(7)
-        # Поток завершен, главное окно остается открытым
+        # Создание окна логов, подключение к сигналам
+        self.log_window = LogWindow(self.calculation_thread, self)
+        self.log_window.stop_button.setDisabled(False)
+        self.calculation_thread.log_signal.connect(self.log)
+        self.calculation_thread.finished_signal.connect(self.on_calculation_finished)
+        self.calculation_thread.stop_signal.connect(self.on_calculation_stopped)
+
+        # Запуск потока и отображение окна логов
+        self.calculation_thread.start()
+        self.log_window.show()
+
+    def log(self, message):
+        if self.log_window:
+            self.log_window.log_area.append(f"{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}  {message}")
+
+    def on_calculation_stopped(self):
+        self.setDisabled(False)
+        self.calculation_thread.stop()
+        self.log("Расчет остановлен.")
+        self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
     def on_calculation_finished(self):
-        """
-        Действия после завершения расчета
-        """
-        # Разблокировка кнопки запуска расчета
-        self.setEnabled(True)
-
-    def tqdm_instance(self, *args, **kwargs):
-        """Создание экземпляра TqdmProgressBar для обновления прогресса"""
-        return TqdmProgressBar(self.log_emitter, *args, **kwargs)
-
-    def manual_progress_update(self, current_step, total_steps):
-        """Обновление прогресс-бара"""
-        if total_steps > 0:
-            progress = int((current_step / total_steps) * 100)
-            self.log_emitter.progress_signal.emit(progress)
+        # self.log("Расчет завершен.")
+        self.setEnabled(True)  # Разблокируем кнопку запуска
+        self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
     def table_to_excel(self, button):
         """
@@ -336,8 +308,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 "report"]
             for script in calc_scripts:
                 df = pd.read_sql_query(f'SELECT * FROM "{script}"', connection)
-                df = df.drop(columns=['index', 'GEOMETRY', 'AREA', 'polygon'])
-                df = df.fillna(0)
+                df = df.drop(columns=['index'])
+                if script != 'report':
+                    df = df.drop(columns=['GEOMETRY', 'AREA', 'polygon'])
+                    df = df.fillna(0)
                 new_wb.sheets.add(f"{script.replace('/', '_')}")
                 sht = new_wb.sheets(f"{script.replace('/', '_')}")
                 sht.range('A1').options(pd.DataFrame, index=False).value = df
@@ -703,11 +677,7 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
 
-
-if __name__ == '__main__':
-    app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow()
-    window.setWindowTitle('Модуль ОС')
-    window.setWindowIcon(QtGui.QIcon('Icon.png'))
-
-    sys.exit(app.exec())
+    def closeEvent(self, event):
+        if self.log_window is not None:
+            self.log_window.close()
+        event.accept()

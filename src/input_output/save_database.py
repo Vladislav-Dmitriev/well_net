@@ -1,28 +1,53 @@
 import json
-import sqlite3 as sql
 import os
+import sqlite3 as sql
 
 import numpy as np
-import shapely as spl
 import pandas as pd
+import shapely as spl
 from loguru import logger
 from tqdm import tqdm
-from .save_excel import get_report
+
+from src.input_output.save_excel import get_report
 from src.calculation.shapely_geometry import check_intersection_area
 
 
 @logger.catch(level='DEBUG')
-def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database):
+def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database, progress_bar):
     """
     Запись результатов в базу данных
-    :param list_name_params:
-    :param dict_result: словарь, по ключам которого содержится результирующий DataFrame для каждого контура
-    :param df_exceptions: DataFrame исключенных из расчета скважин(возможно без объекта работы)
-    :param dict_parameters: словарь с параметрами расчета
-    :param path_database: путь для сохранения базы данных с результатами
-    :return:
+
+    :param dict_result: dict - словарь, содержащий DataFrame результатов для каждого контура
+    :param df_exceptions: DataFrame - исключенные из расчета скважины
+    :param dict_parameters: dict - параметры расчета
+    :param list_name_params: list - список имен параметров расчета
+    :param path_database: str - путь к файлу базы данных для сохранения результатов
+    :param progress_bar:
     """
-    dict_rename = {
+    dict_rename = get_column_mappings()
+
+    # Подготовка базы данных
+    db_result = prepare_database(path_database)
+    total_count_tables = len(dict_result)
+    # Запись данных по контурам
+    for i, (contour_name, data) in enumerate(tqdm(dict_result.items(), desc="Запись сетки в базу данных")):
+        write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_result, dict_rename)
+        progress_bar.emit(int((i + 1) / total_count_tables * 100))
+
+    # Запись итогового отчета
+    save_report_to_db(db_result, dict_result, dict_parameters, list_name_params)
+
+    db_result.commit()
+    db_result.close()
+
+
+def get_column_mappings():
+    """
+    Возвращает словарь для переименования колонок из стандартизированных имен в удобочитаемые имена
+
+    :return: dict - словарь для переименования колонок
+    """
+    return {
         'wellName': '№ скважины',
         'nameDate': 'Дата',
         'workMarker': 'Характер работы',
@@ -45,7 +70,6 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
         'well type': 'Тип скважины',
         'fond': 'Фонд скважины',
         'GEOMETRY': 'GEOMETRY',
-        'num_of_research': 'Количество исследований в год',
         'AREA': 'AREA',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
@@ -72,57 +96,123 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
         'wellNet': 'Статус по опорной сети',
         'polygon': 'polygon'
     }
-    # удаление БД, если уже существует
-    try:
+
+
+def prepare_database(path_database):
+    """
+    Создает и возвращает подключение к базе данных, удаляя старую версию базы, если она существует
+
+    :param path_database: str - путь к файлу базы данных
+    :return: sqlite3.Connection - подключение к базе данных
+    """
+    if os.path.exists(path_database):
         os.remove(path_database)
-    except FileNotFoundError:
-        pass
-    print(os.path.isfile(path_database))
-    db_result = sql.connect(path_database)
+    return sql.connect(path_database)
 
-    for key, value in tqdm(dict_result.items(), "Write regular mesh to database", position=0, leave=True,
-                           colour='white', ncols=80):
-        name = str(key).replace("/", " ")
-        # reduce name of Excel sheet to 31 characters if it's too long
-        if len(name) > 31:
-            name = name.split(' k=')[0][:31 - len(' k=' + name.split(' k=')[-1])] + ' k=' + name.split(' k=')[-1]
 
-        df = value[0].copy()
-        contour = value[1]
-        if contour is None:
-            df_excluded = df_exceptions.copy()
-        else:
-            df_excluded = df_exceptions[df_exceptions['wellName'].isin(
-                set(check_intersection_area(contour, df_exceptions, dict_parameters['percent'],
-                                            dict_parameters['calc_option'])))]
-        df['num_of_research'] = df['num_of_research'].apply(lambda x: int(x) + 1)
-        df.drop(columns=['POINT3', 'POINT', 'limit_oilrate', 'min_dist', 'gasStatus'],
-                axis=1, inplace=True)
-        df = pd.concat([df, df_excluded], axis=0, sort=False).reset_index(drop=True)
-        df['intersection'] = df['intersection'].fillna('')
-        df['intersection'] = list(
-            map(lambda x: " ".join(str(y) for y in x) if type(x) != str else x, df["intersection"]))
-        df['AREA'] = df['AREA'].apply(lambda x: spl.to_geojson(x) if isinstance(x, spl.Polygon) else x)
-        df['GEOMETRY'] = df.apply(lambda x: json.dumps(
-            spl.geometry.mapping(x['GEOMETRY']) if x['GEOMETRY'] != np.nan else spl.LineString(
-                [[x['coordinateX'], x['coordinateY']], [x['coordinateX3'], x['coordinateY3']]]), indent=2), axis=1)
-        df['polygon'] = spl.to_geojson(contour)
-        df = df[dict_rename.keys()]
-        df.columns = dict_rename.values()
-        df['Дата'] = pd.to_datetime(df['Дата'])
-        logger.info(f'Write to database table with name: {name}')
-        df.to_sql(name=name.replace('-', '/'), con=db_result, if_exists='replace')
+def write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_result, dict_rename):
+    """
+    Записывает данные по контуру в базу данных.
 
-    logger.info('Getting report table')
+    :param contour_name: str - имя контура, используемое как имя таблицы
+    :param data: tuple - данные контура в виде кортежа (DataFrame, объект контура)
+    :param df_exceptions: DataFrame - данные исключенных скважин
+    :param dict_parameters: dict - параметры расчета
+    :param db_result: sqlite3.Connection - подключение к базе данных
+    :param dict_rename: dict - словарь для переименования колонок
+    """
+    contour_name = format_name(contour_name)
+    df, contour = data[0].copy(), data[1]
+
+    # Исключения для текущего контура
+    df_excluded = filter_exceptions(df_exceptions, contour, dict_parameters)
+
+    # Обработка данных перед записью
+    df = prepare_dataframe_for_db(df, df_excluded, contour, dict_rename)
+
+    # Запись данных в таблицу базы данных
+    logger.info(f'Запись в таблицу: {contour_name}')
+    df.to_sql(name=contour_name, con=db_result, if_exists='replace')
+
+
+def format_name(name):
+    """
+    Форматирует имя контура для использования в качестве имени таблицы, сокращая его до 31 символа при необходимости.
+
+    :param name: str - оригинальное имя контура
+    :return: str - отформатированное имя таблицы
+    """
+    name = str(name).replace("/", " ")
+    return name[:31] if len(name) > 31 else name
+
+
+def filter_exceptions(df_exceptions, contour, dict_parameters):
+    """
+    Фильтрует исключенные скважины для текущего контура, если контур указан.
+
+    :param df_exceptions: DataFrame - данные исключенных скважин
+    :param contour: объект контура (Polygon или None) - контур для фильтрации скважин
+    :param dict_parameters: dict - параметры расчета для фильтрации
+    :return: DataFrame - отфильтрованные данные исключений
+    """
+    if contour is None:
+        return df_exceptions.copy()
+    intersecting_wells = check_intersection_area(
+        contour, df_exceptions, dict_parameters['percent'], dict_parameters['calc_option']
+    )
+    return df_exceptions[df_exceptions['wellName'].isin(intersecting_wells)]
+
+
+def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
+    """
+    Подготавливает DataFrame перед записью в базу данных.
+
+    :param df: DataFrame - исходные данные контура
+    :param df_excluded: DataFrame - исключенные скважины для текущего контура
+    :param contour: объект контура (Polygon или None) - контур для добавления геометрии
+    :param dict_rename: dict - словарь для переименования колонок
+    :return: DataFrame - подготовленные данные для записи
+    """
+    df['num_of_research'] += 1
+    df.drop(columns=['POINT3', 'POINT', 'limit_oilrate', 'min_dist', 'gasStatus'], inplace=True)
+
+    # Объединение с исключенными скважинами
+    df = pd.concat([df, df_excluded], ignore_index=True).reset_index(drop=True)
+
+    # Обработка столбцов с геометрией и пересечениями
+    df['intersection'] = df['intersection'].fillna('').apply(
+        lambda x: " ".join(map(str, x)) if isinstance(x, list) else x
+    )
+    df['AREA'] = df['AREA'].apply(lambda x: spl.to_geojson(x) if isinstance(x, spl.Polygon) else x)
+    df['GEOMETRY'] = df.apply(lambda row: json.dumps(
+        spl.geometry.mapping(row['GEOMETRY']) if pd.notna(row['GEOMETRY']) else
+        spl.LineString([[row['coordinateX'], row['coordinateY']], [row['coordinateX3'], row['coordinateY3']]])), axis=1
+                              )
+    df['polygon'] = spl.to_geojson(contour)
+
+    # Переименование колонок
+    df = df[dict_rename.keys()]
+    df.columns = dict_rename.values()
+    df['Дата'] = pd.to_datetime(df['Дата'])
+    return df
+
+
+def save_report_to_db(db_result, dict_result, dict_parameters, list_name_params):
+    """
+    Сохраняет отчетные данные и параметры расчета в базу данных.
+
+    :param db_result: sqlite3.Connection - подключение к базе данных
+    :param dict_result: dict - результаты расчетов
+    :param dict_parameters: dict - параметры расчета
+    :param list_name_params: list - список имен параметров
+    """
+    logger.info('Запись отчетной таблицы в базу данных')
     df_report = get_report(dict_result)
-
-    logger.info('Writing report table to database')
     df_report.to_sql(name='report', con=db_result, if_exists='replace')
-    df_params_sql = pd.DataFrame([{new_key: ', '.join(map(str, dict_parameters[old_key])) if isinstance(
-        dict_parameters[old_key], list) else str(dict_parameters[old_key]) for new_key, old_key in
-                                   zip(list_name_params, list(dict_parameters.keys()))}])
-    df_params_sql.to_sql(name='parameters', con=db_result, if_exists='replace')
-    db_result.commit()
-    db_result.close()
 
-    pass
+    # Параметры расчета
+    logger.info('Запись параметров расчета в базу данных')
+    df_params = pd.DataFrame([{new_key: ', '.join(map(str, dict_parameters[old_key]))
+    if isinstance(dict_parameters[old_key], list) else str(dict_parameters[old_key])
+                               for new_key, old_key in zip(list_name_params, dict_parameters.keys())}])
+    df_params.to_sql(name='parameters', con=db_result, if_exists='replace')
