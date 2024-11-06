@@ -1,8 +1,5 @@
 import os
-import time
-
 from tqdm import tqdm
-
 import numpy as np
 from loguru import logger
 import geopandas as gpd
@@ -159,7 +156,7 @@ def get_contours(contours_path, log_user, progress_bar):
     total_files_count = len(list_of_files)
 
     for current_file in tqdm(list_of_files, "Preparing contour coordinates", position=0, leave=True,
-                             colour='white', ncols=80):
+                             colour='white', ncols=80, disable=True):
         with open(f'{contours_path}{current_file}', 'r') as file:
             data = list(filter(None, file.read().split('/')))
             list_polygons = []

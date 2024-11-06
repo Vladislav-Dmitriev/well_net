@@ -458,7 +458,7 @@ def separation_gdis(df_invisible):
     list_first_year = []
     # separate dataframe on two parts
     for i in tqdm(range(0, len(list_separation), 2), "Separation", position=0, leave=True,
-                  colour='white', ncols=80):
+                  colour='white', ncols=80, disable=True):
         list_first_year += [list_separation[i]]
     df_invisible.drop(['dist_from_0'], axis=1, inplace=True)
 

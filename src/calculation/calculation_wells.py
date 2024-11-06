@@ -34,7 +34,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     list_objects.sort()
 
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
-                        colour='white', ncols=80):
+                        colour='white', ncols=80, disable=True):
         logger.info(f'Current horizon: {horizon}')
         log_user.emit(f"-----Построение опорной сетки по объекту {horizon}")
         # для каждого объекта определяется свой df_horizon

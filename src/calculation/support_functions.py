@@ -67,7 +67,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
     mu, ct, phi, k, gas_viscocity, pressure, num_default, num_obj = 0, 0, 0, 0, 0, 0, 0, 0
 
     for obj in tqdm(list_obj, "Calculate time coefficient for objects of well", position=0, leave=True, colour='white',
-                    ncols=80):
+                    ncols=80, disable=True):
         if obj in dict_property[oilfield].keys():
             num_obj += 1
             # расчет свойств объектов, которые есть в PVT таблице
@@ -247,6 +247,13 @@ def get_path():
         return application_path
     else:
         raise Exception('Executable file path not found')
+    # if getattr(sys, 'frozen', False):
+    #     # Возвращаем директорию, в которой находится .exe файл
+    #     return os.path.dirname(sys.executable)
+    # else:
+    #     # Если программа запущена как скрипт, возвращаем директорию, где находится main.py
+    #     return os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
+
 
 
 @logger.catch(level='DEBUG')

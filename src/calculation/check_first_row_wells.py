@@ -1,5 +1,4 @@
 import math
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -252,7 +251,8 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
     df_in_contour = gpd.GeoDataFrame(df_in_contour, geometry="GEOMETRY")
     wells = list(df_in_contour.wellName.unique())
     wells_count = len(wells)
-    for i, well in enumerate(tqdm(wells, "Calculation research radius", position=0, leave=True, colour='white')):
+    for i, well in enumerate(tqdm(wells, "Calculation research radius", position=0, leave=True, colour='white',
+                                  disable=True)):
         # Обновляем столбец distance
         df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
                                              df_in_contour.GEOMETRY))

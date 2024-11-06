@@ -165,7 +165,7 @@ def get_report(dict_result):
     dict_report = {}
 
     for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
-                           colour='white', ncols=80):
+                           colour='white', ncols=80, disable=True):
         df = value[0]
         df = df[df['wellNet'] == 'Выбрана в опорную сеть']
 

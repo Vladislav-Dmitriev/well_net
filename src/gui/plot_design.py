@@ -3,6 +3,7 @@ import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import shapely as spl
+import pandas as pd
 from loguru import logger
 from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
@@ -56,7 +57,7 @@ def plot_results(df_result, script):
     """
     Визуализация полученных результатов в зависимости от выбранного сценария расчета
     :param df_result: DataFrame с результатами расчета по текущему сценарию
-    :param script: выбранный сценарий расчета
+    :param script: сценарий расчета
     :return: Сохранение картинок с опорной сеткой для разных объектов и разных радиусов исследования
     """
     dict_rename = {
@@ -87,7 +88,7 @@ def plot_results(df_result, script):
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',
         'mean_radius': 'Средний радиус по объекту, м',
-        'time_coef': 'Коэффициент для расчет времени исследования',
+        'time_coef': 'Коэффициент для расчета времени исследования',
         'k': 'Проницаемость, мД',
         'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
         'pressure': 'Начальное пластовое давление (карты изобар), атм',
@@ -115,7 +116,7 @@ def plot_results(df_result, script):
     df_result['GEOMETRY'] = df_result['GEOMETRY'].apply(lambda x: spl.geometry.shape(json.loads(x)))
     # добавление маркеров, упрощающих различие по статусам скважин по опорной сети
     df_result['status'] = ''
-    # df_excluded = df_result[df_result['current_horizon'] == 0]
+
     df_result.loc[df_result['wellNet'].map(str).str.contains(
         'Охвачена исследованиями|Охвачена приоритетными'), 'status'] = 'covered'
     df_result.loc[df_result['wellNet'].str.lower().str.contains('исключена|не охвачена'), 'status'] = 'excluded'

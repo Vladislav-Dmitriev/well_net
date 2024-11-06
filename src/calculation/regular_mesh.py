@@ -54,15 +54,15 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     list_polygons = []
     df_current_result = pd.DataFrame()
     # проходимся по каждому фонду (добывающий, нагнетательный, пьезометрический)
-    for fond in tqdm(dict_parameters['list_order_fond'], "Regular mesh for fond", position=0, leave=True,
-                     colour='white', ncols=80):
+    for fond in tqdm(dict_parameters['list_order_fond'].strip().upper().split(","), "Regular mesh for fond", position=0, leave=True,
+                     colour='white', ncols=80, disable=True):
         # выделение DataFrame на фонд (добывающий, нагнетательный, пьезометрический) и процента скважин в ОС от фонда
         if fond == "ДОБ":
-            log_user("Построение регулярной сетки по добывающему фонду")
+            log_user.emit("Построение регулярной сетки по добывающему фонду")
         elif fond == "НАГ":
-            log_user("Построение регулярной сетки по нагнетательному фонду")
+            log_user.emit("Построение регулярной сетки по нагнетательному фонду")
         elif fond == "ПЬЕЗ":
-            log_user("Построение регулярной сетки по пьезометрическому фонду")
+            log_user.emit("Построение регулярной сетки по пьезометрическому фонду")
 
         df_fond = dict_fonds[fond][0]
         wellnet_percent = dict_fonds[fond][1]

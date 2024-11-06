@@ -1,8 +1,6 @@
 import json
 import os
 import sys
-import time
-
 from tqdm import tqdm
 from datetime import timedelta
 import numpy as np
@@ -68,7 +66,7 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
-        df_input['num_of_research'] = 1
+        df_input['num_of_research'] = False
         # gdis data accounting
         logger.info("GDIS data accounting")
         log_user.emit("Учет данных о проведенных исследованиях NGT")
@@ -130,10 +128,10 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_ba
     df_exceptions['wellNet'] = 'Исключена из расчета, куст/пласт/состояние'
     # delete from input DataFrame wells with no information about cluster, status, reservoir
     df_input = df_input[(df_input['KUST'] != 0) & (df_input['SOST'] != 0) & (df_input['PLAST'] != 0)]
-    df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = df_input[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']].astype(
-        'str')
-    df_exceptions[['NSKV', 'PLAST', 'STATUS_DATE', 'PEREV']] = (df_exceptions[['NSKV', 'PLAST',
-                                                                               'STATUS_DATE', 'PEREV']].astype('str'))
+    df_input[['NSKV', 'SIMVOL', 'PLAST', 'STATUS_DATE', 'PEREV']] = (
+        df_input[['NSKV', 'SIMVOL', 'PLAST', 'STATUS_DATE', 'PEREV']].astype('str'))
+    df_exceptions[['NSKV', 'SIMVOL', 'PLAST', 'STATUS_DATE', 'PEREV']] = \
+        (df_exceptions[['NSKV', 'SIMVOL', 'PLAST', 'STATUS_DATE', 'PEREV']].astype('str'))
     # cleaning wellStatus
     df_exceptions = pd.concat([df_exceptions, df_input.loc[df_input.SOST.map(str.lower).str.contains(DELETE_MARKER)]],
                               axis=0, sort=False).reset_index(drop=True)
@@ -147,14 +145,19 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_ba
     df_input = df_input[(df_input['PEREV'] == 'совмест.') | (df_input['PEREV'] == 'работает')]
     #  reset indexes in DataFrames
     df_input = df_input.reset_index(drop=True)
-    # add columns with oilfield name and coordinates T3 point
+
+    # delete from SIMVOL column 117, 118 (wells transferred to another horizon)
+    df_input = df_input[(df_input['SIMVOL'] != '117') & (df_input['SIMVOL'] != '118')]
+    df_exceptions = df_exceptions[(df_exceptions['SIMVOL'] != '117') & (df_exceptions['SIMVOL'] != '118')]
 
     # create list of required columns
     required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'PEREV', 'KUST', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
     progress_bar.emit(25)
+    # add columns with oilfield name and coordinates T3 point
     df_input = add_t3_coord_geobd(df_input, required_cols)
     progress_bar.emit(50)
+    # add columns with oilfield name and coordinates T3 point
     df_exceptions = add_t3_coord_geobd(df_exceptions, required_cols + ['wellNet'])
     progress_bar.emit(75)
 
@@ -276,7 +279,7 @@ def preparing_project_wells(dict_parameters, log_user, progress_bar):
     progress_bar.emit(0)  # update progress bar value
 
     for well in tqdm(list_well_names, "Preparing project wells", position=0, leave=True,
-                     colour='white', ncols=80):
+                     colour='white', ncols=80, disable=True):
         objs = list(
             df_project[df_project['UWI'] == well].PLAST.explode().unique())  # list of unique well objects
 

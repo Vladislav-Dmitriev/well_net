@@ -8,7 +8,6 @@
 /main.exe
 /main.spec
 __pycache__
-/src/gui/qtsample.ui
 /src/main.spec
 /Опорная_сеть.exe
 /src/gui/qtsample2.ui
@@ -19,3 +18,4 @@ __pycache__
 /src/my_database.db
 /src/test.py
 /src/gui/Icon.png
+/Icon.ico

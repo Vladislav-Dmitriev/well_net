@@ -1,13 +1,10 @@
 import json
 import os
 import sqlite3 as sql
-
-import numpy as np
 import pandas as pd
 import shapely as spl
 from loguru import logger
 from tqdm import tqdm
-
 from src.input_output.save_excel import get_report
 from src.calculation.shapely_geometry import check_intersection_area
 
@@ -30,7 +27,8 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
     db_result = prepare_database(path_database)
     total_count_tables = len(dict_result)
     # Запись данных по контурам
-    for i, (contour_name, data) in enumerate(tqdm(dict_result.items(), desc="Запись сетки в базу данных")):
+    for i, (contour_name, data) in enumerate(tqdm(dict_result.items(), "Запись сетки в базу данных", position=0,
+                                                  leave=True, colour='white', ncols=80, disable=True)):
         write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_result, dict_rename)
         progress_bar.emit(int((i + 1) / total_count_tables * 100))
 
@@ -70,6 +68,7 @@ def get_column_mappings():
         'well type': 'Тип скважины',
         'fond': 'Фонд скважины',
         'GEOMETRY': 'GEOMETRY',
+        'num_of_research': 'Кол-во исследований в год',
         'AREA': 'AREA',
         'intersection': 'Пересечения со скважинами',
         'number': 'Кол-во пересечений',

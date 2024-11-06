@@ -96,12 +96,29 @@ class ValidateData(BaseModel):
         """
         Валидация параметров, имеющих значения да/нет, то есть boolean
         :param value: строковое значение параметра из QComboBox
-        :return:
         """
         if value == 'Да':
             return True
         else:
             return False
+
+    @field_validator('list_order_fond')
+    def check_fond_order(cls, list_order_fond: str) -> str:
+        """
+        Валидация порядка фондов для построения регулярной сетки
+        :param list_order_fond: строковое значение порядка фондов
+        """
+        # Набор допустимых значений
+        valid_names = {"доб", "пьез", "наг"}
+
+        words = [word.strip().lower() for word in list_order_fond.split(",")]
+
+        if len(words) != 3 or set(words) != valid_names:
+            raise ValueError(
+                "Строка должна содержать ровно 3 названия: 'доб' 'пьез' 'наг'"
+                " через запятую в любом порядке и регистре.")
+
+        return list_order_fond
 
     @field_validator('percent', 'percent_oilrate', 'percent_piez', 'percent_inj', 'percent_prod',
                      'MaxOverlapPercent', mode='before')
@@ -109,7 +126,6 @@ class ValidateData(BaseModel):
         """
         Валидация параметров, определяющихся в процентах. Перевод в число с плавающей точкой
         :param percent_val: строковое значение параметров из виджета
-        :return:
         """
         try:
             percent_val = float(percent_val)

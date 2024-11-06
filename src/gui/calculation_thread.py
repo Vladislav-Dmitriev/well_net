@@ -89,7 +89,9 @@ class CalculationThread(QtCore.QThread):
         total_contour_count = len(dict_contours)
         self.log_signal.emit(f"Количество контуров: {total_contour_count}")
 
-        for i, (contour_name, contour) in enumerate(tqdm(dict_contours.items(), "Calculation by contours")):
+        for i, (contour_name, contour) in enumerate(tqdm(dict_contours.items(), "Calculation by contours",
+                                                         position=0, leave=True, colour='white', ncols=80,
+                                                         disable=True)):
 
             self.log_signal.emit(f"-----Расчет {i + 1} из {total_contour_count} контуров")
             if not contour.is_valid:

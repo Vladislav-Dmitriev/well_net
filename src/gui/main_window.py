@@ -67,7 +67,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.treeWidget.expandAll()  # раскрытие виджета QTreeWidget, чтобы видеть все задаваемые параметры
         self.filedir_widget()  # добавление внутрь виджета QTreeWidget в item с путем к данным QLineEdit
         self.add_combobox()  # добавление QComboBox на те item QTreeWidget, где параметры задаются всего парой значений
-        self.database_path = f'{get_path()}\\output\\wellnet_default.db'  # актуальный путь к БД
+        self.database_path = f'{get_path()}\\wellnet_default.db'  # актуальный путь к БД
         self.set_default_params()  # загрузка в QTreeWidget параметров из БД
         self.dict_param = self.get_dict_qtreewidget()  # словарь с параметрами расчета
         self.filedir_actions()  # валидация пути к файлу + кнопка для открытия диалогового окна выбора файла
@@ -126,11 +126,15 @@ class MainWindow(QtWidgets.QMainWindow):
         Загрузка предыдущих расчетов вместе с параметрами
         :return:
         """
-        self.database_path = QtWidgets.QFileDialog.getOpenFileName(self,
-                                                                   "Выберите файл с результатами предыдущих расчетов",
-                                                                   f'{get_path()}\\output', filter='Database (*.db)')[0]
-        self.set_default_params()
-        self.combobox_scen_switch()
+        try:
+            self.database_path = QtWidgets.QFileDialog.getOpenFileName(self,
+                                                                       "Выберите файл с результатами предыдущих расчетов",
+                                                                       f'{get_path()}\\output',
+                                                                       filter='Database (*.db)')[0]
+            self.set_default_params()
+            self.combobox_scen_switch()
+        except Exception as e:
+            pass
 
     def validate_path_db(self):
         """
@@ -283,6 +287,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_calculation_finished(self):
         # self.log("Расчет завершен.")
         self.setEnabled(True)  # Разблокируем кнопку запуска
+        self.combobox_scen_switch()
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
     def table_to_excel(self, button):
@@ -398,7 +403,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                     'Координата забоя Y (по траектории)', 'Дебит нефти (ТР), т/сут',
                                     'Дебит природного газа, тыс.м3/сут', 'Приемистость (ТР), м3/сут',
                                     'Обводненность (ТР), % (объём)', 'Дебит конденсата газа, т/сут',
-                                    'Средний радиус по объекту, м', 'Коэффициент для расчет времени исследования',
+                                    'Средний радиус по объекту, м', 'Коэффициент для расчета времени исследования',
                                     'Проницаемость, мД', 'Начальное пластовое давление (карты изобар), атм',
                                     'Время исследования, сут', 'Потери нефти, т', 'Потери газа, тыс. м3',
                                     'Потери закачки, м3', 'Процент охвата площади объекта',
@@ -422,18 +427,17 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         # удаление текущих item из combobox
         self.ui.combobox_scenario.clear()
-
         connection = sql.connect(self.database_path)
         cursor = connection.cursor()
-        list_scen = [x[0] for x in
-                     cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
-                     x[0] != 'parameters' and x[0] != 'report']
+        list_scripts = [x[0] for x in
+                        cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
+                        x[0] != 'parameters' and x[0] != 'report']
         # add combobox items by current calculation
-        for scen in list_scen:
-            self.ui.combobox_scenario.addItem(scen)
+        for sc in list_scripts:
+            self.ui.combobox_scenario.addItem(sc)
 
-        if list_scen:
-            df = pd.read_sql_query(f'SELECT * FROM "{list_scen[0]}"', connection)
+        if list_scripts:
+            df = pd.read_sql_query(f'SELECT * FROM "{list_scripts[0]}"', connection)
             df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
             df = df.fillna(0)
             list_horizons = list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode()))
