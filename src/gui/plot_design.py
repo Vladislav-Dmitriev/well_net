@@ -110,6 +110,7 @@ def plot_results(df_result, script):
         'wellNet': 'Статус по опорной сети',
         'polygon': 'polygon'
     }
+
     dict_rename = {v: k for k, v in dict_rename.items()}
     df_result.columns = dict_rename.values()
     df_result['AREA'] = df_result['AREA'].apply(lambda x: spl.geometry.shape(json.loads(x)) if x != 0 else x)
@@ -122,9 +123,10 @@ def plot_results(df_result, script):
     df_result.loc[df_result['wellNet'].str.lower().str.contains('исключена|не охвачена'), 'status'] = 'excluded'
     df_result.loc[df_result['fond'] == 'ПРОЕКТ', 'status'] = 'project'
     df_result.loc[df_result['wellNet'] == 'Выбрана в опорную сеть', 'status'] = 'included'
+    # df_result = df_result[df_result['wellNet'] == 'excluded']
 
-    fig, ax = plt.subplots(figsize=(20, 20))
-    fig.set_size_inches(7, 7)
+    # Подготовка данных для отображения
+    fig, ax = plt.subplots(figsize=(7, 7))
     dict_shapes = {
         "excluded_points": [],
         "excluded_geometry": [],
@@ -132,12 +134,14 @@ def plot_results(df_result, script):
         "areas": [],
         "areas_contour": []
     }
-    # построение контура
+
+    # Построение контура
     if df_result.iloc[0]['polygon'] != 0:
-        (gpd.GeoSeries(spl.geometry.shape(json.loads(df_result.iloc[0]['polygon']))).
-         boundary.plot(ax=ax, color='saddlebrown'))
-    # построение зон исследования скважин опорной сети
-    for index, row in df_result[df_result['status'] == 'included'].iterrows():
+        (gpd.GeoSeries(spl.geometry.shape(json.loads(df_result.iloc[0]['polygon'])))
+         .boundary.plot(ax=ax, color='saddlebrown'))
+
+    # Построение зон исследования для "included" объектов
+    for _, row in df_result[df_result['status'] == 'included'].iterrows():
         area_color = get_color_area(row['fond'])
         line_type, line_color = get_linetype_color(row['fond'], row['year_of_survey'])
         polygon_area = row['AREA']
@@ -147,8 +151,8 @@ def plot_results(df_result, script):
         line, = ax.plot(*polygon_area.boundary.xy, ls=line_type, color=line_color)
         dict_shapes['areas_contour'].append(line)
 
-    for index, row in df_result.drop_duplicates(subset='wellName').iterrows():
-        # получение цвета геометрии в зависимости от статуса скважины и маркера точки T1 для нее
+    # Отображение скважин и геометрии
+    for _, row in df_result.drop_duplicates(subset='wellName').iterrows():
         geometry_color, marker, font_color = get_geometry_color(row['status'])
         geometry = gpd.GeoSeries(row['GEOMETRY'])
         line, = ax.plot(*geometry.loc[0].xy, color=geometry_color)
@@ -160,6 +164,7 @@ def plot_results(df_result, script):
             dict_shapes['excluded_geometry'].append(line)
             dict_shapes['excluded_annotation'].append(annotate)
 
+    # Легенда для различных типов объектов
     piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
     inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
     prod = mpatches.Patch(color='black', fc='lightsalmon', label='Добыващие(с исследованием)')
@@ -175,59 +180,85 @@ def plot_results(df_result, script):
                               markerfacecolor='saddlebrown', markersize=14, linestyle='None')
     handles = [piez, inj, prod, wellnet_point, research_wells, proj_wells, exception_wells]
 
+    # Условная легенда для сценария "Оптимальная сетка"
     if script == 'Оптимальная сетка':
         line_1_year = Line2D([0], [0], color='black', linestyle="-", lw=1, label='Исследования на текущий год')
         line_2_year = Line2D([0], [0], color='black', linestyle=":", lw=1, label='На 2 год')
         line_3_year = Line2D([0], [0], color='black', linestyle="-.", lw=1, label='На 3 год')
         handles += [line_1_year, line_2_year, line_3_year]
 
-    # Добавление к легенде маркера с контуром
+    # Добавление контура к легенде
     if df_result.iloc[0]['polygon'] != 0:
         handles += [contour_boundary]
     legend = ax.legend(handles=handles, loc='upper right', fancybox=True, framealpha=0.5)
 
-    def format_coord(x, y):
-        return f'x={x:.2f}, y={y:.2f}'
 
-    ax.format_coord = format_coord
+    # Формат координат и отключение осей
+    ax.format_coord = lambda x, y: f'x={x:.2f}, y={y:.2f}'
     ax.set_aspect('equal')
     ax.set_axis_off()
+
+    # Добавление масштабной линейки
     scalebar = ScaleBar(1, location='lower left', box_alpha=0, dimension='si-length', pad=0.5)
     ax.add_artist(scalebar)
-    ax.margins(x=0, y=-0.25)  # zoom picture before output
+    # ax.margins(x=0, y=-0.25)  # увеличение перед выводом
     fig.tight_layout(pad=0)
 
-    checkbox_ax = fig.add_subplot(111, position=[0.01, 0.85, 0.15, 0.15], zorder=5)
+    # Добавление панели с CheckButtons для кастомного управления элементами графика
+    checkbox_ax = fig.add_axes([0.01, 0.85, 0.15, 0.15], zorder=5)  # фиксированная позиция для панели
     checkbox_ax.set_axis_off()
     checkbox_labels = ['Легенда', 'Исключенные скважины', 'Зоны исследования']
     checkbox_activated = [True, True, True]
     check = CheckButtons(checkbox_ax, checkbox_labels, checkbox_activated)
 
-    def toggle_legend(label):
-        """
-        Функция обработки сигналов checkbox на картинке
-        :param label: checkbox, на который нажал пользователь
-        :return: действие скрыть/показать элемент картинки, привязанный к checkbox
-        """
-        if label == 'Легенда':
-            is_visible = legend.get_visible()
-            legend.set_visible(not is_visible)  # Показать/скрыть легенду
-            fig.canvas.draw_idle()
-        elif label == 'Исключенные скважины':
-            for p, g, a in zip(dict_shapes['excluded_points'], dict_shapes['excluded_geometry'],
-                               dict_shapes['excluded_annotation']):
-                p.set_visible(not p.get_visible())
-                g.set_visible(not g.get_visible())
-                a.set_visible(not a.get_visible())
-            fig.canvas.draw_idle()
-        elif label == 'Зоны исследования':
-            for area, contour_area in zip(dict_shapes['areas'], dict_shapes['areas_contour']):
-                for poly in area:
-                    poly.set_visible(not poly.get_visible())
-                contour_area.set_visible(not contour_area.get_visible())
-            fig.canvas.draw_idle()
-        # fig.canvas.draw_idle()
+    def update(val):
+        # Обновляем видимость элементов
+        if check.get_status()[0]:  # Легенда
+            # Создание легенды
+            legend.set_visible(True)
+        else:
+            legend.set_visible(False)
 
-    check.on_clicked(toggle_legend)
+        if check.get_status()[1]:  # Исключенные скважины
+            for point in dict_shapes['excluded_points']:
+                point.set_visible(True)
+            for line in dict_shapes['excluded_geometry']:
+                line.set_visible(True)
+            for annotate in dict_shapes['excluded_annotation']:
+                annotate.set_visible(True)
+        else:
+            for point in dict_shapes['excluded_points']:
+                point.set_visible(False)
+            for line in dict_shapes['excluded_geometry']:
+                line.set_visible(False)
+            for annotate in dict_shapes['excluded_annotation']:
+                annotate.set_visible(False)
+
+        if check.get_status()[2]:  # Зоны исследования
+            for area in dict_shapes['areas']:
+                # Для каждой области нужно отдельно установить видимость каждого элемента
+                if isinstance(area, list):  # Если это список, проходим по всем его элементам
+                    for patch in area:
+                        patch.set_visible(True)
+                else:  # Если это одиночный объект, просто меняем его видимость
+                    area.set_visible(True)
+
+            for contour in dict_shapes['areas_contour']:
+                # Процесс с контурами аналогичен
+                contour.set_visible(True)
+        else:
+            for area in dict_shapes['areas']:
+                if isinstance(area, list):
+                    for patch in area:
+                        patch.set_visible(False)
+                else:
+                    area.set_visible(False)
+
+            for contour in dict_shapes['areas_contour']:
+                contour.set_visible(False)
+
+        fig.canvas.draw_idle()
+
+    check.on_clicked(update)
 
     return fig, ax, check

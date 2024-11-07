@@ -79,6 +79,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_window = None
         self.calculation_thread = None  # Инициализация для потока расчета
         self.show()
+        # self.table_to_excel("Сохранить все сценарии в Excel")
 
     def set_default_params(self):
         """
@@ -237,9 +238,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.calculate.clicked.connect(lambda: self.main_calc_function())
 
         # save current table in Excel
-        self.ui.save_table.clicked.connect(lambda: self.table_to_excel(self.ui.save_table))
+        self.ui.save_table.clicked.connect(lambda: self.table_to_excel(self.ui.save_table.text()))
         # save all tables in Excel
-        self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(self.ui.save_all_tables))
+        self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(self.ui.save_all_tables.text()))
         # choosing directory to save database
         self.ui.choose_directory.clicked.connect(lambda:
                                                  self.ui.path_result_db.
@@ -255,6 +256,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Запуск окна логов и функции расчета в отдельных потоках
         """
+        if not os.path.isfile(self.dict_param['Файл с данными']):
+            return self.message_box("По указанному пути файл с данными не найден")
+
         self.setDisabled(True)
 
         self.database_path = self.ui.path_result_db.text()
@@ -290,7 +294,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.combobox_scen_switch()
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
-    def table_to_excel(self, button):
+    def table_to_excel(self, button_text):
         """
         Сохранение таблицы/таблиц в Excel файл
         :return: запись в Excel
@@ -308,33 +312,41 @@ class MainWindow(QtWidgets.QMainWindow):
         app1 = xw.App(visible=False)
         new_wb = xw.Book()
 
-        if button.text() == 'Сохранить все сценарии в Excel':
-            calc_scripts = [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + [
-                "report"]
-            for script in calc_scripts:
-                df = pd.read_sql_query(f'SELECT * FROM "{script}"', connection)
-                df = df.drop(columns=['index'])
-                if script != 'report':
-                    df = df.drop(columns=['GEOMETRY', 'AREA', 'polygon'])
-                    df = df.fillna(0)
-                new_wb.sheets.add(f"{script.replace('/', '_')}")
-                sht = new_wb.sheets(f"{script.replace('/', '_')}")
+        try:
+            if button_text == 'Сохранить все сценарии в Excel':
+                calc_scripts = [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + [
+                    "report"]
+                for script in calc_scripts:
+                    df = pd.read_sql_query(f'SELECT * FROM "{script}"', connection)
+                    df = df.drop(columns=['index'])
+                    if script != 'report':
+                        df = df.drop(columns=['GEOMETRY', 'AREA', 'polygon'])
+                        df = df.fillna(0)
+                        df = df[((df['Объект расчета'] != 0) & (
+                                    df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                                        (df['Объект расчета'] == 0) & (
+                                        (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) |
+                                        (df['Объекты работы'] == 0)))].reset_index(drop=True)
+                    new_wb.sheets.add(f"{script.replace('/', '_')}")
+                    sht = new_wb.sheets(f"{script.replace('/', '_')}")
+                    sht.range('A1').options(pd.DataFrame, index=False).value = df
+
+            else:
+                df = pd.read_sql_query(f'SELECT * FROM "{self.ui.combobox_scenario.currentText()}"', connection)
+                df = df.drop(columns=['index', 'polygon', 'AREA', 'GEOMETRY'])
+                df = df.fillna(0)
+                df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                        (df['Объект расчета'] == 0) & (
+                         (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) |
+                         (df['Объекты работы'] == 0)))].reset_index(drop=True)
+                new_wb.sheets.add(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
+                sht = new_wb.sheets(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
                 sht.range('A1').options(pd.DataFrame, index=False).value = df
+            new_wb.save(path_to_save)
 
-        else:
-            df = pd.read_sql_query(f'SELECT * FROM "{self.ui.combobox_scenario.currentText()}"', connection)
-            df = df.drop(columns=['index', 'polygon', 'AREA', 'GEOMETRY'])
-            df = df.fillna(0)
-            df = pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True)
-            new_wb.sheets.add(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
-            sht = new_wb.sheets(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
-            sht.range('A1').options(pd.DataFrame, index=False).value = df
-
-        new_wb.save(path_to_save)
-        app1.kill()
-        connection.close()
+        finally:
+            app1.kill()
+            connection.close()
 
     def write_dict(self):
         """
@@ -392,7 +404,8 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.clear_layout(item.layout())  # Если это layout, рекурсивно очищаем
 
-    def rounding(self, df):
+    @staticmethod
+    def rounding(df):
         """
         Метод возвращает округленные значения в DataFrame
         :param df: DataFrame сводки по сценариям или результат текущего сценария
@@ -440,23 +453,23 @@ class MainWindow(QtWidgets.QMainWindow):
             df = pd.read_sql_query(f'SELECT * FROM "{list_scripts[0]}"', connection)
             df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
             df = df.fillna(0)
-            list_horizons = list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode()))
+            list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
             df = df.drop(columns=['index'])
             for hor in list_horizons:
                 self.ui.combobox_horizon.addItem(hor)
             self.clear_layout(self.ui.tab_2.layout())
-            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
-                                                       self.dict_param['Сценарий расчета']))
+            df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                        (df['Объект расчета'] == 0) & (
+                            (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
+                                df['Объекты работы'] == 0)))].reset_index(drop=True)
+            self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
+
             df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
             df = self.rounding(df)
             df_report = df_report.drop(columns=['index'])
             df_report = df_report.fillna(0)
             df_report = self.rounding(df_report)
-            model = DataframeToTable(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
+            model = DataframeToTable(df)
             model_report = DataframeToTable(df_report)
             self.ui.results.setModel(model)
             self.ui.results.resizeColumnsToContents()
@@ -476,22 +489,25 @@ class MainWindow(QtWidgets.QMainWindow):
             connection = sql.connect(self.database_path)
             df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
             connection.close()
+
             df = df.drop(columns=['index'])
             df = df.fillna(0)
-            df = self.rounding(df)
-            list_horizons = list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode()))
+
+            self.ui.combobox_horizon.clear()
+            list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
             for hor in list_horizons:
                 self.ui.combobox_horizon.addItem(hor)
+
+            df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                        (df['Объект расчета'] == 0) & (
+                            (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
+                                df['Объекты работы'] == 0)))].reset_index(drop=True)
+
             self.clear_layout(self.ui.tab_2.layout())
-            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
-                                                       self.dict_param['Сценарий расчета']))
+            self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
             df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
             df = self.rounding(df)
-            model = DataframeToTable(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == list_horizons[0])],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
+            model = DataframeToTable(df)
             self.ui.results.setModel(model)
             self.ui.results.resizeColumnsToContents()
 
@@ -508,16 +524,15 @@ class MainWindow(QtWidgets.QMainWindow):
             connection.close()
             df = df.drop(columns=['index'])
             df = df.fillna(0)
+            df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)) | ((df['Объект расчета'] == 0) & (
+                        (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
+                            df['Объекты работы'] == 0)))].reset_index(drop=True)
+
             self.clear_layout(self.ui.tab_2.layout())
-            self.ui.tab_2.layout().addWidget(MplWidget(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True),
-                                                       self.dict_param['Сценарий расчета']))
+            self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
             df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
             df = self.rounding(df)
-            model = DataframeToTable(pd.concat(
-                [df[(df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)],
-                 df[df['Объект расчета'] == 0]], axis=0, sort=False).reset_index(drop=True))
+            model = DataframeToTable(df)
             self.ui.results.setModel(model)
             self.ui.results.resizeColumnsToContents()
 

@@ -179,9 +179,11 @@ def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
     df = pd.concat([df, df_excluded], ignore_index=True).reset_index(drop=True)
 
     # Обработка столбцов с геометрией и пересечениями
-    df['intersection'] = df['intersection'].fillna('').apply(
-        lambda x: " ".join(map(str, x)) if isinstance(x, list) else x
-    )
+    # df['intersection'] = df['intersection'].fillna('').apply(
+    #     lambda x: " ".join(map(str, x)) if isinstance(x, list) else x
+    # )
+    df['intersection'] = df['intersection'].fillna('')
+    df[['intersection']] = df[['intersection']].astype(str)
     df['AREA'] = df['AREA'].apply(lambda x: spl.to_geojson(x) if isinstance(x, spl.Polygon) else x)
     df['GEOMETRY'] = df.apply(lambda row: json.dumps(
         spl.geometry.mapping(row['GEOMETRY']) if pd.notna(row['GEOMETRY']) else
