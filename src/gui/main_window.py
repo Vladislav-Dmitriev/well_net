@@ -1,10 +1,9 @@
-import sys
 import os
 import pandas as pd
 import sqlite3 as sql
 import xlwings as xw
 from datetime import datetime
-from PyQt6 import QtWidgets, QtCore, QtGui
+from PyQt6 import QtWidgets, QtCore
 from src.gui.qtsample import UiMainWindow
 from src.gui.validate_widget_data import ValidateData, ValidatePath
 from pydantic import ValidationError
@@ -70,6 +69,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.database_path = f'{get_path()}\\wellnet_default.db'  # актуальный путь к БД
         self.set_default_params()  # загрузка в QTreeWidget параметров из БД
         self.dict_param = self.get_dict_qtreewidget()  # словарь с параметрами расчета
+        self.current_tables_dict = None
         self.filedir_actions()  # валидация пути к файлу + кнопка для открытия диалогового окна выбора файла
         self.combobox_actions()  # обновление словаря с параметрами при изменении значений в одном из QComboBox
         self.combobox_scen_switch()  # QComboBox для переключения между сценариями расчета, загрузка из БД
@@ -79,7 +79,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_window = None
         self.calculation_thread = None  # Инициализация для потока расчета
         self.show()
-        # self.table_to_excel("Сохранить все сценарии в Excel")
 
     def set_default_params(self):
         """
@@ -129,11 +128,13 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         try:
             self.database_path = QtWidgets.QFileDialog.getOpenFileName(self,
-                                                                       "Выберите файл с результатами предыдущих расчетов",
+                                                                       "Выберите файл с результатами"
+                                                                       " предыдущих расчетов",
                                                                        f'{get_path()}\\output',
                                                                        filter='Database (*.db)')[0]
             self.set_default_params()
             self.combobox_scen_switch()
+
         except Exception as e:
             pass
 
@@ -242,15 +243,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # save all tables in Excel
         self.ui.save_all_tables.clicked.connect(lambda: self.table_to_excel(self.ui.save_all_tables.text()))
         # choosing directory to save database
-        self.ui.choose_directory.clicked.connect(lambda:
-                                                 self.ui.path_result_db.
-                                                 setText(QtWidgets.QFileDialog.getSaveFileName(
-                                                     self, "Директория сохранения результатов расчета",
-                                                     f'{get_path()}\\output\\{os.getlogin()}_'
-                                                     f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db',
-                                                     filter='Database (*.db)')[0]))
+        self.ui.choose_directory.clicked.connect(self.update_db_path)
         # check editing finished QLineEdit with database path
         self.ui.path_result_db.editingFinished.connect(self.validate_path_db)
+
+    def update_db_path(self):
+        """
+        Обновление пути к базе данных для сохранения результатов
+        """
+        path_to_db = QtWidgets.QFileDialog.getSaveFileName(self, "Директория сохранения результатов расчета",
+                                                           f'{get_path()}\\output\\{os.getlogin()}_'
+                                                           f'{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.db',
+                                                           filter='Database (*.db)')[0]
+        if not path_to_db:
+            # Если пользователь отменил сохранение
+            return
+
+        self.ui.path_result_db.setText(path_to_db)
 
     def main_calc_function(self):
         """
@@ -290,7 +299,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_calculation_finished(self):
         # self.log("Расчет завершен.")
-        self.setEnabled(True)  # Разблокируем кнопку запуска
+        self.setEnabled(True)  # Разблокируем основное окно
         self.combobox_scen_switch()
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
@@ -307,17 +316,15 @@ class MainWindow(QtWidgets.QMainWindow):
             # Если пользователь отменил сохранение
             return
 
-        connection = sql.connect(self.database_path)
-
         app1 = xw.App(visible=False)
         new_wb = xw.Book()
 
         try:
             if button_text == 'Сохранить все сценарии в Excel':
-                calc_scripts = [self.ui.combobox_scenario.itemText(i) for i in range(self.ui.combobox_scenario.count())] + [
-                    "report"]
+                calc_scripts = list(self.current_tables_dict.keys())
+
                 for script in calc_scripts:
-                    df = pd.read_sql_query(f'SELECT * FROM "{script}"', connection)
+                    df = self.current_tables_dict[script]
                     df = df.drop(columns=['index'])
                     if script != 'report':
                         df = df.drop(columns=['GEOMETRY', 'AREA', 'polygon'])
@@ -326,19 +333,20 @@ class MainWindow(QtWidgets.QMainWindow):
                                     df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
                                         (df['Объект расчета'] == 0) & (
                                         (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) |
-                                        (df['Объекты работы'] == 0)))].reset_index(drop=True)
+                                        (df['Объекты работы'] == "0")))].reset_index(drop=True)
                     new_wb.sheets.add(f"{script.replace('/', '_')}")
                     sht = new_wb.sheets(f"{script.replace('/', '_')}")
                     sht.range('A1').options(pd.DataFrame, index=False).value = df
 
             else:
-                df = pd.read_sql_query(f'SELECT * FROM "{self.ui.combobox_scenario.currentText()}"', connection)
+                df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
                 df = df.drop(columns=['index', 'polygon', 'AREA', 'GEOMETRY'])
                 df = df.fillna(0)
-                df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
-                        (df['Объект расчета'] == 0) & (
-                         (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) |
-                         (df['Объекты работы'] == 0)))].reset_index(drop=True)
+                df = df[
+                    ((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                                (df['Объект расчета'] == 0) & (
+                                    (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
+                                        df['Объекты работы'] == "0")))].reset_index(drop=True)
                 new_wb.sheets.add(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
                 sht = new_wb.sheets(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
                 sht.range('A1').options(pd.DataFrame, index=False).value = df
@@ -346,7 +354,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         finally:
             app1.kill()
-            connection.close()
 
     def write_dict(self):
         """
@@ -442,26 +449,36 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.combobox_scenario.clear()
         connection = sql.connect(self.database_path)
         cursor = connection.cursor()
+
+        # список имен таблиц результатов
         list_scripts = [x[0] for x in
                         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
                         x[0] != 'parameters' and x[0] != 'report']
-        # add combobox items by current calculation
+        self.current_tables_dict = {name: pd.read_sql_query(f'SELECT * FROM "{name}"', connection)
+                                    for name in list_scripts + ["report"]}
+
+        connection.close()
+
+        # Добавление сценариев расчета в ComboBox
         for sc in list_scripts:
             self.ui.combobox_scenario.addItem(sc)
 
         if list_scripts:
-            df = pd.read_sql_query(f'SELECT * FROM "{list_scripts[0]}"', connection)
-            df_report = pd.read_sql_query(f'SELECT * FROM "report"', connection)
+            df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
+            df_report = self.current_tables_dict["report"]
             df = df.fillna(0)
             list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
             df = df.drop(columns=['index'])
+
+            # добавление всех объектов расчета по выбранному сценарию в ComboBox
             for hor in list_horizons:
                 self.ui.combobox_horizon.addItem(hor)
+
             self.clear_layout(self.ui.tab_2.layout())
             df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
                         (df['Объект расчета'] == 0) & (
                             (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
-                                df['Объекты работы'] == 0)))].reset_index(drop=True)
+                                df['Объекты работы'] == "0")))].reset_index(drop=True)
             self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
 
             df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
@@ -475,9 +492,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.results.resizeColumnsToContents()
             self.ui.report.setModel(model_report)
             self.ui.report.resizeColumnsToContents()
-            self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
-            self.ui.combobox_horizon.currentTextChanged.connect(self.get_filtered_table)
-        connection.close()
 
     def get_result_table(self, table_name):
         """
@@ -486,22 +500,19 @@ class MainWindow(QtWidgets.QMainWindow):
         :return: помещает данные из таблицы в БД в виджет окна приложения
         """
         if table_name:
-            connection = sql.connect(self.database_path)
-            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
-            connection.close()
+            df = self.current_tables_dict[table_name]
 
             df = df.drop(columns=['index'])
             df = df.fillna(0)
 
             self.ui.combobox_horizon.clear()
             list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
-            for hor in list_horizons:
-                self.ui.combobox_horizon.addItem(hor)
+            self.ui.combobox_horizon.addItems(list_horizons)
 
             df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
                         (df['Объект расчета'] == 0) & (
                             (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
-                                df['Объекты работы'] == 0)))].reset_index(drop=True)
+                                df['Объекты работы'] == "0")))].reset_index(drop=True)
 
             self.clear_layout(self.ui.tab_2.layout())
             self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
@@ -519,14 +530,12 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         table_name = self.ui.combobox_scenario.currentText()
         if table_name:
-            connection = sql.connect(self.database_path)
-            df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)
-            connection.close()
+            df = self.current_tables_dict[table_name]
             df = df.drop(columns=['index'])
             df = df.fillna(0)
             df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == horizon)) | ((df['Объект расчета'] == 0) & (
                         (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
-                            df['Объекты работы'] == 0)))].reset_index(drop=True)
+                            df['Объекты работы'] == "0")))].reset_index(drop=True)
 
             self.clear_layout(self.ui.tab_2.layout())
             self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
@@ -695,6 +704,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 continue
             else:
                 self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
+
+        self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
+        self.ui.combobox_horizon.currentTextChanged.connect(self.get_filtered_table)
 
     def closeEvent(self, event):
         if self.log_window is not None:

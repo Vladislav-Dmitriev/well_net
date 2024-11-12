@@ -61,8 +61,7 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
         df_input, df_exceptions = preprocessing_NGT(df, dict_parameters['min_length_horWell'], progress_bar)
         logger.info("General preparing data")
         log_user.emit("Подготовка данных к расчету")
-        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters,
-                                            log_user, progress_bar)
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_bar)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
@@ -86,8 +85,7 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
         df_input, df_exceptions = preprocessing_GeoBD(df, dict_constant, dict_geobd_columns, progress_bar)
         logger.info("General preparing data")
         log_user.emit("Подготовка данных к расчету")
-        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters,
-                                            log_user, progress_bar)
+        df_input, df_exceptions = preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_bar)
         # add project wells to input DataFrame
         df_input = pd.concat([df_input, df_project], axis=0, sort=False).reset_index(drop=True)
         df_input = df_input.fillna(0)
@@ -326,7 +324,7 @@ def preparing_project_wells(dict_parameters, log_user, progress_bar):
 
 
 @logger.catch(level='DEBUG')
-def preparing(dict_constant, df_input, df_exceptions, dict_parameters, log_user, progress_bar):
+def preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_bar):
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 

@@ -1,5 +1,6 @@
+import os
 from PyQt6 import QtWidgets, QtGui
-from tqdm import tqdm
+from src.calculation.support_functions import get_path
 
 
 class LogWindow(QtWidgets.QWidget):
@@ -14,7 +15,7 @@ class LogWindow(QtWidgets.QWidget):
         self.log_area = QtWidgets.QTextEdit(readOnly=True)
         self.progress_bar = QtWidgets.QProgressBar(maximum=100)
         self.stop_button = QtWidgets.QPushButton("Прервать расчет")
-        self.setWindowIcon(QtGui.QIcon('Icon.png'))
+        self.setWindowIcon(QtGui.QIcon(os.path.join(get_path(), "Icon.ico")))
 
         # Layout
         hbox_layout = QtWidgets.QHBoxLayout()

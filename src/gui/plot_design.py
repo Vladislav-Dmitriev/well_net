@@ -190,8 +190,11 @@ def plot_results(df_result, script):
     # Добавление контура к легенде
     if df_result.iloc[0]['polygon'] != 0:
         handles += [contour_boundary]
-    legend = ax.legend(handles=handles, loc='upper right', fancybox=True, framealpha=0.5)
 
+    # добавление новых осей для фиксации легенды
+    legend_axes = fig.add_axes([0.78, 0.65, 0.2, 0.35], zorder=5)
+    legend_axes.set_axis_off()
+    legend = legend_axes.legend(handles=handles, fancybox=True, framealpha=0.5)
 
     # Формат координат и отключение осей
     ax.format_coord = lambda x, y: f'x={x:.2f}, y={y:.2f}'
@@ -201,8 +204,6 @@ def plot_results(df_result, script):
     # Добавление масштабной линейки
     scalebar = ScaleBar(1, location='lower left', box_alpha=0, dimension='si-length', pad=0.5)
     ax.add_artist(scalebar)
-    # ax.margins(x=0, y=-0.25)  # увеличение перед выводом
-    fig.tight_layout(pad=0)
 
     # Добавление панели с CheckButtons для кастомного управления элементами графика
     checkbox_ax = fig.add_axes([0.01, 0.85, 0.15, 0.15], zorder=5)  # фиксированная позиция для панели

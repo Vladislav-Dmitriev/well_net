@@ -123,7 +123,7 @@ def write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_re
     contour_name = format_name(contour_name)
     df, contour = data[0].copy(), data[1]
 
-    # Исключения для текущего контура
+    # Исключенные скважины для текущего контура
     df_excluded = filter_exceptions(df_exceptions, contour, dict_parameters)
 
     # Обработка данных перед записью
@@ -178,10 +178,6 @@ def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
     # Объединение с исключенными скважинами
     df = pd.concat([df, df_excluded], ignore_index=True).reset_index(drop=True)
 
-    # Обработка столбцов с геометрией и пересечениями
-    # df['intersection'] = df['intersection'].fillna('').apply(
-    #     lambda x: " ".join(map(str, x)) if isinstance(x, list) else x
-    # )
     df['intersection'] = df['intersection'].fillna('')
     df[['intersection']] = df[['intersection']].astype(str)
     df['AREA'] = df['AREA'].apply(lambda x: spl.to_geojson(x) if isinstance(x, spl.Polygon) else x)
@@ -190,6 +186,8 @@ def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
         spl.LineString([[row['coordinateX'], row['coordinateY']], [row['coordinateX3'], row['coordinateY3']]])), axis=1
                               )
     df['polygon'] = spl.to_geojson(contour)
+
+    df['oilfield'] = df['oilfield'].str.upper()
 
     # Переименование колонок
     df = df[dict_rename.keys()]
