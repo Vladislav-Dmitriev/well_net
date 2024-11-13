@@ -39,6 +39,7 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
     db_result.close()
 
 
+@logger.catch(level='DEBUG')
 def get_column_mappings():
     """
     Возвращает словарь для переименования колонок из стандартизированных имен в удобочитаемые имена
@@ -97,6 +98,7 @@ def get_column_mappings():
     }
 
 
+@logger.catch(level='DEBUG')
 def prepare_database(path_database):
     """
     Создает и возвращает подключение к базе данных, удаляя старую версию базы, если она существует
@@ -134,6 +136,7 @@ def write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_re
     df.to_sql(name=contour_name, con=db_result, if_exists='replace')
 
 
+@logger.catch(level='DEBUG')
 def format_name(name):
     """
     Форматирует имя контура для использования в качестве имени таблицы, сокращая его до 31 символа при необходимости.
@@ -145,6 +148,7 @@ def format_name(name):
     return name[:31] if len(name) > 31 else name
 
 
+@logger.catch(level='DEBUG')
 def filter_exceptions(df_exceptions, contour, dict_parameters):
     """
     Фильтрует исключенные скважины для текущего контура, если контур указан.
@@ -162,6 +166,7 @@ def filter_exceptions(df_exceptions, contour, dict_parameters):
     return df_exceptions[df_exceptions['wellName'].isin(intersecting_wells)]
 
 
+@logger.catch(level='DEBUG')
 def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
     """
     Подготавливает DataFrame перед записью в базу данных.
@@ -196,6 +201,7 @@ def prepare_dataframe_for_db(df, df_excluded, contour, dict_rename):
     return df
 
 
+@logger.catch(level='DEBUG')
 def save_report_to_db(db_result, dict_result, dict_parameters, list_name_params):
     """
     Сохраняет отчетные данные и параметры расчета в базу данных.

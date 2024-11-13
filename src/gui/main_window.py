@@ -71,8 +71,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dict_param = self.get_dict_qtreewidget()  # словарь с параметрами расчета
         self.current_tables_dict = None
         self.filedir_actions()  # валидация пути к файлу + кнопка для открытия диалогового окна выбора файла
+        self.update_display()  # QComboBox для переключения между сценариями расчета, загрузка из БД
         self.combobox_actions()  # обновление словаря с параметрами при изменении значений в одном из QComboBox
-        self.combobox_scen_switch()  # QComboBox для переключения между сценариями расчета, загрузка из БД
         self.buttons()  # основные кнопки: расчет, результаты в Excel, выбор директории для записи в БД результатов
         self.item_clicked()  # проверка на нажатие редактируемого item в QTreeWidget
         self.menu_()  # основные кнопки действий меню
@@ -133,7 +133,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                                                        f'{get_path()}\\output',
                                                                        filter='Database (*.db)')[0]
             self.set_default_params()
-            self.combobox_scen_switch()
+            self.update_display()
 
         except Exception as e:
             pass
@@ -300,7 +300,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_calculation_finished(self):
         # self.log("Расчет завершен.")
         self.setEnabled(True)  # Разблокируем основное окно
-        self.combobox_scen_switch()
+        self.update_display()
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
     def table_to_excel(self, button_text):
@@ -441,12 +441,10 @@ class MainWindow(QtWidgets.QMainWindow):
             df[list_rounding_report] = df[list_rounding_report].round(2)
             return df
 
-    def combobox_scen_switch(self):
+    def update_dict_tables(self):
         """
-        :return: удаление предыдущих item из combobox переключения сценариев расчета и добавление новых
+        Обновление словаря с таблицами результатов
         """
-        # удаление текущих item из combobox
-        self.ui.combobox_scenario.clear()
         connection = sql.connect(self.database_path)
         cursor = connection.cursor()
 
@@ -459,39 +457,62 @@ class MainWindow(QtWidgets.QMainWindow):
 
         connection.close()
 
-        # Добавление сценариев расчета в ComboBox
-        for sc in list_scripts:
-            self.ui.combobox_scenario.addItem(sc)
+        self.ui.combobox_scenario.blockSignals(True)
+        self.ui.combobox_scenario.clear()
+        self.ui.combobox_scenario.blockSignals(False)
+        self.ui.combobox_scenario.addItems(list_scripts)
 
-        if list_scripts:
-            df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
-            df_report = self.current_tables_dict["report"]
-            df = df.fillna(0)
-            list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
-            df = df.drop(columns=['index'])
+        df_report = self.current_tables_dict["report"]
+        df_report = df_report.drop(columns=['index'])
+        df_report = df_report.fillna(0)
+        df_report = self.rounding(df_report)
+        model_report = DataframeToTable(df_report)
+        self.ui.report.setModel(model_report)
+        self.ui.report.resizeColumnsToContents()
 
-            # добавление всех объектов расчета по выбранному сценарию в ComboBox
-            for hor in list_horizons:
-                self.ui.combobox_horizon.addItem(hor)
+    def update_display(self):
+        """
+        Обновляет вывод всех результатов в GUI
+        """
+        # загрузка таблиц из БД в словарь
+        self.update_dict_tables()
+        # обновление item combobox со сценариями расчета
+        self.update_hor_items()
+        # обновление картинки и таблицы результатов
+        self.update_result_table_picture()
 
-            self.clear_layout(self.ui.tab_2.layout())
-            df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
-                        (df['Объект расчета'] == 0) & (
-                            (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
-                                df['Объекты работы'] == "0")))].reset_index(drop=True)
-            self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
+    def update_hor_items(self):
+        """
+        Обновление item для combobox с объектами расчета
+        """
+        df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
+        df = df.fillna(0)
+        list_horizons = sorted(list(set(df[df['Объект расчета'] != 0]['Объект расчета'].explode())))
 
-            df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
-            df = self.rounding(df)
-            df_report = df_report.drop(columns=['index'])
-            df_report = df_report.fillna(0)
-            df_report = self.rounding(df_report)
-            model = DataframeToTable(df)
-            model_report = DataframeToTable(df_report)
-            self.ui.results.setModel(model)
-            self.ui.results.resizeColumnsToContents()
-            self.ui.report.setModel(model_report)
-            self.ui.report.resizeColumnsToContents()
+        # удаление текущих значений и добавление новых
+        self.ui.combobox_horizon.blockSignals(True)
+        self.ui.combobox_horizon.clear()
+        self.ui.combobox_horizon.blockSignals(False)
+        self.ui.combobox_horizon.addItems(list_horizons)
+
+    def update_result_table_picture(self):
+        """
+        Обновление картинки по значениям combobox_scenario и combobox_horizon
+        """
+        df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
+        df = df.drop(columns=['index'])
+        df = df.fillna(0)
+        df = df[((df['Объект расчета'] != 0) & (df['Объект расчета'] == self.ui.combobox_horizon.currentText())) | (
+                (df['Объект расчета'] == 0) & (
+                (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) | (
+                df['Объекты работы'] == "0")))].reset_index(drop=True)
+        self.clear_layout(self.ui.tab_2.layout())
+        self.ui.tab_2.layout().addWidget(MplWidget(df.copy(), self.dict_param['Сценарий расчета']))
+        df = df.drop(columns=['polygon', 'GEOMETRY', 'AREA'])
+        df = self.rounding(df)
+        model = DataframeToTable(df)
+        self.ui.results.setModel(model)
+        self.ui.results.resizeColumnsToContents()
 
     def get_result_table(self, table_name):
         """
@@ -705,8 +726,8 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.ui.treeWidget.itemWidget(item, 1).currentTextChanged.connect(self.update_dict)
 
-        self.ui.combobox_scenario.currentTextChanged.connect(self.get_result_table)
-        self.ui.combobox_horizon.currentTextChanged.connect(self.get_filtered_table)
+        self.ui.combobox_scenario.currentTextChanged.connect(self.update_hor_items)
+        self.ui.combobox_horizon.currentTextChanged.connect(self.update_result_table_picture)
 
     def closeEvent(self, event):
         if self.log_window is not None:

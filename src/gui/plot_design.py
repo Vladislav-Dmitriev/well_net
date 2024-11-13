@@ -120,10 +120,10 @@ def plot_results(df_result, script):
 
     df_result.loc[df_result['wellNet'].map(str).str.contains(
         'Охвачена исследованиями|Охвачена приоритетными'), 'status'] = 'covered'
-    df_result.loc[df_result['wellNet'].str.lower().str.contains('исключена|не охвачена'), 'status'] = 'excluded'
+    df_result.loc[
+        df_result['wellNet'].str.lower().str.contains('исключена|не охвачена|в списке искл'), 'status'] = 'excluded'
     df_result.loc[df_result['fond'] == 'ПРОЕКТ', 'status'] = 'project'
     df_result.loc[df_result['wellNet'] == 'Выбрана в опорную сеть', 'status'] = 'included'
-    # df_result = df_result[df_result['wellNet'] == 'excluded']
 
     # Подготовка данных для отображения
     fig, ax = plt.subplots(figsize=(7, 7))
