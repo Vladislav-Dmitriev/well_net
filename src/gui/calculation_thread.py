@@ -1,6 +1,7 @@
 from PyQt6 import QtCore
 import geopandas as gpd
 import pandas as pd
+import os
 from tqdm import tqdm
 from loguru import logger
 
@@ -30,11 +31,12 @@ class CalculationThread(QtCore.QThread):
         self.path_database = path_database
         self._is_stopped = False
 
-    def initialize_logging(self, application_path):
+    @logger.catch(level='DEBUG')
+    def initialize_logging(self):
         """Инициализация логов в файл."""
-        delete_logfiles(f'{application_path}/output/')
+        delete_logfiles(os.path.join(get_path(), "output"))
         log_handler = logger.add(
-            f'{application_path}/output/logfile.log',
+            os.path.join(get_path(), "output", "logfile.log"),
             level='DEBUG',
             format="{time:DD-MM-YYYY HH:mm:ss} {level} {message}",
             rotation='200KB'
@@ -42,10 +44,10 @@ class CalculationThread(QtCore.QThread):
         self.log_signal.emit("Начало расчета")
         return log_handler
 
+    @logger.catch(level='DEBUG')
     def run(self):
         """Основной метод, выполняющий расчет в потоке."""
-        application_path = get_path()
-        self.log_handler = self.initialize_logging(application_path)
+        self.log_handler = self.initialize_logging()
 
         df_input, df_exceptions, list_exception, path_property = self.load_and_prepare_data()
 
@@ -56,6 +58,10 @@ class CalculationThread(QtCore.QThread):
         dict_result.update(
             self.process_wells_out_of_contours(df_input, well_out_contour, path_property, list_exception))
 
+        # Delete .json file with PVT properties from PVT sheet in Excel data file
+        if os.path.isfile(path_property):
+            os.remove(path_property)
+
         # Save results to database
         self.save_results_to_database(dict_result, df_exceptions)
 
@@ -63,6 +69,7 @@ class CalculationThread(QtCore.QThread):
         self.stop()
         self.finished_signal.emit()
 
+    @logger.catch(level='DEBUG')
     def load_and_prepare_data(self):
         """Загружает и подготавливает данные для расчета."""
         self.log_signal.emit("-----------Чтение и подготовка данных-----------")
@@ -75,6 +82,7 @@ class CalculationThread(QtCore.QThread):
         preparing_reservoir_properties(self.dict_parameters, path_property, self.log_signal, self.progress_signal)
         return df_input, df_exceptions, list_exception, path_property
 
+    @logger.catch(level='DEBUG')
     def process_contours(self, df_input, path_property, list_exception):
         """Обрабатывает контуры и выполняет расчеты."""
         self.log_signal.emit("-----------Расчет опорной сетки по контурам-----------")
@@ -115,6 +123,7 @@ class CalculationThread(QtCore.QThread):
 
         return dict_result, well_out_contour
 
+    @logger.catch(level='DEBUG')
     def process_wells_out_of_contours(self, df_input, well_out_contour, path_property, list_exception):
         """Выполняет расчет для скважин вне контуров."""
         self.log_signal.emit("-----------Расчет опорной сетки вне контуров-----------")

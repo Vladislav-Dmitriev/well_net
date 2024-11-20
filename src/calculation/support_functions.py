@@ -240,6 +240,7 @@ def get_path():
     :return: Функция возвращает путь, по которому находится exe файл
     """
     if getattr(sys, 'frozen', False):
+        # application_path = getattr(sys, '_MEIPASS', None)
         application_path = os.path.dirname(sys.executable)
         return application_path
     elif __file__:
@@ -247,13 +248,6 @@ def get_path():
         return application_path
     else:
         raise Exception('Executable file path not found')
-    # if getattr(sys, 'frozen', False):
-    #     # Возвращаем директорию, в которой находится .exe файл
-    #     return os.path.dirname(sys.executable)
-    # else:
-    #     # Если программа запущена как скрипт, возвращаем директорию, где находится main.py
-    #     return os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
-
 
 
 @logger.catch(level='DEBUG')
@@ -285,10 +279,23 @@ def delete_logfiles(mypath):
     :param mypath: абсолютный путь к папке с логфайлами
     :return:
     """
-    list_logfiles = [f for f in os.listdir(path=mypath) if f.endswith('.log')]
-    for logfile in list_logfiles:
-        os.remove(f'{mypath}{logfile}')
-    pass
+    try:
+        # Получаем список всех файлов с расширением .log в указанной директории
+        list_logfiles = [f for f in os.listdir(mypath) if f.endswith('.log')]
+
+        for logfile in list_logfiles:
+            filepath = os.path.join(mypath, logfile)  # Корректное формирование пути
+            if os.path.isfile(filepath):  # Проверяем, что это файл
+                os.remove(filepath)  # Удаляем файл
+                logger.info(f"File deleted: {filepath}")
+            else:
+                logger.info(f"Object skipped: {filepath}")
+    except FileNotFoundError:
+        logger.info(f"Folder is not found: {mypath}")
+    except PermissionError:
+        logger.info(f"No permission to delete files in the folder: {mypath}")
+    except Exception as e:
+        logger.info(f"An error occurred: {e}")
 
 
 @logger.catch(level='DEBUG')

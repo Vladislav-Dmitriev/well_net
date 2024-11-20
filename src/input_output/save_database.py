@@ -111,6 +111,7 @@ def prepare_database(path_database):
     return sql.connect(path_database)
 
 
+@logger.catch(level='DEBUG')
 def write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_result, dict_rename):
     """
     Записывает данные по контуру в базу данных.

@@ -8,6 +8,33 @@ from src.gui.plot_design import plot_results
 class CustomNavigationToolbar(NavigationToolbar):
     toolitems = [t for t in NavigationToolbar.toolitems if t[0] not in ('Subplots', 'Customize')]
 
+    def __init__(self, canvas, parent=None):
+        super().__init__(canvas, parent)
+
+    def save_figure(self):
+        # Открываем диалог для выбора имени файла
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Сохранить изображение", "", "JPEG Files (*.jpg);;All Files (*)"
+        )
+        if filename:
+            # Заданные параметры
+            width_pixels = 15000  # Ширина в пикселях
+            height_pixels = 15000  # Высота в пикселях
+            dpi = 300  # Разрешение в DPI
+
+            # Рассчитываем размер фигуры в дюймах
+            figsize = (width_pixels / dpi, height_pixels / dpi)
+
+            # Устанавливаем временный размер фигуры
+            original_figsize = self.canvas.figure.get_size_inches()  # Сохраняем текущий размер
+            self.canvas.figure.set_size_inches(figsize)  # Задаем новый размер
+
+            # Сохраняем график
+            self.canvas.figure.savefig(filename, dpi=dpi, format="jpeg")
+
+            # Восстанавливаем оригинальный размер
+            self.canvas.figure.set_size_inches(original_figsize)  # Возвращаем исходный размер
+
 
 class MplWidget(QtWidgets.QWidget):
     def __init__(self, df_results, script, parent=None):

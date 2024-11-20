@@ -24,10 +24,10 @@ class ValidateData(BaseModel):
 
     data_file: str = Field(..., description='data_file')
     calculation_scenario: str = Field(..., description='calculation_scenario')
-    gdis_option: str = Field(..., description='gdis_option')
+    gdis_option: Union[str, None] = Field(..., description='gdis_option')
     calc_option: bool = Field(..., description='calc_option')
     percent: float = Field(..., description='percent')
-    horizon_count: int = Field(..., description='horizon_count')
+    horizon_count: Union[int, None] = Field(..., description='horizon_count')
     mult_coef: list = Field(..., description='mult_coef')
     limit_radius_coef: float = Field(..., description='limit_radius_coef')
     min_length_horWell: float = Field(..., description='min_length_horWell')
@@ -78,15 +78,19 @@ class ValidateData(BaseModel):
             return 'regular'
 
     @field_validator('gdis_option', mode='before')
-    def gdis_date(cls, gdis_option: str) -> str:
+    def gdis_date(cls, gdis_option: str) -> str | None:
         """
         Валидация даты последнего актуального исследования ГДИС
         :param gdis_option: дата последнего актуального исследования ГДИС в виде строки из виджета
-        :return:
+        :return: дата в корректном формате или None, если значение пустое
         """
+        if not gdis_option:  # Проверяем, если значение пустое (None, '', и т.д.)
+            return None
+
         try:
             pd.to_datetime(gdis_option, format='%d.%m.%Y')
             return gdis_option
+
         except ValidationError:
             logger.info("Incorrect GDIS date format")
             raise ValidationError('Enter correct format of GDIS date')
@@ -139,18 +143,22 @@ class ValidateData(BaseModel):
             raise ValueError('Enter a numeric value in the range 0-100')
 
     @field_validator('horizon_count', mode='before')
-    def horizon_count_to_int(cls, horizon_count: str) -> int:
+    def horizon_count_to_int(cls, horizon_count: str) -> int | None:
         """
         Валидация параметра кол-ва объектов работы на скважину
         :param horizon_count: строковое значение параметра кол-ва объектов работы на скважину
         :return:
         """
+        if not horizon_count:
+            return None
+
         try:
             float(horizon_count)
             if str(horizon_count).isdigit():
                 return int(horizon_count)
             else:
                 raise ValueError('Value must be positive integer')
+
         except ValueError:
             logger.info('Value must be positive integer')
             raise ValueError('Value must be positive integer')

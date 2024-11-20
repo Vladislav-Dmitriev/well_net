@@ -667,6 +667,7 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
 
     else:
         logger.info('Incorrect data of GDIS GeoBD')
+        log_user.emit("ГДИС не учтены. Дата последнего актуального исследования не указана")
         progress_bar.emit(100)
         return df_input, df_exceptions
 
@@ -722,6 +723,7 @@ def ngt_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_b
 
     else:
         logger.info('Incorrect date of GDIS')
+        log_user.emit("ГДИС не учтены. Дата последнего актуального исследования не указана")
         progress_bar.emit(100)
         return df_input, df_exceptions
 
@@ -996,7 +998,7 @@ def fonds_for_calc(df_horizon, script, percent, cover_criteria, mean_oilrate_opt
             lambda x: [y for y in x['intersection'] if y != x['wellName']], axis=1)
     #  подсчет кол-ва охваченных скважин
     df_necessarily['number'] = df_necessarily['intersection'].apply(lambda x: len(set(x)))
-    # инициализация списка скважин приоритетных к включению в ОС и охваченных ими скважины
+    # инициализация списка скважин приоритетных к включению в ОС
     list_necessarily = list(set(df_necessarily['wellName'].explode().unique()))
     # инициализация списка скважин, охваченных приоритетными к включению в ОС
     list_intersection_necessarily = list(set([x for x in list(df_necessarily['intersection'].explode().unique())

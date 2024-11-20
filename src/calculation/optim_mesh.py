@@ -30,7 +30,7 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     "слепых" зон и скважин в них
     :param path_property: путь к файлу с параметрами
     средним радиусом в этом случае для построения области взаимодействия будет заданное максимальное расстояние
-    :param log_user:
+    :param log_user: сигнал логирования для передачи сообщения пользователю
     :return: Возвращается словарь с добавленным ключом по коэффициенту умножения радиуса охвата
     """
     # удаление исключенных скважин из DataFrame пьезометров и нагнетательных
@@ -79,7 +79,7 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
                                                   dict_parameters['limit_research_time'], df_piez_recalc, df_prod_recalc,
                                                   df_inj_recalc, df_result_invisible,
                                                   pd.DataFrame(columns=df_piez_recalc.columns))
-            df_result_invisible['wellNet'] = 'Выбрана в опорную сеть'
+
             if (dict_parameters['separation_by_years'] == 1) and (not df_result_invisible.empty):
                 log_user.emit("Распределение скважин для исследования на 1 год вперед")
                 df_result_invisible['year_of_survey'] = 1
@@ -105,17 +105,17 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     list_piez_notwellnet = list(set(df_piez['wellName'].explode().unique()) - set(
         df_result.loc[df_result['fond'] == 'ПЬЕЗ', 'wellName'].explode().unique()))
     # список исследуемых добывающих скважин из столбца пересечений
-    list_research_prod = list(set(df_result['intersection'].explode().unique()))
+    list_research_prod = list(set(df_result['intersection'].explode().unique()) -
+                              set(df_result['wellName'].explode().unique()))
     # добавление в результирующий DataFrame исключенных скважин, скважин не выбранных в ОС и исследуемых
     df_result = pd.concat([df_result, df_piez_inj_exception, df_piez[df_piez['wellName'].isin(list_piez_notwellnet)],
                            df_inj[df_inj['wellName'].isin(list_inj_notwellnet)],
-                           df_prod_wells[df_prod_wells['wellName'].isin(
-                               [x for x in df_result['intersection'].explode().unique() if x == x])]],
+                           df_prod_wells[df_prod_wells['wellName'].isin(list_research_prod)]],
                           axis=0, sort=False).reset_index(drop=True)
     df_result.loc[df_result['wellName'].isin(list_piez_notwellnet + list_inj_notwellnet), 'wellNet'] =\
         'Исключена из опорной сети'
     df_result.loc[df_result['intersection'].map(str).str.contains('Не охвачена'), 'wellNet'] =\
-        'В списке исключений'
+        'Не охвачена исследованиями, исключена из ОС'
     df_result.loc[df_result['wellName'].isin(list_research_prod), 'wellNet'] = 'Охвачена исследованиями'
 
     # обнуление времени исследования пьезометрических скважин
@@ -453,7 +453,7 @@ def separation_gdis(df_invisible):
     # add column with distance from nearest well
     df_invisible['dist_from_0'] = list(map(lambda x: x.distance(df_invisible['GEOMETRY'].iloc[0]),
                                            df_invisible['GEOMETRY']))
-    df_invisible.sort_values(by=['dist_from_0'], ascending=True)
+    df_invisible = df_invisible.sort_values(by=['dist_from_0'], ascending=True)
     list_separation = list(set(df_invisible.wellName.explode().unique()))
     list_first_year = []
     # separate dataframe on two parts

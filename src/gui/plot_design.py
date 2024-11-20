@@ -3,13 +3,13 @@ import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import shapely as spl
-import pandas as pd
 from loguru import logger
 from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
 from matplotlib.widgets import CheckButtons
 
 
+@logger.catch(level='DEBUG')
 def get_color_area(fond):
     """
     Определение цвета зоны, охваченной исследованием
@@ -21,6 +21,7 @@ def get_color_area(fond):
     return dict_area_colors[fond]
 
 
+@logger.catch(level='DEBUG')
 def get_linetype_color(fond, year):
     """
     Выбор стиля и цвета линии обводки в зависимости от фонда и года исследования скважины
@@ -37,6 +38,7 @@ def get_linetype_color(fond, year):
     return line_type, line_color
 
 
+@logger.catch(level='DEBUG')
 def get_geometry_color(status):
     """
     Получение цвета геометрии(токи или линии), маркера и подписи скважины на картинке статуса по опорной сети
