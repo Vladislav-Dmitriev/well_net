@@ -18,3 +18,4 @@ __pycache__
 /src/my_database.db
 /src/test.py
 /Icon.ico
+/wellnet_default.db
