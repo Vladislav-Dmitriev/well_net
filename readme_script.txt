@@ -10,16 +10,17 @@ wellnet/
 		regular_mesh_all_wells.py
 		regular_mesh_intersections.py
 
-	preparing/
+	gui/
+		__init__.py
+		calculation_thread.py
+		log_window.py
+			
+
+	input_output/
 		__init__.py
 		dictionaries.py
 		preparing_data.py
-
-	visualization/
-		__init__.py
-		design.py
-		mapping.py
-		print_in_excel.py
+		save_database.py
 	
 	__init__.py
 	main.py
@@ -28,7 +29,7 @@ wellnet/
 -----------------------------------------------Инструкция-----------------------------------------------
 
 --- main.py
-	Основной скрипт модуля. Содержит вызовы всех функций расчета, а также функций визуализации и запсии в Excel файл.
+	Основной скрипт модуля. Содержит вызовы всех функций расчета, а также функций визуализации и записи в Excel файл.
 
 	1) Вызывается функция загрузки параметров расчета upload_parameters(path) из скрипта auxiliary_functions.py
 	2) Вызов функции подготовки DataFrame для расчета upload_input_data(dict_constant, dict_parameters) из скрипта

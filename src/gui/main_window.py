@@ -118,7 +118,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         self.ui.readme_txt.triggered.connect(lambda: os.startfile(os.path.join(get_path(), 'README.txt')))
         self.ui.reference.triggered.connect(lambda: os.startfile(os.path.join(get_path(), 'Методичка ОС.docx')))
-        self.ui.exit.triggered.connect(QtCore.QCoreApplication.instance().quit)
         self.ui.open_project.triggered.connect(self.load_database)
 
     def load_database(self):
@@ -322,13 +321,18 @@ class MainWindow(QtWidgets.QMainWindow):
         new_wb = xw.Book()
 
         try:
+
+            df_params = self.current_tables_dict["parameters"].drop(columns=["index"])
+            df_params = df_params.T.reset_index()
+            df_params.columns = ["Параметр", "Значение"]
+
             if "Сохранить все сценарии" in button_text:
-                calc_scripts = list(self.current_tables_dict.keys())
+                calc_scripts = [key for key in list(self.current_tables_dict.keys()) if key != "parameters"]
 
                 for script in calc_scripts:
                     df = self.current_tables_dict[script]
                     df = df.drop(columns=['index'])
-                    if script != 'report':
+                    if script != "report":
                         df = df.drop(columns=['GEOMETRY', 'AREA', 'polygon'])
                         df = df.fillna(0)
                         if "по текущему объекту" in button_text:
@@ -337,9 +341,14 @@ class MainWindow(QtWidgets.QMainWindow):
                                             (df['Объект расчета'] == 0) & (
                                             (df['Объекты работы'].str.contains(self.ui.combobox_horizon.currentText())) |
                                             (df['Объекты работы'] == "0")))].reset_index(drop=True)
-                    new_wb.sheets.add(f"{script.replace('/', '_')}")
-                    sht = new_wb.sheets(f"{script.replace('/', '_')}")
-                    sht.range('A1').options(pd.DataFrame, index=False).value = df
+                        new_wb.sheets.add(f"{script.replace('/', '_')}")
+                        sht = new_wb.sheets(f"{script.replace('/', '_')}")
+                        sht.range('A1').options(pd.DataFrame, index=False).value = df
+
+                    else:
+                        new_wb.sheets.add("Сводка по результатам")
+                        sht = new_wb.sheets("Сводка по результатам")
+                        sht.range('A1').options(pd.DataFrame, index=False).value = df
                     
             else:
                 df = self.current_tables_dict[self.ui.combobox_scenario.currentText()]
@@ -353,6 +362,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 new_wb.sheets.add(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
                 sht = new_wb.sheets(f"{self.ui.combobox_scenario.currentText().replace('/', '_')}")
                 sht.range('A1').options(pd.DataFrame, index=False).value = df
+
+            new_wb.sheets.add("Параметры")
+            sht = new_wb.sheets("Параметры")
+            sht.range("A1").options(pd.DataFrame, index=False).value = df_params
             new_wb.save(path_to_save)
 
         finally:
@@ -456,7 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table';''').fetchall() if
                         x[0] != 'parameters' and x[0] != 'report']
         self.current_tables_dict = {name: pd.read_sql_query(f'SELECT * FROM "{name}"', connection)
-                                    for name in list_scripts + ["report"]}
+                                    for name in list_scripts + ["report", "parameters"]}
 
         connection.close()
 

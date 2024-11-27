@@ -18,8 +18,8 @@ class CustomNavigationToolbar(NavigationToolbar):
         )
         if filename:
             # Заданные параметры
-            width_pixels = 15000  # Ширина в пикселях
-            height_pixels = 15000  # Высота в пикселях
+            width_pixels = 25000  # Ширина в пикселях
+            height_pixels = 25000  # Высота в пикселях
             dpi = 300  # Разрешение в DPI
 
             # Рассчитываем размер фигуры в дюймах

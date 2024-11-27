@@ -81,7 +81,8 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                     log_user.emit(f"")
                     continue
                 df_result = calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result,
-                                            df_necessarily_wells, horizon, mean_rad, coeff, key, obj_square, path_property,
+                                            df_necessarily_wells, horizon, mean_rad, coeff, key, obj_square,
+                                            path_property,
                                             list_exception, dict_parameters, log_user)
             # сценарий с построением регулярной сеткой на каждом из фондов
             elif dict_parameters['calculation_scenario'] == 'regular':

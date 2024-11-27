@@ -5,7 +5,6 @@ import pandas as pd
 import shapely as spl
 from loguru import logger
 from tqdm import tqdm
-from src.input_output.save_excel import get_report
 from src.calculation.shapely_geometry import check_intersection_area
 
 
@@ -222,3 +221,90 @@ def save_report_to_db(db_result, dict_result, dict_parameters, list_name_params)
     if isinstance(dict_parameters[old_key], list) else str(dict_parameters[old_key])
                                for new_key, old_key in zip(list_name_params, dict_parameters.keys())}])
     df_params.to_sql(name='parameters', con=db_result, if_exists='replace')
+
+
+@logger.catch(level='DEBUG')
+def get_report(dict_result):
+    """
+    Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
+    :param dict_result: словарь с результатами расчетов по всем объектам
+    :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом увеличения радиуса
+    """
+    dict_names_report = {'contour_k': 'Сценарий',
+                         'obj_count': 'Кол-во объектов',
+                         'mean_rad': 'Средний радиус',
+                         'mean_time': 'Среднее время исследования',
+                         'piez_count': 'Кол-во пьезометров',
+                         'inj_count': 'Кол-во нагн',
+                         'prod_count': 'Кол-во доб',
+                         'well_quantity0': 'Кол-во исслед. скв. 1 год',
+                         'well_quantity1': 'Кол-во исслед. скв. 2 год',
+                         'well_quantity2': 'Кол-во исслед. скв. 3 год',
+                         'research_wells0': 'Охваченные исследованиями 1 год',
+                         'research_wells1': 'Охваченные исследованиями 2 год',
+                         'research_wells2': 'Охваченные исследованиями 3 год',
+                         'oil_loss0': 'Потери нефти 1 год, т',
+                         'oil_loss1': 'Потери нефти 2 год, т',
+                         'oil_loss2': 'Потери нефти 3 год, т',
+                         'injection_loss0': 'Потери закачки жидкости 1 год, м3',
+                         'injection_loss1': 'Потери закачки жидкости 2 год, м3',
+                         'injection_loss2': 'Потери закачки жидкости 3 год, м3',
+                         'gas_loss0': 'Потери по добыче газа 1 год, тыс.м3',
+                         'gas_loss1': 'Потери по добыче газа 2 год, тыс.м3',
+                         'gas_loss2': 'Потери по добыче газа 3 год, тыс.м3',
+                         'percent_of_default': 'Процент объектов по умолчанию'}
+
+    dict_report = {}
+
+    for key, value in tqdm(dict_result.items(), "Preparing report", position=0, leave=True,
+                           colour='white', ncols=80, disable=True):
+        df = value[0]
+        df = df[df['wellNet'] == 'Выбрана в опорную сеть']
+
+        dict_report['contour_k'] = dict_report.get('contour_k', []) + [key]
+        dict_report['obj_count'] = dict_report.get('obj_count', []) + [len(set(df['workHorizon'].explode().unique()))]
+        dict_report['mean_rad'] = dict_report.get('mean_rad', []) + [df['mean_radius'].mean()]
+        dict_report['mean_time'] = dict_report.get('mean_time', []) + [df['research_time'].mean()]
+        dict_report['piez_count'] = dict_report.get('piez_count', []) + [len(df[df['fond'] == 'ПЬЕЗ'])]
+        dict_report['inj_count'] = dict_report.get('inj_count', []) + [len(df[df['fond'] == 'НАГ'])]
+        dict_report['prod_count'] = dict_report.get('prod_count', []) + [len(df[df['fond'] == 'ДОБ'])]
+
+        dict_report['well_quantity0'] = dict_report.get('well_quantity0', []) + [df[df['year_of_survey'] == 0].shape[0]]
+        dict_report['well_quantity1'] = (dict_report.get('well_quantity1', []) +
+                                         [df[df['year_of_survey'] == 1].shape[0]])
+        dict_report['well_quantity2'] = (dict_report.get('well_quantity2', []) +
+                                         [df[df['year_of_survey'] == 2].shape[0]])
+
+        dict_report['research_wells0'] = (dict_report.get('research_wells0', []) +
+                                          [len(set(df[df['year_of_survey'] == 0]['intersection'].explode().unique()))])
+        dict_report['research_wells1'] = dict_report.get('research_wells1', []) + [
+            len(set(df[df['year_of_survey'] == 1]['intersection'].explode().unique()))]
+        dict_report['research_wells2'] = dict_report.get('research_wells2', []) + [
+            len(set(df[df['year_of_survey'] == 2]['intersection'].explode().unique()))]
+        # потери по добыче нефти
+        dict_report['oil_loss0'] = dict_report.get('oil_loss0', []) + [df[df['year_of_survey'] == 0].oil_loss.sum()]
+        dict_report['oil_loss1'] = dict_report.get('oil_loss1', []) + [df[df['year_of_survey'] == 1].oil_loss.sum()]
+        dict_report['oil_loss2'] = dict_report.get('oil_loss2', []) + [df[df['year_of_survey'] == 2].oil_loss.sum()]
+        # потери по закачке жидкости
+        dict_report['injection_loss0'] = (dict_report.get('injection_loss0', []) +
+                                          [df[df['year_of_survey'] == 0].injection_loss.sum()])
+        dict_report['injection_loss1'] = (dict_report.get('injection_loss1', []) +
+                                          [df[df['year_of_survey'] == 1].injection_loss.sum()])
+        dict_report['injection_loss2'] = dict_report.get('injection_loss2', []) + [
+            df[df['year_of_survey'] == 2].injection_loss.sum()]
+        # потери по добыче газа
+        dict_report['gas_loss0'] = (dict_report.get('gas_loss0', []) +
+                                    [df[(df['year_of_survey'] == 0) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss1'] = (dict_report.get('gas_loss1', []) +
+                                    [df[(df['year_of_survey'] == 1) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+        dict_report['gas_loss2'] = (dict_report.get('gas_loss2', []) +
+                                    [df[(df['year_of_survey'] == 2) & (df['fond'] == 'ДОБ')].gas_loss.sum()])
+
+        dict_report['percent_of_default'] = (dict_report.get('percent_of_default', []) +
+                                             [100 * df.default_count.sum() / df.obj_count.sum()])
+
+    df_report = pd.DataFrame.from_dict(dict_report, orient='columns')
+    # округление числовых столбцов DataFrame до 2 знаков после запятой
+    df_report.rename(columns=dict_names_report, inplace=True)
+
+    return df_report

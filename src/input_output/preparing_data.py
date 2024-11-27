@@ -574,7 +574,13 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
 
     except Exception as e:
         logger.info(f'Rename excel filters error: {e}')
+
+    # завершение процесса подключения к документу excel
+    app1.kill()
+
     log_user.emit("Открытие листа с данными по исследованиям")
+
+    app1 = xw.App(visible=False)
     gdis_wb = xw.Book(os.path.join(get_path(), "input", dict_parameters['data_file']))
     gdis_sheet = gdis_wb.sheets['ГДИС']
     # create list with names of cells in column Pпл на ВНК
@@ -619,7 +625,7 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
     try:
         # read data from sheet with pandas
         df_gdis = pd.read_excel(os.path.join(get_path(), "input", dict_parameters['data_file']), skiprows=[1],
-                                sheet_name='ГДИС')
+                                sheet_name='ГДИС', dtype={"Дата испытания": str})
         # check empty dataframe
         if df_gdis.empty:
             log_user.emit("Лист с данными по исследованиям пуст")
@@ -642,11 +648,12 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
 
         df_gdis = df_gdis[df_gdis['Качество исследования'] == 'результат достоверный']
         df_gdis = df_gdis.fillna(0)
+        df_gdis['Общее время исслед.'] = df_gdis['Общее время исслед.'].apply(lambda x: float(str(x).replace(",", ".")))
         df_gdis = df_gdis[df_gdis['Общее время исслед.'] > 24].reset_index(drop=True)
-        df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(
-            lambda x: x if parseDate(str(x), dayfirst=True).year > 1950 else 0)
-        df_gdis = df_gdis[df_gdis['Дата испытания'] != 0]
-        df_gdis['Дата окончания'] = (pd.to_datetime(df_gdis['Дата испытания'], format='%d.%m.%Y')
+        df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(lambda x: parseDate(str(x), dayfirst=True))
+        # df_gdis['Дата испытания'] = df_gdis['Дата испытания'].apply(
+        #     lambda x: str(x).replace("/", ".") if str(x).replace("/", ".") is not np.nan else str(x))
+        df_gdis['Дата окончания'] = (pd.to_datetime(df_gdis['Дата испытания'], dayfirst=True)
                                      + df_gdis['Общее время исслед.'].apply(lambda x: timedelta(hours=x)))
         df_gdis = df_gdis[
             ['Скважина', 'Пласт ОИС', 'Вид исследования', 'Дата испытания', 'Дата окончания', 'Качество исследования']]
@@ -667,7 +674,7 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
 
     else:
         logger.info('Incorrect data of GDIS GeoBD')
-        log_user.emit("ГДИС не учтены. Дата последнего актуального исследования не указана")
+        log_user.emit("ГДИС не учтены. Дата последнего актуального исследования не указана или неверный формат данных")
         progress_bar.emit(100)
         return df_input, df_exceptions
 
