@@ -24,6 +24,9 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
 
     :param dict_constant: словарь со статусами работы скважин
     :param dict_parameters: словарь с параметрами расчета
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
+
     :return: возвращает подготовленный DataFrame после считывания исходного файла со скважинами
     """
 
@@ -112,7 +115,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_ba
     :param df_input: Выгрузка данных ГеоБД
     :param dict_constant: статусы и характеры работы скважин
     :param dict_geobd_columns: список имен столбцов
-    :param progress_bar:
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: DataFrame с необходимыми столбцами для расчета, столбцы в правильном порядке,
     скважины разделены на ННС и ГС
     """
@@ -182,7 +185,7 @@ def add_t3_coord_geobd(df, list_columns):
     Подготовка DataFrame к расчету, удаление дубликатов с "_Т3" и добавление координат Т3 первого ствола для ГС
     :param df: DataFrame для подготовки к расчету, удаление дубликатов в столбце имен и добавление столбцов с T3
     :param list_columns: список столбцов, которые необходимо оставить для дальнейшего расчета
-    :return:
+    :return: DataFrame скважин с подготовленными координатами
     """
     df['MEST'] = list(str(df.loc[0]['LINK']).split('='))[-1].upper()
     df['X3'] = 0
@@ -236,9 +239,10 @@ def add_t3_coord_geobd(df, list_columns):
 def preparing_project_wells(dict_parameters, log_user, progress_bar):
     """
     Чтение файла с проектными скважинами, обработка координат и разделение на типы ННС/ГС
+
     :param dict_parameters: словарь с параметрами расчета
-    :param progress_bar:
-    :param log_user:
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
     :return: подготовленный DataFrame с проектными скважинами
     """
     logger.info('Preparing project wells')
@@ -328,10 +332,11 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_
     """
     Подготовка к расчету DataFrame, прошедшего предварительную подготовку в зависимости от типа выгрузки
 
-    :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
-    :param dict_parameters: словарь с параметрами расчета
     :param dict_constant: словарь со статусами работы скважин
     :param df_input: DataFrame, полученный из входного файла
+    :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
+    :param dict_parameters: словарь с параметрами расчета
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: Возврат DataFrame, подготовленного к расчету
     """
 
@@ -467,8 +472,10 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_
 def preprocessing_NGT(df_input, min_length_horWell, progress_bar):
     """
     Подготовка данных из NGT
-    :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
+
     :param df_input: Выгрузка данных NGT
+    :param min_length_horWell: минимальная длина ГС, для разделения скважин на ННС и ГС
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: подготовленный DataFrame выгрузки NGT, скважины разделены на ННС и ГС
     """
 
@@ -503,6 +510,7 @@ def preprocessing_NGT(df_input, min_length_horWell, progress_bar):
 def add_t3_coord_ngt(df, min_length_horWell):
     """
     Добавление координат T3 для всех скважин для возможности создания геометрии
+
     :param df: DataFrame с данными по скважинам из NGT
     :param min_length_horWell: минимальная заданная длина ГС
     :return: DataFrame с подготовленными координатами T1 и T3
@@ -542,10 +550,13 @@ def add_t3_coord_ngt(df, min_length_horWell):
 def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_bar):
     """
     Функция обработки данных ГДИС из выгрузки ГеоБД
+
     :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
     :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
     :param dict_parameters: словарь с параметрами расчета
-    :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
+    :return: DataFrame очищенный от скважин, на которых проводились ГДИС не ранее указанной даты
     """
 
     progress_bar.emit(0)
@@ -688,6 +699,8 @@ def ngt_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress_b
     :param df_exceptions: DataFrame исключенных скважин в ходе подготовки к расчету
     :param df_input: DataFrame, полученный путем считывания исходного файла со скважинами
     :param dict_parameters: словарь с параметрами расчета
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: DataFrame очищенный от скважин, на которых проводились ГДИС не более n лет назад
     """
 
@@ -818,6 +831,8 @@ def preparing_reservoir_properties(dict_parameters, path, log_user, progress_bar
 
     :param dict_parameters: словарь с параметрами расчета
     :param path: путь к корневой папке
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: сохраняет словарь в корневую папку в виде json файла со свойствами месторождений
     """
 
@@ -946,6 +961,7 @@ def get_exception_wells(dict_parameters, sheet, log_user):
 
     :param sheet: имя листа в исходном файле Excel
     :param dict_parameters: словарь с параметрами расчета
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
     :return: возвращает список скважин для исключения
     """
     application_path = get_path()
@@ -974,13 +990,14 @@ def get_exception_wells(dict_parameters, sheet, log_user):
 def fonds_for_calc(df_horizon, script, percent, cover_criteria, mean_oilrate_option, percent_oilrate):
     """
     Подготовка пьезометров, нагнетательных и добывающих скважин для расчета с учетом списка приоритетных к исследованию
+
     :param df_horizon: DataFrame скважин выделенных на текущий объект расчета
     :param script: сценарий расчета
     :param percent: процент расстояния между точками T1 и T3 необходимый для включения скважины в зону исследования
     :param cover_criteria: параметр учета процента расстояния между точками T1 и T3 скважины
     :param mean_oilrate_option: параметр учета среднего дебита нефти по объекту
     :param percent_oilrate: процент от среднего дебита нефти по объекту
-    :return: Подготовленные DataFrame 3 фондов, DataFrame приоритетных скважин, DataFrame скважин, охваченных
+    :return: Подготовленные DataFrame 3-х фондов, DataFrame приоритетных скважин, DataFrame скважин, охваченных
              приоритетными и средний дебит по объекту расчета
     """
     df_necessarily = df_horizon[df_horizon['num_of_research']]

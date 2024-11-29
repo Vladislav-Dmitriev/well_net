@@ -10,6 +10,11 @@ class ValidatePath(BaseModel):
 
     @field_validator('path')
     def validate_path(cls, path: str) -> str:
+        """
+        Валидация пути к БД
+        :param path: путь к БД, введенный пользователем
+        :return: путь к БД, либо сообщение об ошибке
+        """
         dir_path, file_name = os.path.split(path)
 
         # Validate if the directory exists and file has a '.db' extension
@@ -70,7 +75,7 @@ class ValidateData(BaseModel):
         """
         Валидация выбранного сценария расчета
         :param calculation_scenario: строка с названием сценария из QComboBox
-        :return:
+        :return: возвращает сценария расчета
         """
         if calculation_scenario == 'Оптимальная сетка':
             return 'optimize'
@@ -100,6 +105,7 @@ class ValidateData(BaseModel):
         """
         Валидация параметров, имеющих значения да/нет, то есть boolean
         :param value: строковое значение параметра из QComboBox
+        :return: True или False
         """
         if value == 'Да':
             return True
@@ -111,6 +117,7 @@ class ValidateData(BaseModel):
         """
         Валидация порядка фондов для построения регулярной сетки
         :param list_order_fond: строковое значение порядка фондов
+        :return: порядок фондов для построения равномерной сетки, либо ошибку с сообщением о неверно введенном параметре
         """
         # Набор допустимых значений
         valid_names = {"доб", "пьез", "наг"}
@@ -122,7 +129,7 @@ class ValidateData(BaseModel):
                 "Строка должна содержать ровно 3 названия: 'доб' 'пьез' 'наг'"
                 " через запятую в любом порядке и регистре.")
 
-        return list_order_fond
+        return list_order_fond.lower().replace(" ", "")
 
     @field_validator('percent', 'percent_oilrate', 'percent_piez', 'percent_inj', 'percent_prod',
                      'MaxOverlapPercent', mode='before')
@@ -130,6 +137,7 @@ class ValidateData(BaseModel):
         """
         Валидация параметров, определяющихся в процентах. Перевод в число с плавающей точкой
         :param percent_val: строковое значение параметров из виджета
+        :return: процент или вызов ошибки с сообщением о неверно введенном параметре
         """
         try:
             percent_val = float(percent_val)
@@ -147,7 +155,8 @@ class ValidateData(BaseModel):
         """
         Валидация параметра кол-ва объектов работы на скважину
         :param horizon_count: строковое значение параметра кол-ва объектов работы на скважину
-        :return:
+        :return: значение параметра, либо пустое значение, если параметр не введен, либо вызов ошибки с сообщением
+         о неверно введенном параметре
         """
         if not horizon_count:
             return None
@@ -166,9 +175,9 @@ class ValidateData(BaseModel):
     @field_validator('fluid_rate', 'limit_oilrate', 'min_research_time', 'max_research_time', mode='before')
     def str_to_empty_or_float(cls, str_to_float_empty: str):
         """
-        Валидация параметров, ограничивающих попадание скважин на расчет модуля: дебит жидкости,
+        Валидация параметров, ограничивающих попадание скважин на расчет модуля: дебит жидкости, мин./макс. время исслед
         :param str_to_float_empty: строковое значение параметра
-        :return:
+        :return: значение введенного параметра если он неотрицательный или не введен, либо вывод сообщения об ошибке
         """
         try:
             str_to_float_empty = float(str_to_float_empty)
@@ -190,7 +199,7 @@ class ValidateData(BaseModel):
         """
         Валидация значения параметра обводненности
         :param water_cut: строковое значение параметра из виджета
-        :return:
+        :return: значение введенного параметра(если => 0 и <= 100) или не введен, либо вывод сообщения об ошибке
         """
         try:
             water_cut = float(water_cut)
@@ -211,7 +220,7 @@ class ValidateData(BaseModel):
         """
         Валидация списка коэффициентов на средний радиус исследования
         :param mult_coef: строковое значение списка коэффициентов из виджета
-        :return:
+        :return: значение введенного параметра, если это список из вещественных чисел, либо сообщение об ошибке
         """
         mult_coef = mult_coef.split(',')
         try:
@@ -230,7 +239,7 @@ class ValidateData(BaseModel):
         """
         Валидация параметров, имеющих значение в виде числа с плавающей точкой
         :param float_params: строковые значения параметров с плавающей запятой из виджета
-        :return:
+        :return: значение введенного параметра если он положительный или не введен, либо вывод сообщения об ошибке
         """
         try:
             float_params = float(float_params)

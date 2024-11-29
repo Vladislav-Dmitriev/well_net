@@ -141,22 +141,22 @@ def core_optim_mesh(list_prod_exception, path_property, percent, mean_rad, coeff
                     df_piez_wells, df_prod_wells, df_inj_wells, df_result, df_necessarily_wells):
     """
     Функция для расчета результирующего DataFrame по объекту
-    :param df_necessarily_wells: DataFrame с обязательными скважинами
-    :param limit_research_time: параметр учета границ времени исследования
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param max_time_research: ограничение максимального времени исследования ННС
-    :param min_time_research: ограничение минимального времени исследования ННС
-    :param obj_square: площадь объекта месторождения по краевым скважинам
     :param list_prod_exception: список исключаемых из расчета скважин
     :param path_property: путь к файлу со свойствами
     :param percent: процент длины траектории скважины для включения в зону охвата
     :param mean_rad: средний радиус по объекту
     :param coeff: коэффициент кратного увеличения радиуса
     :param horizon: объект, по которому идет расчет
+    :param obj_square: площадь объекта месторождения по краевым скважинам
+    :param min_time_research: ограничение минимального времени исследования ННС
+    :param max_time_research: ограничение максимального времени исследования ННС
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
+    :param limit_research_time: параметр учета границ времени исследования
     :param df_piez_wells: пьезометры по текущему объекту
     :param df_prod_wells: добывающие скважины по текущему объекту
     :param df_inj_wells: нагнетательные скважины по текущему объекту
     :param df_result: пустой DataFrame, в который записывается результат расчета
+    :param df_necessarily_wells: DataFrame с обязательными скважинами
     :return: результирующий DataFrame по объекту
     """
     inj_count = df_inj_wells.shape[0] + df_necessarily_wells[df_necessarily_wells['fond'] == 'НАГ'].shape[0]
@@ -268,11 +268,11 @@ def core_optim_mesh(list_prod_exception, path_property, percent, mean_rad, coeff
 def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обрабатывает DataFrame из пьезометров, подающийся на вход
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param percent: процент длины траектории скважины для включения в зону охвата
     :param df_piez_wells: DataFrame из пьезометров, выделенный из входного файла
     :param hor_prod_wells: DataFrame из добывающих скважин
     :param df_result: В функцию подается DataFrame df_result для добавления в общий результат расчета пьезометров
+    :param percent: процент длины траектории скважины для включения в зону охвата
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :return: Возвращаются: 1) список скважин, не имеющих пересечений;
                            2) DataFrame пьезометров;
                            3) DataFrame добывающих;
@@ -303,12 +303,12 @@ def piez_calc(df_piez_wells, hor_prod_wells, df_result, percent, calc_option):
 def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame нагнетательных скважин
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
     :param df_inj_wells: DataFrame нагнетательных скважин
     :param df_result: Результирующий DataFrame, к которому добавится результат обработки DataFrame нагнетательных скв.
+    :param percent: процент длины траектории скважины для включения в зону охвата
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :return: Возвращаются: 1) список скважин, не имеющих пересечений;
                            2) DataFrame нагнетательных;
                            3) DataFrame добывающих;
@@ -343,12 +343,12 @@ def inj_calc(isolated_wells, hor_prod_wells, df_inj_wells, df_result, percent, c
 def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, percent, calc_option):
     """
     Функция обарабатывает DataFrame одиночных скважин
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :param list_exception: список исключаемых из расчета скважин
-    :param percent: процент длины траектории скважины для включения в зону охвата
     :param isolated_wells: Список скважин, не имеюших пересечений
     :param hor_prod_wells: DataFrame добывающих скважин
     :param df_result: Результирующий DataFrame, к которому добавится результат обработки DataFrame одиночных скв.
+    :param percent: процент длины траектории скважины для включения в зону охвата
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :return: Возвращаются: 1) список скважин, не имеющих пересечений;
                            2) DataFrame добывающих;
                            3) Общий DataFrame со всеми результатами расчета по объекту
@@ -415,13 +415,13 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
 @logger.catch(level='DEBUG')
 def get_invisible_wells(df_recalc, df_prod, percent, radius, coeff, calc_option):
     """
-    Функция получения скважин в слепой зоне при k > 1.5 (k*R)
-    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
-    :param coeff: коэффициент домножения радиуса
+    Функция получения скважин в слепой зоне при k > ограничения коэффициента кратного увеличения R (k*R)
     :param df_recalc: копия результирующего DataFrame для выделения скважин в слепой зоне
     :param df_prod: DataFrame добывающих скважин
     :param percent: процент перекрытия зоной охвата, при котором скважина попадает в нее
     :param radius: максимальный радиус охвата в слепой зоне
+    :param coeff: коэффициент домножения радиуса
+    :param calc_option: параметр определяет критерий учета процента длины ГС для попадания в зону охвата
     :return: возвращает список скважин для дообследования и DataFrame с обновленным столбцом пересечений
     """
     logger.info("Search invisible wells")

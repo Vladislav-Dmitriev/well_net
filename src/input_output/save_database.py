@@ -18,7 +18,7 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
     :param dict_parameters: dict - параметры расчета
     :param list_name_params: list - список имен параметров расчета
     :param path_database: str - путь к файлу базы данных для сохранения результатов
-    :param progress_bar:
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     """
     dict_rename = get_column_mappings()
 
@@ -227,6 +227,7 @@ def save_report_to_db(db_result, dict_result, dict_parameters, list_name_params)
 def get_report(dict_result):
     """
     Функция для создания краткого отчета по всем контурам с разными коэффициентами для радиусов охвата
+
     :param dict_result: словарь с результатами расчетов по всем объектам
     :return: возвращает DataFrame с отчетом по каждому контуру с определенным коэффициентом увеличения радиуса
     """

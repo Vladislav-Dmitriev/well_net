@@ -65,7 +65,7 @@ def check_intersection_point(point, df_areas, percent, calc_option):
     :param percent: процент попадания скважины в зону охвата
     :param point: геометрия скважины(точка/линия)
     :param df_areas: DataFrame со столбцом зон вокруг скважин
-    :return: перечесение со сколькими зонами имеет определенная скважина
+    :return: пересечение со сколькими зонами имеет определенная скважина
     """
     if calc_option:
         df_areas = gpd.GeoDataFrame(df_areas, geometry="AREA")

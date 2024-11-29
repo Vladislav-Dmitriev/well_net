@@ -12,6 +12,9 @@ class CustomNavigationToolbar(NavigationToolbar):
         super().__init__(canvas, parent)
 
     def save_figure(self):
+        """
+        Функция кастомизации панели инструментов работы с картинкой
+        """
         # Открываем диалог для выбора имени файла
         filename, _ = QtWidgets.QFileDialog.getSaveFileName(
             self, "Сохранить изображение", "", "JPEG Files (*.jpg);;All Files (*)"
@@ -58,6 +61,10 @@ class MplWidget(QtWidgets.QWidget):
         self.setLayout(self.my_layout)
 
     def resizeEvent(self, event):
+        """
+        Функция отклика на изменение размера окна либо перемещения окна приложения между экранами с разным разрешением
+        :param event: событие с виджетом, где размещена картинка
+        """
         # Получаем новый размер окна
         width = self.width()
         height = self.height()

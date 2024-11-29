@@ -160,7 +160,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def validate(self, dict_params, dict_previous):
         """
         Функция валидации параметров расчета
-        :param dict_params:
+        :param dict_params: текущий словарь параметров, введенных пользователем
         :param dict_previous: словарь со значениями параметров до изменения
         :return: если введенный пользователем параметр имеет некорректное значение,
          то возвращаются параметры из старого словаря
@@ -192,7 +192,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def filedir_widget(self):
         """
-        Добавление виджета с помощью класса в item с путем к файлу данных для расчета
+        Добавление поля с помощью класса в item с путем к файлу данных для расчета
         :return:
         """
         filedir_item = self.ui.treeWidget.findItems('Файл с данными', QtCore.Qt.MatchFlag.MatchContains |
@@ -203,7 +203,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Вызов функции валидации словаря параметров при изменении пути к файлу с данными вручную и
         открытие диалогового окна для выбора файла с данными, показаны файлы только формата .xlsx
-        :return:
         """
         filedir_item = self.ui.treeWidget.findItems('Файл с данными', QtCore.Qt.MatchFlag.MatchContains |
                                                     QtCore.Qt.MatchFlag.MatchRecursive, 0)[0]
@@ -214,9 +213,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def open_filedialog(self, filedir_item):
         """
-        Функция открытия диалогового окна для помещения пути файла с данными в виджет параметров расчета
+        Функция открытия диалогового окна для помещения пути файла с данными в виджет параметров расчета.
+        Обновление словаря с параметрами и его валидация при изменении пути к файлу с данными
         :param filedir_item: item, в котором находится виджет с путем к файлу с данными
-        :return:
         """
         self.ui.treeWidget.itemWidget(filedir_item, 1).layout().itemAt(0).widget().setText(
             QtWidgets.QFileDialog.getOpenFileName(self, 'Выберите файл с данными',
@@ -225,6 +224,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def message_box(self, message):
         """
+        Функция вывода сообщения для пользователя в отдельном окне
         :param message: текст сообщения для пользователя
         :return: выводится окно об ошибочном вводе параметра расчета
         """
@@ -232,7 +232,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def buttons(self):
         """
-        :return: действия на все кнопки в окне приложения
+        Сигналы на нажатия кнопок в главном окне приложения
         """
         # begin calculation button
         self.ui.calculate.clicked.connect(lambda: self.main_calc_function())
@@ -289,17 +289,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_window.show()
 
     def log(self, message):
+        """
+        Задание формата вывода логов для пользователя
+        :param message: сообщение с информацией о ходе расчета для пользователя
+        """
         if self.log_window:
             self.log_window.log_area.append(f"{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}  {message}")
 
     def on_calculation_stopped(self):
+        """
+        Остановка расчета, обнуление потока расчета и вывод сообщения в окно логов о прерывании расчета
+        """
         self.setDisabled(False)
         self.calculation_thread.stop()
         self.log("Расчет остановлен.")
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
 
     def on_calculation_finished(self):
-        # self.log("Расчет завершен.")
+        """
+        Сигнал об успешном завершении расчета, разблокировка главного окна, обнуление потока расчета
+        """
         self.setEnabled(True)  # Разблокируем основное окно
         self.update_display()
         self.calculation_thread = None  # Обнуляем поток для возможности перезапуска
@@ -307,7 +316,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def table_to_excel(self, button_text):
         """
         Сохранение таблицы/таблиц в Excel файл
-        :return: запись в Excel
         """
         path_to_save = QtWidgets.QFileDialog.getSaveFileName(self, "Сохранение таблицы опорной сетки",
                                                              f'{get_path()}\\output\\{os.getlogin()}_'
@@ -373,7 +381,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def write_dict(self):
         """
-        :return: считывает параметры расчета из виджета и записывает их в БД
+        Считывание параметров расчета из виджета, запись их в БД
         """
         # подключение к БД
         connection = sql.connect(self.database_path)
@@ -407,7 +415,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def item_clicked(self):
         """
         При нажатии на ячейку в столбце доступном для редактирования открывается возможность редактировать ее значение
-        :return: редактирование ячейки пользователем
         """
         # check clicked item of QTreeWidget
         self.ui.treeWidget.itemClicked.connect(self.editable_column)
@@ -417,7 +424,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def clear_layout(self, layout):
         """
         Удаление текущей картинки, чтобы разместить новую
-        :return:
         """
         while layout.count() > 0:
             item = layout.takeAt(0)
@@ -432,7 +438,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Метод возвращает округленные значения в DataFrame
         :param df: DataFrame сводки по сценариям или результат текущего сценария
-        :return:
         """
         if df.columns[0] == '№ скважины':
             list_rounding_result = ['Координата X', 'Координата забоя Х (по траектории)', 'Координата Y',
@@ -532,9 +537,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def get_result_table(self, table_name):
         """
-        Загрузка и вывод таблиц в виджет
+        Загрузка и вывод таблиц в виджет. Помещает данные из таблицы в БД в виджет окна приложения
         :param table_name: имя таблицы в БД, откуда необходимо выгрузить данные
-        :return: помещает данные из таблицы в БД в виджет окна приложения
         """
         if table_name:
             df = self.current_tables_dict[table_name]
@@ -563,7 +567,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Фильтр для таблицы результатов расчета по определенному объекту
         :param horizon: объект, выбранный пользователем
-        :return:
         """
         table_name = self.ui.combobox_scenario.currentText()
         if table_name:
@@ -638,7 +641,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_dict(self):
         """
-        Обвовление всех значений словаря параметров, тк один из item-ов был изменен
+        Обновление всех значений словаря параметров, тк один из item-ов был изменен
         :return: обновленный словарь значений параметров
         """
         # копирования словаря на случай, если будет введено неверное значение
@@ -717,7 +720,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def combobox_actions(self):
         """
         Добавление сигналов на изменение QComboBox параметров расчета
-        :return:
         """
         list_combobox_items = ['Критерий охвата траектории ГС', 'Учет Q ср. по объекту', 'Учет границ исслед. ННС/ГС',
                                'Учет % от каждого фонда', 'Сценарий расчета', 'Распред-ие ГДИС скв. по годам']
@@ -746,6 +748,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.combobox_horizon.currentTextChanged.connect(self.update_result_table_picture)
 
     def closeEvent(self, event):
+        """
+        Корректное завершение работы при закрытии главного окна приложения
+        :param event: событие из главного окна
+        """
         if self.log_window is not None:
             self.log_window.close()
         event.accept()

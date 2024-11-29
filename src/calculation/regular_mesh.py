@@ -28,6 +28,7 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     :param obj_square: площадь текущего объекта расчета по крайним скважинам
     :param mean_rad: средний радиус исследования по текущему объекта
     :param coeff: коэффициент кратного увеличения радиуса исследования
+    :param log_user: сигнал, передающий сообщения для пользователя в окно логирования приложения
     :return: результирующий DataFrame с опорными скважинами
     """
     # удаление исключенных скважин из DataFrame пьезометров, нагнетательных и добывающих
@@ -54,8 +55,8 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     list_polygons = []
     df_current_result = pd.DataFrame()
     # проходимся по каждому фонду (добывающий, нагнетательный, пьезометрический)
-    for fond in tqdm(dict_parameters['list_order_fond'].strip().upper().split(","), "Regular mesh for fond", position=0, leave=True,
-                     colour='white', ncols=80, disable=True):
+    for fond in tqdm(dict_parameters['list_order_fond'].replace(" ", "").upper().split(","), "Regular mesh for fond",
+                     position=0, leave=True, colour='white', ncols=80, disable=True):
         # выделение DataFrame на фонд (добывающий, нагнетательный, пьезометрический) и процента скважин в ОС от фонда
         if fond == "ДОБ":
             log_user.emit("Построение регулярной сетки по добывающему фонду")

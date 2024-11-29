@@ -171,6 +171,7 @@ def get_time_coef(dict_property, objects, Wc, oilfield, gas_status):
 @logger.catch(level='DEBUG')
 def dict_keys(list_r, contour_name):
     """
+    Создание словаря для записи сценариев расчета. Ключи словаря - связка (название контура + коэффициент увеличения R)
     :param list_r: список коэффициентов для умножения радиуса
     :param contour_name: имя контура
     :return: словарь с ключами из коэффициентов и имени текущего контура
@@ -185,7 +186,7 @@ def upload_parameters(path):
     """
     Функция загрузки заданных пользователем параметров
     :param path: путь к файлу с параметрами расчета
-    :return: возваращает словарь с параметрами расчета
+    :return: возвращает словарь с параметрами расчета
     """
     with open(path, encoding='UTF-8') as f:
         dict_parameters = yaml.safe_load(f)
@@ -240,7 +241,6 @@ def get_path():
     :return: Функция возвращает путь, по которому находится exe файл
     """
     if getattr(sys, 'frozen', False):
-        # application_path = getattr(sys, '_MEIPASS', None)
         application_path = os.path.dirname(sys.executable)
         return application_path
     elif __file__:

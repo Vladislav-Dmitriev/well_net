@@ -33,7 +33,7 @@ class CalculationThread(QtCore.QThread):
 
     @logger.catch(level='DEBUG')
     def initialize_logging(self):
-        """Инициализация логов в файл."""
+        """Инициализация логов в файл"""
         delete_logfiles(os.path.join(get_path(), "output"))
         log_handler = logger.add(
             os.path.join(get_path(), "output", "logfile.log"),
@@ -46,7 +46,7 @@ class CalculationThread(QtCore.QThread):
 
     @logger.catch(level='DEBUG')
     def run(self):
-        """Основной метод, выполняющий расчет в потоке."""
+        """Основной метод, выполняющий расчет в потоке"""
         self.log_handler = self.initialize_logging()
 
         df_input, df_exceptions, list_exception, path_property = self.load_and_prepare_data()
@@ -71,7 +71,11 @@ class CalculationThread(QtCore.QThread):
 
     @logger.catch(level='DEBUG')
     def load_and_prepare_data(self):
-        """Загружает и подготавливает данные для расчета."""
+        """
+        Загружает и подготавливает данные для расчета
+        :return: подготовленный DataFrame данных по скважинам, DataFrame исключенных скважин,
+                 список исключаемых скважин, путь к .json файлу с PVT свойствами по всем месторождениям
+        """
         self.log_signal.emit("-----------Чтение и подготовка данных-----------")
         df_input, df_exceptions, list_exception = upload_input_data(dict_constant, self.dict_parameters,
                                                                     self.log_signal, self.progress_signal)
@@ -84,7 +88,13 @@ class CalculationThread(QtCore.QThread):
 
     @logger.catch(level='DEBUG')
     def process_contours(self, df_input, path_property, list_exception):
-        """Обрабатывает контуры и выполняет расчеты."""
+        """
+        Обрабатывает контуры и выполняет расчеты
+        :param df_input: DataFrame входных данных
+        :param path_property: путь к .json файлу с PVT свойствами по всем месторождениям
+        :param list_exception: список исключаемых из расчета скважин
+        :return: возвращает словарь с результатами расчета по контурам и список скважин вне контуров
+        """
         self.log_signal.emit("-----------Расчет опорной сетки по контурам-----------")
         dict_contours = get_contours(f'{get_path()}/input/', self.log_signal, self.progress_signal)
 
@@ -125,7 +135,10 @@ class CalculationThread(QtCore.QThread):
 
     @logger.catch(level='DEBUG')
     def process_wells_out_of_contours(self, df_input, well_out_contour, path_property, list_exception):
-        """Выполняет расчет для скважин вне контуров."""
+        """
+        Выполняет расчет для скважин вне контуров
+        :return: возвращает словарь с результатами расчета вне контуров
+        """
         self.log_signal.emit("-----------Расчет опорной сетки вне контуров-----------")
         df_out_contour = df_input[df_input.wellName.isin(well_out_contour)]
         if df_out_contour[df_out_contour['fond'] != 'ПРОЕКТ'].empty:
@@ -135,12 +148,17 @@ class CalculationThread(QtCore.QThread):
                            self.dict_parameters, self.log_signal, self.progress_signal)
 
     def save_results_to_database(self, dict_result, df_exceptions):
-        """Сохраняет результаты расчета в базу данных."""
+        """
+        Сохраняет результаты расчета в базу данных
+        :param dict_result: словарь с результатами расчета
+        :param df_exceptions: DataFrame исключенных из расчета скважин
+        """
         self.log_signal.emit("-----------Сохранение результатов расчета-----------")
         results_to_db(dict_result, df_exceptions, self.dict_parameters, self.list_name_params, self.path_database,
                       self.progress_signal)
         self.log_signal.emit("Результаты сохранены в базу данных")
 
     def stop(self):
+        """Функция остановки процесса расчета"""
         self._is_stopped = True
         logger.remove(self.log_handler)
