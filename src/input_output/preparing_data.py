@@ -956,32 +956,33 @@ def preparing_reservoir_properties(dict_parameters, path, log_user, progress_bar
 @logger.catch(level='DEBUG')
 def get_exception_wells(dict_parameters, sheet, log_user):
     """
-    Загрузка скважин для исключения из расчета или скважин обязательных для включения в ОС в зависимости от имени листа
+    Загрузка скважин, обязательных для включения в ОС в зависимости от имени листа
     в Excel
 
     :param sheet: имя листа в исходном файле Excel
     :param dict_parameters: словарь с параметрами расчета
     :param log_user: сигнал для передачи сообщения пользователю в окно логирования
-    :return: возвращает список скважин для исключения
+    :return: возвращает список обязательных для включения в ОС скважин
     """
     application_path = get_path()
     try:
         logger.info(f"Trying read sheet '{sheet}'")
         log_user.emit(f"Чтение листа '{sheet}'")
-        df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+        df_necessarily = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
                                      header=None,
                                      sheet_name=sheet)
-        if df_exception.empty:
+        if df_necessarily.empty:
             logger.info(f"Empty sheet '{sheet}'")
             log_user.emit(f"Нет данных на листе '{sheet}'")
             return []
     except ValueError:
         logger.info(f"Sheet '{sheet}' not found in data file")
+        log_user.emit(f"Лист '{sheet}' не найден")
         return []
 
-    df_exception[0] = df_exception[0].astype(str)
+    df_necessarily[0] = df_necessarily[0].astype(str)
     # list unique well names for exception
-    list_exception = list(df_exception[0].explode().unique())
+    list_exception = list(df_necessarily[0].explode().unique())
 
     return list_exception
 

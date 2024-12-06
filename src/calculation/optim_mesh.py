@@ -1,10 +1,11 @@
 import geopandas as gpd
 import pandas as pd
 from loguru import logger
-from shapely.ops import unary_union, cascaded_union
+from shapely.ops import unary_union
 from tqdm import tqdm
 from .support_functions import get_time_coef, get_property
 from .shapely_geometry import intersect_number, check_intersection_area, add_shapely_types
+import shapely as spl
 
 
 @logger.catch(level='DEBUG')
@@ -499,6 +500,17 @@ def optimization(df_prod, df_inj_piez):
         #  создаем сет уникальных значений столбца с пересечениями и сортируем dataframe по кол-ву пересечений
         set_visible_wells = set(df_optim['intersection'].explode().unique())
         df_optim = df_optim.sort_values(by=['number'], ascending=True)
+
+        # алгоритм фильтрации пьезометров/нагнеталок с одинаковым набором пересечений
+        # из группы с одинаковым набором пересеч. остается скв. с min средним расстоянием до всех охваченных добывающих
+        df_optim["intersection_group"] = df_optim["intersection"].map(lambda x: ", ".join(x))
+
+        df_optim["mean_distance"] = df_optim.apply(lambda x: calculate_average_distances(x["GEOMETRY"], x["intersection"], df_prod),
+                                  axis=1)
+        df_optim = df_optim.groupby("intersection_group", group_keys=False).apply(
+            lambda group: group[group["mean_distance"] == group["mean_distance"].min()])
+        df_optim.drop(["intersection_group", "mean_distance"], axis=1, inplace=True)
+
         # на каждой итерации создается сет охваченных скважин без текущей строки, если он совпадает полным сетом,
         # то текущая скважина удаляется, тк охваченные ею скважины есть в пересечениях других
         for well in df_optim.wellName.values:
@@ -510,3 +522,14 @@ def optimization(df_prod, df_inj_piez):
         list_inj_piez_wells += list(df_optim.wellName.values)
 
     return list_inj_piez_wells
+
+
+def calculate_average_distances(geometry, intersections, prod_df):
+    """Функция для расчёта средних расстояний."""
+
+    # Найти геометрии в df_prod
+    geoms = prod_df[prod_df['wellName'].isin(intersections)]['GEOMETRY']
+
+    # Вычислить расстояния
+    distances = [geometry.distance(g) for g in geoms]
+    return sum(distances) / len(distances) if distances else None

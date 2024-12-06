@@ -1,4 +1,6 @@
 import json
+import os.path
+
 import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -7,6 +9,12 @@ from loguru import logger
 from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
 from matplotlib.widgets import CheckButtons
+from src.calculation.support_functions import get_path
+
+import xml.etree.ElementTree as ET
+from svgpath2mpl import parse_path
+from matplotlib.path import Path
+from matplotlib.transforms import Affine2D
 
 
 @logger.catch(level='DEBUG')
@@ -52,6 +60,47 @@ def get_geometry_color(status):
     font_color = dict_status[status][2]
 
     return geometry_color, marker, font_color
+
+
+def extract_path_data(file_path):
+    # Парсинг SVG
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    # Приведение пространства имен в соответствие
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    # Извлечение первого <path> элемента
+    path_element = root.find(".//svg:path", namespace)
+    if path_element is not None:
+        return path_element.get("d")
+    else:
+        raise ValueError("No <path> element found in the SVG file.")
+
+
+# Шаг 2: Создание маркера из атрибута 'd'
+def create_custom_marker(path_data):
+    # Парсим путь из данных
+    path = parse_path(path_data)
+    bbox = path.get_extents()
+
+    # Вычисляем центр пути как среднее значение координат вершин
+    vertices = path.vertices
+    center_x, center_y = vertices.mean(axis=0)
+
+    # Центрируем путь относительно его геометрического центра
+    transform = (
+        Affine2D()
+        .translate(-center_x, -center_y)  # Сдвигаем в центр
+        # .scale(100 / max(bbox.width, bbox.height))  # Масштабируем
+        .scale(1, -1)  # зеркальное отображение
+        # .scale(-1, 1)  # отражение вдоль горизотальной оси
+        # .scale(1, 1)
+    )
+
+    # Применяем трансформацию
+    transformed_path = path.transformed(transform)
+    return transformed_path
 
 
 @logger.catch(level='DEBUG')
@@ -113,6 +162,8 @@ def plot_results(df_result, script):
         'polygon': 'polygon'
     }
 
+    list_markers = [f for f in os.listdir(os.path.join(get_path(), 'markers')) if f.endswith('.svg')]
+
     dict_rename = {v: k for k, v in dict_rename.items()}
     df_result.columns = dict_rename.values()
     df_result['AREA'] = df_result['AREA'].apply(lambda x: spl.geometry.shape(json.loads(x)) if x != 0 else x)
@@ -158,6 +209,11 @@ def plot_results(df_result, script):
         geometry_color, marker, font_color = get_geometry_color(row['status'])
         geometry = gpd.GeoSeries(row['GEOMETRY'])
         line, = ax.plot(*geometry.loc[0].xy, color=geometry_color)
+
+        # path_data = extract_path_data(os.path.join(get_path(), "markers", "106.svg"))
+        # custom_marker = create_custom_marker(path_data)
+        # marker = Path(custom_marker.vertices, custom_marker.codes)
+
         point = ax.scatter(row['coordinateX'], row['coordinateY'], color=geometry_color, marker=marker, label='All')
         annotate = ax.annotate(row['wellName'], xy=(row['coordinateX'], row['coordinateY']), xytext=(3, 3),
                                textcoords="offset points", fontsize=6, color=font_color)

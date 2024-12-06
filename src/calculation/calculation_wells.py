@@ -21,8 +21,8 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     :param path_property: путь к справочнику с PVT свойствами
     :param list_exception: список исключаемых скважин
     :param dict_parameters: словарь с параметрами расчета
-    :param log_user:
-    :param progress_bar:
+    :param log_user: сигнал, передающий сообщения для пользователя в окно логирования приложения
+    :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
     :return: словарь с результирующим DataFrame по каждому ключу
     """
 
