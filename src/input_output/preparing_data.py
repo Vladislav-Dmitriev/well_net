@@ -12,7 +12,7 @@ from shapely.geometry import Point, LineString
 
 from src.calculation.support_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
 from src.calculation.shapely_geometry import check_intersection_area
-from .dictionaries import dict_geobd_columns, dict_names_column, dict_project_columns
+from .dictionaries import dict_geobd_columns, dict_ngt_column, dict_project_columns, dict_ngt_encoding
 
 
 @logger.catch
@@ -34,9 +34,9 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
     df_project = preparing_project_wells(dict_parameters, log_user, progress_bar)
 
     # Upload exception list wells
-    log_user.emit("Получение списка исключенных скважин")
+    log_user.emit("Считывание листа исключенных скважин")
     progress_bar.emit(0)
-    list_exception = get_exception_wells(dict_parameters, 'Исключения', log_user)
+    df_excluded_wells = get_exception_wells(dict_parameters, 'Исключения', log_user)
     progress_bar.emit(100)
 
     # Get path to application folder
@@ -102,9 +102,9 @@ def upload_input_data(dict_constant, dict_parameters, log_user, progress_bar):
         log_user.emit("Неверный формат файла загрузки")
         sys.exit()
     # Upload necessarily research wells
-    list_necessarily = get_exception_wells(dict_parameters, 'Приоритетные скважины', log_user)
-    df_input.loc[df_input['wellName'].isin(list_necessarily), 'num_of_research'] = True
-    return df_input, df_exceptions, list_exception
+    list_necessarily = get_necessarily_wells(dict_parameters, 'Приоритетные скважины', log_user)
+    df_input.loc[df_input['wellName'].str.split("_").str[0].isin(list_necessarily), 'num_of_research'] = True
+    return df_input, df_exceptions, df_excluded_wells
 
 
 @logger.catch(level='DEBUG')
@@ -147,13 +147,10 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_ba
     #  reset indexes in DataFrames
     df_input = df_input.reset_index(drop=True)
 
-    # delete from SIMVOL column 117, 118 (wells transferred to another horizon)
-    df_input = df_input[(df_input['SIMVOL'] != '117') & (df_input['SIMVOL'] != '118')]
-    df_exceptions = df_exceptions[(df_exceptions['SIMVOL'] != '117') & (df_exceptions['SIMVOL'] != '118')]
-
     # create list of required columns
-    required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'PEREV', 'KUST', 'X', 'X3',
-                     'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
+    required_cols = ['NSKV', 'UWI', 'STATUS_DATE', 'FOND', 'SOST', 'MEST',
+                     'PLAST', 'PEREV', 'KUST', 'SIMVOL', 'X', 'X3', 'Y', 'Y3',
+                     'DEBOIL', 'DEBLIQ', 'PRIEM', 'VPROCOBV', 'SPOSOB', 'DEBGAS', 'PRIEMGAS', 'DEBCOND']
     progress_bar.emit(25)
     # add columns with oilfield name and coordinates T3 point
     df_input = add_t3_coord_geobd(df_input, required_cols)
@@ -164,7 +161,7 @@ def preprocessing_GeoBD(df_input, dict_constant, dict_geobd_columns, progress_ba
 
     df_input.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
     df_exceptions.drop(columns=['UWI', 'PEREV'], axis=1, inplace=True)
-    correct_order = ['NSKV', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'KUST', 'X', 'X3',
+    correct_order = ['NSKV', 'STATUS_DATE', 'FOND', 'SOST', 'MEST', 'PLAST', 'KUST', 'SIMVOL', 'X', 'X3',
                      'Y', 'Y3', 'DEBOIL', 'DEBLIQ', 'DEBGAS', 'PRIEM', 'PRIEMGAS', 'VPROCOBV', 'SPOSOB', 'DEBCOND',
                      'well type']
 
@@ -192,30 +189,46 @@ def add_t3_coord_geobd(df, list_columns):
     df['Y3'] = 0
     df = df[list_columns]
     list_well_names = list(df['UWI'].explode().unique())  # list of unique well names
-    df = df.sort_values(by=['NSKV'], ascending=True)
-    df.reset_index(drop=True)
+    df = df.sort_values(by=['NSKV'], ascending=True).reset_index(drop=True)
+    df[["NSKV"]] = df[["NSKV"]].astype(str)
     df['well type'] = ''
     # iterate by well names
     for well in list_well_names:
         objs = list(
             df[df['UWI'] == well].PLAST.explode().unique())  # list of unique work objects current well
-        if len(set(df[df['UWI'] == well].NSKV)) > 1:  # if in column of well names there are more than 1
-            # name but they have same geobd encoding then well is horizontal
-            df.loc[df['UWI'] == well, 'well type'] = 'horizontal'
-            # value of watercut is taken from the first wellbore
-            df.loc[df['UWI'] == well, 'VPROCOBV'] = \
-                list(df.loc[df['UWI'] == well, 'VPROCOBV'].explode())[0]
-            # T1 coordinates for horizontal well are taken from first wellbore, T3 from last wellbore
-            coord_x = list(df[df['UWI'] == well].X.explode().unique())
-            coord_y = list(df[df['UWI'] == well].Y.explode().unique())
-            df.loc[df['UWI'] == well, 'X'] = coord_x[0]
-            df.loc[df['UWI'] == well, 'X3'] = coord_x[-1]
-            df.loc[df['UWI'] == well, 'Y'] = coord_y[0]
-            df.loc[df['UWI'] == well, 'Y3'] = coord_y[-1]
+        if len(objs) > 1:
+            for ob in objs:
+                df.loc[(df['UWI'] == well) & (df["PLAST"] == ob), 'VPROCOBV'] = \
+                    list(df.loc[df['UWI'] == well, 'VPROCOBV'].explode())[0]
+                # T1 coordinates for horizontal well are taken from first wellbore, T3 from last wellbore
+                coord_x = list(df[(df['UWI'] == well) & (df["PLAST"] == ob)].X.explode().unique())
+                coord_y = list(df[(df['UWI'] == well) & (df["PLAST"] == ob)].Y.explode().unique())
+                df.loc[(df['UWI'] == well) & (df["PLAST"] == ob), 'X'] = coord_x[0]
+                df.loc[(df['UWI'] == well) & (df["PLAST"] == ob), 'X3'] = coord_x[-1]
+                df.loc[(df['UWI'] == well) & (df["PLAST"] == ob), 'Y'] = coord_y[0]
+                df.loc[(df['UWI'] == well) & (df["PLAST"] == ob), 'Y3'] = coord_y[-1]
+                # if mask dataframe by uniq UWI and object get more than 1 rows well type will be horizontalKa
+                if df[(df["UWI"] == well) & (df["PLAST"] == ob)].shape[0] > 1:
+                    # name but they have same geobd encoding then well is horizontal
+                    df.loc[(df["UWI"] == well) & (df["PLAST"] == ob), "well type"] = "horizontal"
+                else:
+                    # in other variants wells will be determined as vertical
+                    df.loc[(df["UWI"] == well) & (df["PLAST"] == ob), 'well type'] = 'vertical'
+
+                df.loc[(df["UWI"] == well) & (df["PLAST"] == ob), "UWI"] = df.loc[(df["UWI"] == well) & (
+                            df["PLAST"] == ob), "UWI"] + f"_БС{objs.index(ob) + 1}"
+                df.loc[(df["UWI"] == well + f"_БС{objs.index(ob) + 1}") & (df["PLAST"] == ob), "NSKV"] = df.loc[
+                    (df["UWI"] == well + f"_БС{objs.index(ob) + 1}") & (df["PLAST"] == ob), "NSKV"].copy().apply(
+                    lambda x: x + f"_БС{objs.index(ob) + 1}")
 
         else:
-            # in other variants wells will be determined as vertical
-            df.loc[df['UWI'] == well, 'well type'] = 'vertical'
+            # if mask dataframe by uniq UWI and object get more than 1 rows well type will be horizontalKa
+            if df[df["UWI"] == well].shape[0] > 1:
+                # name but they have same geobd encoding then well is horizontal
+                df.loc[df["UWI"] == well, "well type"] = "horizontal"
+            else:
+                # in other variants wells will be determined as vertical
+                df.loc[df["UWI"] == well, 'well type'] = 'vertical'
             # value of watercut is taken from the first wellbore
             df.loc[df['UWI'] == well, 'VPROCOBV'] = \
                 list(df.loc[df['UWI'] == well, 'VPROCOBV'].explode())[0]
@@ -227,11 +240,17 @@ def add_t3_coord_geobd(df, list_columns):
             df.loc[df['UWI'] == well, 'Y'] = coord_y[0]
             df.loc[df['UWI'] == well, 'Y3'] = coord_y[0]
         # writing wells object to columns PLAST separated by commas
-        df.loc[df['UWI'] == well, 'PLAST'] = df.apply(lambda x: ', '.join(objs), axis=1)
+        df.loc[df['UWI'] == well, 'PLAST'] = df[df['UWI'] == well].apply(lambda x: ', '.join(objs), axis=1)
     # leave only unique wells by geobd encoding column
-    df = df.drop_duplicates(subset=['UWI'])
-    df = df.reset_index(drop=True)
-
+    df = df.drop_duplicates(subset=['UWI'], keep="first")
+    # find duplicates in NSKV column
+    duplicates_mask = df["NSKV"].duplicated(keep=False)
+    # add numbering only for duplicates
+    if duplicates_mask.sum() > 0:  # check num of duplicates
+        df.loc[duplicates_mask, "NSKV"] = (
+            df[duplicates_mask].groupby("NSKV").cumcount().add(1).astype(str).radd(
+                df.loc[duplicates_mask, "NSKV"] + "_")
+        )
     return df
 
 
@@ -307,6 +326,9 @@ def preparing_project_wells(dict_parameters, log_user, progress_bar):
     df_project.drop(columns=['UWI'], axis=1, inplace=True)
     df_project = df_project[['NSKV', 'X', 'X3', 'Y', 'Y3', 'PLAST', 'well type']]
     df_project.columns = dict_project_columns.values()
+
+    # add well number markers
+    df_project["marker_num"] = "33"
 
     # add to input dataframe columns for shapely types of coordinates
     df_project.insert(loc=df_project.shape[1], column="POINT",
@@ -452,6 +474,7 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_
                                                       list(map(lambda x, y: LineString(
                                                           tuple(x.coords) + tuple(y.coords)),
                                                                df_input.POINT, df_input.POINT3)))
+    df_input["GEOMETRY"] = df_input.apply(lambda x: x["POINT"] if x["GEOMETRY"].length == 0 else x["GEOMETRY"], axis=1)
 
     # add to exceptions dataframe columns for shapely types of coordinates
     df_exceptions["POINT"] = df_exceptions.apply(lambda x: Point(x['coordinateX'], x['coordinateY']), axis=1)
@@ -463,6 +486,8 @@ def preparing(dict_constant, df_input, df_exceptions, dict_parameters, progress_
                                                                 list(map(lambda x, y: LineString(
                                                                     tuple(x.coords) + tuple(y.coords)),
                                                                          df_exceptions.POINT, df_exceptions.POINT3)))
+    df_exceptions["GEOMETRY"] = df_exceptions.apply(
+        lambda x: x["POINT"] if x["GEOMETRY"].length == 0 else x["GEOMETRY"], axis=1)
     progress_bar.emit(100)
 
     return df_input, df_exceptions
@@ -481,14 +506,29 @@ def preprocessing_NGT(df_input, min_length_horWell, progress_bar):
 
     progress_bar.emit(0)
     # rename columns
-    df_input.columns = dict_names_column.values()
+    df_input.columns = dict_ngt_column.values()
     df_input = df_input.fillna(0)  # fill NaN cells
     progress_bar.emit(25)
+    # add encoding for well signs
+    df_input["marker_num"] = 34
+    df_input["exploitation"] = df_input["exploitation"].astype(str)
+    for _, row in df_input.iterrows():
+        work = str(row["workMarker"]).lower()
+        status = str(row["wellStatus"]).lower()
+        exploitation = row["exploitation"].lower()
+        try:
+            if (work == "неф") or (work == "переведена на другой объект"):
+                df_input.loc[df_input["wellName"] == row["wellName"], "marker_num"] = str(dict_ngt_encoding[work][status][exploitation])
+            else:
+                df_input.loc[df_input["wellName"] == row["wellName"], "marker_num"] = str(dict_ngt_encoding[work][status])
+        except KeyError:
+            pass
     # create exceptions DataFrame
-    df_exceptions = df_input[(df_input['workHorizon'] == 0) | (df_input['wellCluster'] == 0)]
+    df_exceptions = df_input[
+        (df_input['workHorizon'] == 0) | (df_input['wellCluster'] == 0) | (df_input['wellStatus'] == 0)]
     df_exceptions['wellNet'] = 'Исключена из расчета, куст/пласт/состояние'
     # cleaning null values
-    df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0)]
+    df_input = df_input[(df_input['workHorizon'] != 0) & (df_input['wellCluster'] != 0) & (df_input['wellStatus'] != 0)]
     # transfer to string type columns of calculation DataFrame
     df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']] = (
         df_input[['wellName', 'workHorizon', 'nameDate', 'wellCluster']].astype('str'))
@@ -561,34 +601,6 @@ def geobd_gdis_data(df_input, df_exceptions, dict_parameters, log_user, progress
 
     progress_bar.emit(0)
     logger.info('Upload GeoBD GDIS table')
-    # open Excel file with data and choose sheet with required name
-    app1 = xw.App(visible=False)
-    app1.display_alerts = False  # отключение запросов и оповещений через всплывающие окна
-    try:
-        wb = app1.books.open(os.path.join(get_path(), "input", dict_parameters['data_file']))
-        # Получаем все именованные диапазоны
-        names = wb.names
-        existing_names = {}
-
-        for name in names:
-            original_name = name.name  # получение всех фильтров в файле
-            if original_name in existing_names:
-                # Если имя уже существует, добавляем суффикс и переименовываем
-                new_name = f"{original_name}_new"
-                name.name = new_name
-            else:
-                existing_names[original_name] = name
-
-        # Сохраняем изменения
-        wb.save()
-        wb.close()
-
-    except Exception as e:
-        logger.info(f'Rename excel filters error: {e}')
-
-    # завершение процесса подключения к документу excel
-    app1.kill()
-
     log_user.emit("Открытие листа с данными по исследованиям")
 
     app1 = xw.App(visible=False)
@@ -905,6 +917,7 @@ def preparing_reservoir_properties(dict_parameters, path, log_user, progress_bar
         df_property[i] = list(map(lambda x: str(x).strip(), df_property[i]))
         if i != 'oilfield' and i != 'reservoir':
             df_property[i] = list(map(lambda x: float(str(x).replace(',', '.')), df_property[i]))
+    df_property['oilfield'] = df_property['oilfield'].map(str.upper)
     # group dataframe by oilfield and reservoir columns and calculate mean properties
     df_property = df_property.groupby(by=['oilfield', 'reservoir'], as_index=False).mean()
     df_property['horizon'] = list(map(lambda x, y: f'{x}__{y}', df_property.oilfield, df_property.reservoir))
@@ -956,8 +969,51 @@ def preparing_reservoir_properties(dict_parameters, path, log_user, progress_bar
 @logger.catch(level='DEBUG')
 def get_exception_wells(dict_parameters, sheet, log_user):
     """
-    Загрузка скважин, обязательных для включения в ОС в зависимости от имени листа
-    в Excel
+    Загрузка скважин, которые необходимо исключить из ОС
+
+    :param sheet: имя листа в исходном файле Excel
+    :param dict_parameters: словарь с параметрами расчета
+    :param log_user: сигнал для передачи сообщения пользователю в окно логирования
+    :return: возвращает список обязательных для включения в ОС скважин
+    """
+    application_path = get_path()
+
+    try:
+        # read first row of file
+        first_row = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']), header=None,
+                                  sheet_name='Исключения', nrows=1)
+        if first_row.loc[0][0] == "NSKV":
+            df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                         header=0,
+                                         sheet_name=sheet)
+        else:
+            df_exception = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
+                                         header=None,
+                                         sheet_name=sheet)
+        df_exception.columns = ["wellName", "workHorizon"]
+
+        if df_exception.empty:
+            return pd.DataFrame(columns=["wellName", "workHorizon"])
+        df_exception[["wellName", "workHorizon"]] = df_exception[["wellName", "workHorizon"]].astype(str)
+        df_exception["wellName"] = df_exception["wellName"].apply(lambda x: x.replace("_T3", ""))
+        list_uniq_wells = list(df_exception["wellName"].explode().unique())
+        for well in list_uniq_wells:
+            objects = list(df_exception[df_exception["wellName"] == well]["workHorizon"].explode().unique())
+            df_exception.loc[df_exception["wellName"] == well, "workHorizon"] = ", ".join(objects)
+        df_exception = df_exception.drop_duplicates(subset=["wellName"]).reset_index(drop=True)
+    except Exception as e:
+        logger.info(f"Sheet '{sheet}' not found in data file")
+        logger.info(f"Error reading exception sheet: {e}")
+        log_user.emit(f"Лист '{sheet}' не найден")
+        return pd.DataFrame(columns=["wellName", "workHorizon"])
+
+    return df_exception
+
+
+@logger.catch(level='DEBUG')
+def get_necessarily_wells(dict_parameters, sheet, log_user):
+    """
+    Загрузка скважин, обязательных для включения в ОС
 
     :param sheet: имя листа в исходном файле Excel
     :param dict_parameters: словарь с параметрами расчета
@@ -969,8 +1025,8 @@ def get_exception_wells(dict_parameters, sheet, log_user):
         logger.info(f"Trying read sheet '{sheet}'")
         log_user.emit(f"Чтение листа '{sheet}'")
         df_necessarily = pd.read_excel(os.path.join(application_path, "input", dict_parameters['data_file']),
-                                     header=None,
-                                     sheet_name=sheet)
+                                       header=None,
+                                       sheet_name=sheet)
         if df_necessarily.empty:
             logger.info(f"Empty sheet '{sheet}'")
             log_user.emit(f"Нет данных на листе '{sheet}'")

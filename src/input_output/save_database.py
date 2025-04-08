@@ -6,10 +6,11 @@ import shapely as spl
 from loguru import logger
 from tqdm import tqdm
 from src.calculation.shapely_geometry import check_intersection_area
+from .validation_dict_params import ValidateToBD
 
 
 @logger.catch(level='DEBUG')
-def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database, progress_bar):
+def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params, path_database, progress_bar, log_signal):
     """
     Запись результатов в базу данных
 
@@ -19,6 +20,7 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
     :param list_name_params: list - список имен параметров расчета
     :param path_database: str - путь к файлу базы данных для сохранения результатов
     :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
+    :param log_signal: сигнал передачи сообщения в окно логирования этапов расчета
     """
     dict_rename = get_column_mappings()
 
@@ -28,6 +30,11 @@ def results_to_db(dict_result, df_exceptions, dict_parameters, list_name_params,
     # Запись данных по контурам
     for i, (contour_name, data) in enumerate(tqdm(dict_result.items(), "Запись сетки в базу данных", position=0,
                                                   leave=True, colour='white', ncols=80, disable=True)):
+        if data[0].empty:
+            progress_bar.emit(int((i + 1) / total_count_tables * 100))
+            logger.info(f"No result by contour: {contour_name}")
+            log_signal.emit(f"Отсутствуют скважины опорной сетки для контура: {contour_name}")
+            continue
         write_contour_data(contour_name, data, df_exceptions, dict_parameters, db_result, dict_rename)
         progress_bar.emit(int((i + 1) / total_count_tables * 100))
 
@@ -53,6 +60,7 @@ def get_column_mappings():
         'oilfield': 'Месторождение',
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
+        'marker_num': 'Кодировка',
         'coordinateX': 'Координата X',
         'coordinateX3': 'Координата забоя Х (по траектории)',
         'coordinateY': 'Координата Y',
@@ -217,6 +225,7 @@ def save_report_to_db(db_result, dict_result, dict_parameters, list_name_params)
 
     # Параметры расчета
     logger.info('Запись параметров расчета в базу данных')
+    dict_parameters = ValidateToBD(**dict_parameters).dict()
     df_params = pd.DataFrame([{new_key: ', '.join(map(str, dict_parameters[old_key]))
     if isinstance(dict_parameters[old_key], list) else str(dict_parameters[old_key])
                                for new_key, old_key in zip(list_name_params, dict_parameters.keys())}])

@@ -41,7 +41,7 @@ def check_intersection_area(area, df_points, percent, calc_option):
         '''Столбец GEOMETRY позволит включать скважины в зону охвата,
         если скважина попадает в нее на определенное кол-во процентов'''
         df_points = gpd.GeoDataFrame(df_points, geometry="GEOMETRY")
-        df_points = df_points[(df_points["GEOMETRY"].intersects(area))]
+        df_points = df_points[df_points["GEOMETRY"].intersects(area)]
         df_points['part_in'] = list(map(lambda x: area.intersection(x).length / x.length if x.length != 0 else 1,
                                         df_points["GEOMETRY"]))
         df_points = df_points[df_points['part_in'] >= percent / 100]

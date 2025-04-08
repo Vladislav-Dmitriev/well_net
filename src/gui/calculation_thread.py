@@ -49,14 +49,14 @@ class CalculationThread(QtCore.QThread):
         """Основной метод, выполняющий расчет в потоке"""
         self.log_handler = self.initialize_logging()
 
-        df_input, df_exceptions, list_exception, path_property = self.load_and_prepare_data()
+        df_input, df_exceptions, df_excluded_wells, path_property = self.load_and_prepare_data()
 
         # Process contours and wells inside contours
-        dict_result, well_out_contour = self.process_contours(df_input, path_property, list_exception)
+        dict_result, well_out_contour = self.process_contours(df_input, path_property, df_excluded_wells)
 
         # Calculate wells outside contours
         dict_result.update(
-            self.process_wells_out_of_contours(df_input, well_out_contour, path_property, list_exception))
+            self.process_wells_out_of_contours(df_input, well_out_contour, path_property, df_excluded_wells))
 
         # Delete .json file with PVT properties from PVT sheet in Excel data file
         if os.path.isfile(path_property):
@@ -77,22 +77,22 @@ class CalculationThread(QtCore.QThread):
                  список исключаемых скважин, путь к .json файлу с PVT свойствами по всем месторождениям
         """
         self.log_signal.emit("-----------Чтение и подготовка данных-----------")
-        df_input, df_exceptions, list_exception = upload_input_data(dict_constant, self.dict_parameters,
-                                                                    self.log_signal, self.progress_signal)
+        df_input, df_exceptions, df_excluded_wells = upload_input_data(dict_constant, self.dict_parameters,
+                                                                       self.log_signal, self.progress_signal)
         application_path = get_path()
         path_property = f'{application_path}/input/reservoir_properties.json'
 
         self.log_signal.emit("Загрузка PVT-свойств из справочника")
         preparing_reservoir_properties(self.dict_parameters, path_property, self.log_signal, self.progress_signal)
-        return df_input, df_exceptions, list_exception, path_property
+        return df_input, df_exceptions, df_excluded_wells, path_property
 
     @logger.catch(level='DEBUG')
-    def process_contours(self, df_input, path_property, list_exception):
+    def process_contours(self, df_input, path_property, df_excluded_wells):
         """
         Обрабатывает контуры и выполняет расчеты
         :param df_input: DataFrame входных данных
         :param path_property: путь к .json файлу с PVT свойствами по всем месторождениям
-        :param list_exception: список исключаемых из расчета скважин
+        :param df_excluded_wells: список исключаемых из расчета скважин
         :return: возвращает словарь с результатами расчета по контурам и список скважин вне контуров
         """
         self.log_signal.emit("-----------Расчет опорной сетки по контурам-----------")
@@ -128,13 +128,14 @@ class CalculationThread(QtCore.QThread):
                 continue
 
             dict_result.update(calculation(contour, df_in_contour, contour_name, path_property,
-                                           list_exception, self.dict_parameters, self.log_signal, self.progress_signal))
+                                           df_excluded_wells, self.dict_parameters, self.log_signal,
+                                           self.progress_signal))
             well_out_contour -= wells_in_contour
 
         return dict_result, well_out_contour
 
     @logger.catch(level='DEBUG')
-    def process_wells_out_of_contours(self, df_input, well_out_contour, path_property, list_exception):
+    def process_wells_out_of_contours(self, df_input, well_out_contour, path_property, df_excluded_wells):
         """
         Выполняет расчет для скважин вне контуров
         :return: возвращает словарь с результатами расчета вне контуров
@@ -144,7 +145,7 @@ class CalculationThread(QtCore.QThread):
         if df_out_contour[df_out_contour['fond'] != 'ПРОЕКТ'].empty:
             return {}
 
-        return calculation(None, df_out_contour, 'Вне контуров', path_property, list_exception,
+        return calculation(None, df_out_contour, 'Вне контуров', path_property, df_excluded_wells,
                            self.dict_parameters, self.log_signal, self.progress_signal)
 
     def save_results_to_database(self, dict_result, df_exceptions):
@@ -155,7 +156,7 @@ class CalculationThread(QtCore.QThread):
         """
         self.log_signal.emit("-----------Сохранение результатов расчета-----------")
         results_to_db(dict_result, df_exceptions, self.dict_parameters, self.list_name_params, self.path_database,
-                      self.progress_signal)
+                      self.progress_signal, self.log_signal)
         self.log_signal.emit("Результаты сохранены в базу данных")
 
     def stop(self):

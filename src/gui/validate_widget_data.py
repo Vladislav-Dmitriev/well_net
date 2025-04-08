@@ -100,7 +100,7 @@ class ValidateData(BaseModel):
             logger.info("Incorrect GDIS date format")
             raise ValidationError('Enter correct format of GDIS date')
 
-    @field_validator( 'calc_option', 'mean_oilrate_option', 'limit_research_time', 'option_percent', mode='before')
+    @field_validator('calc_option', 'mean_oilrate_option', 'limit_research_time', 'option_percent', mode='before')
     def check_boolean_options(cls, value: str) -> bool:
         """
         Валидация параметров, имеющих значения да/нет, то есть boolean

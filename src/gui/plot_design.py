@@ -62,7 +62,13 @@ def get_geometry_color(status):
     return geometry_color, marker, font_color
 
 
+@logger.catch(level='DEBUG')
 def extract_path_data(file_path):
+    """
+    Извлечение координат фигуры из svg изображения
+    :param file_path: путь к файлу svg
+    :return: координаты файла svg для отрисовки фигуры, либо исключение (если координаты в svg отсутствуют)
+    """
     # Парсинг SVG
     tree = ET.parse(file_path)
     root = tree.getroot()
@@ -78,8 +84,13 @@ def extract_path_data(file_path):
         raise ValueError("No <path> element found in the SVG file.")
 
 
-# Шаг 2: Создание маркера из атрибута 'd'
+@logger.catch(level='DEBUG')
 def create_custom_marker(path_data):
+    """
+    Центрирование координат фигуры svg
+    :param path_data: данные координат path из файла svg
+    :return: центрированные координаты path svg
+    """
     # Парсим путь из данных
     path = parse_path(path_data)
     bbox = path.get_extents()
@@ -92,15 +103,26 @@ def create_custom_marker(path_data):
     transform = (
         Affine2D()
         .translate(-center_x, -center_y)  # Сдвигаем в центр
-        # .scale(100 / max(bbox.width, bbox.height))  # Масштабируем
         .scale(1, -1)  # зеркальное отображение
-        # .scale(-1, 1)  # отражение вдоль горизотальной оси
-        # .scale(1, 1)
     )
 
     # Применяем трансформацию
     transformed_path = path.transformed(transform)
     return transformed_path
+
+
+@logger.catch(level='DEBUG')
+def reverse_search_from_dictionary(dictionary, value):
+    """
+    Поиск ключа в словаре по значению, которое находится по этому ключу
+    :param dictionary: словарь dict
+    :param value: значение словаря, ключ которого необходимо найти
+    :return: найденный ключ словаря
+    """
+    keys = dictionary.keys()
+    for key in keys:
+        if value in dictionary[key]:  # no need of 'get', you're sure the key is present
+            return key
 
 
 @logger.catch(level='DEBUG')
@@ -119,6 +141,7 @@ def plot_results(df_result, script):
         'oilfield': 'Месторождение',
         'workHorizon': 'Объекты работы',
         'wellCluster': 'Куст',
+        # 'marker': 'Кодировка',
         'coordinateX': 'Координата X',
         'coordinateX3': 'Координата забоя Х (по траектории)',
         'coordinateY': 'Координата Y',
@@ -162,10 +185,75 @@ def plot_results(df_result, script):
         'polygon': 'polygon'
     }
 
-    list_markers = [f for f in os.listdir(os.path.join(get_path(), 'markers')) if f.endswith('.svg')]
+    dict_rename_plus = {
+        'wellName': '№ скважины',
+        'nameDate': 'Дата',
+        'workMarker': 'Характер работы',
+        'wellStatus': 'Состояние',
+        'oilfield': 'Месторождение',
+        'workHorizon': 'Объекты работы',
+        'wellCluster': 'Куст',
+        'marker_num': 'Кодировка',
+        'coordinateX': 'Координата X',
+        'coordinateX3': 'Координата забоя Х (по траектории)',
+        'coordinateY': 'Координата Y',
+        'coordinateY3': 'Координата забоя Y (по траектории)',
+        'oilRate': 'Дебит нефти (ТР), т/сут',
+        'fluidRate': 'Дебит жидкости (ТР), м3/сут',
+        'gasRate': 'Дебит природного газа, тыс.м3/сут',
+        'injectivity': 'Приемистость (ТР), м3/сут',
+        'injectivity_day': 'Приемистость (по суточным), м3/сут',
+        'water_cut': 'Обводненность (ТР), % (объём)',
+        'exploitation': 'Способ эксплуатации',
+        'condRate': 'Дебит конденсата газа, т/сут',
+        'well type': 'Тип скважины',
+        'fond': 'Фонд скважины',
+        'GEOMETRY': 'GEOMETRY',
+        'num_of_research': 'Количество исследований в год',
+        'AREA': 'AREA',
+        'intersection': 'Пересечения со скважинами',
+        'number': 'Кол-во пересечений',
+        'mean_radius': 'Средний радиус по объекту, м',
+        'time_coef': 'Коэффициент для расчета времени исследования',
+        'k': 'Проницаемость, мД',
+        'gas_visc': 'Вязкость газа в пластовых условиях, сПз',
+        'pressure': 'Начальное пластовое давление (карты изобар), атм',
+        'default_count': 'Объектов по умолчанию',
+        'obj_count': 'Объектов всего',
+        'percent_of_default': 'Процент объектов со свойствами по умолчанию',
+        'current_horizon': 'Объект расчета',
+        'research_time': 'Время исследования, сут',
+        'oil_loss': 'Потери нефти, т',
+        'gas_loss': 'Потери газа, тыс. м3',
+        'injection_loss': 'Потери закачки, м3',
+        'coverage_percentage': 'Процент охвата площади объекта',
+        'percent_piez_wells': 'Доля пьезометров в опорной сети',
+        'percent_inj_wells': 'Доля нагнетательных в опорной сети',
+        'percent_prod_wells': 'Доля добывающих в опорной сети',
+        'percent_gas_wells': 'Доля газовых добывающих скважин в опорной сети',
+        'year_of_survey': 'Год исследования',
+        'mean_oilrate': 'Средний дебит нефти по объекту, т/сут',
+        'wellNet': 'Статус по опорной сети',
+        'polygon': 'polygon'
+    }
 
-    dict_rename = {v: k for k, v in dict_rename.items()}
-    df_result.columns = dict_rename.values()
+    dict_marker_colors = {"black": [33, 34, 37, 39, 114, 127, 117, 118, 124, 125, 72, 73,
+                                    74, 75, 76, 77, 84, 85, 86, 87, 88, 89, 78, 79, 80, 81, 82,
+                                    83, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 200,
+                                    201, 202, 203, 204, 205, 206, 207, 208, 209, 302, 303, 304, 305, 306, 307],
+                          "darkred": [222, 223, 224, 225, 226, 227, 233],
+                          "blue": [147, 102, 103, 104, 148, 133, 105, 106, 107],
+                          "deepskyblue": [271, 271, 273],
+                          "silver": [43],
+                          "darkorchid": [115],
+                          "dodgerblue": [215]}
+
+    try:
+        dict_rename = {v: k for k, v in dict_rename.items()}
+        df_result.columns = dict_rename.values()
+    except ValueError:
+        dict_rename = {v: k for k, v in dict_rename_plus.items()}
+        df_result.columns = dict_rename.values()
     df_result['AREA'] = df_result['AREA'].apply(lambda x: spl.geometry.shape(json.loads(x)) if x != 0 else x)
     df_result['GEOMETRY'] = df_result['GEOMETRY'].apply(lambda x: spl.geometry.shape(json.loads(x)))
     # добавление маркеров, упрощающих различие по статусам скважин по опорной сети
@@ -206,21 +294,25 @@ def plot_results(df_result, script):
 
     # Отображение скважин и геометрии
     for _, row in df_result.drop_duplicates(subset='wellName').iterrows():
-        geometry_color, marker, font_color = get_geometry_color(row['status'])
-        geometry = gpd.GeoSeries(row['GEOMETRY'])
-        line, = ax.plot(*geometry.loc[0].xy, color=geometry_color)
+        if (row['coordinateX'] != 0) and (row['coordinateY'] != 0):
+            geometry_color, marker, font_color = get_geometry_color(row['status'])
+            path_data = extract_path_data(os.path.join(get_path(), "markers", f'{row['marker_num']}.svg'))
+            custom_marker = create_custom_marker(path_data)
+            marker = Path(custom_marker.vertices, custom_marker.codes)
+            marker_color = reverse_search_from_dictionary(dict_marker_colors, int(row['marker_num']))
 
-        # path_data = extract_path_data(os.path.join(get_path(), "markers", "106.svg"))
-        # custom_marker = create_custom_marker(path_data)
-        # marker = Path(custom_marker.vertices, custom_marker.codes)
-
-        point = ax.scatter(row['coordinateX'], row['coordinateY'], color=geometry_color, marker=marker, label='All')
-        annotate = ax.annotate(row['wellName'], xy=(row['coordinateX'], row['coordinateY']), xytext=(3, 3),
-                               textcoords="offset points", fontsize=6, color=font_color)
-        if row['status'] == 'excluded':
-            dict_shapes['excluded_points'].append(point)
-            dict_shapes['excluded_geometry'].append(line)
-            dict_shapes['excluded_annotation'].append(annotate)
+            geometry = gpd.GeoSeries(row['GEOMETRY'])
+            line, = ax.plot(*geometry.loc[0].xy, color=marker_color)
+            point = ax.scatter(row['coordinateX'], row['coordinateY'], marker=marker, s=200, linewidths=0.5,
+                               label='All', facecolor=marker_color)
+            annotate = ax.annotate(row['wellName'], xy=(row['coordinateX'], row['coordinateY']), xytext=(3, 3),
+                                   textcoords="offset points", fontsize=6, color=font_color)
+            if row['status'] == 'excluded':
+                dict_shapes['excluded_points'].append(point)
+                dict_shapes['excluded_geometry'].append(line)
+                dict_shapes['excluded_annotation'].append(annotate)
+        else:
+            continue
 
     # Легенда для различных типов объектов
     piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')

@@ -33,14 +33,16 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     """
     # удаление исключенных скважин из DataFrame пьезометров, нагнетательных и добывающих
     log_user.emit("Удаление исключенных скважин из расчета")
-    df_regular_exceptions = pd.concat([df_piez_wells[df_piez_wells['wellName'].isin(list_exception)],
-                                       df_inj_wells[df_inj_wells['wellName'].isin(list_exception)],
-                                       df_prod_wells[df_prod_wells['wellName'].isin(list_exception)]],
-                                      axis=0, sort=False).reset_index(drop=True)
+
+    df_regular_exceptions = pd.concat(
+        [df_piez_wells[df_piez_wells['wellName'].str.split("_").str[0].isin(list_exception)],
+         df_inj_wells[df_inj_wells['wellName'].str.split("_").str[0].isin(list_exception)],
+         df_prod_wells[df_prod_wells['wellName'].str.split("_").str[0].isin(list_exception)]],
+        axis=0, sort=False).reset_index(drop=True)
     df_regular_exceptions['wellNet'] = 'В списке исключений'
-    df_piez = df_piez_wells[~df_piez_wells['wellName'].isin(list_exception)]
-    df_inj = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
-    df_prod = df_prod_wells[~df_prod_wells['wellName'].isin(list_exception)]
+    df_piez = df_piez_wells[~df_piez_wells['wellName'].str.split("_").str[0].isin(list_exception)]
+    df_inj = df_inj_wells[~df_inj_wells['wellName'].str.split("_").str[0].isin(list_exception)]
+    df_prod = df_prod_wells[~df_prod_wells['wellName'].str.split("_").str[0].isin(list_exception)]
 
     # словарь с DataFrame каждого фонда, процентом скважин в ОС и приоритетных скважин
     dict_fonds = {}
@@ -84,27 +86,27 @@ def calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         list_check_well = []
         if df_fond.shape[0] > 0:
             df_fond['intersection'] = list(
-                map(lambda x, y: check_intersection_area(x, df_fond[df_fond.wellName != y],
+                map(lambda x, y: check_intersection_area(x, df_fond[df_fond.wellName.str.split("_").str[0] != y],
                                                          dict_parameters['percent'],
                                                          dict_parameters['calc_option']),
-                    df_fond.AREA, df_fond.wellName))
+                    df_fond.AREA, df_fond.wellName.str.split("_").str[0]))
 
             df_fond['number'] = df_fond['intersection'].apply(lambda x: np.size(x))
             df_fond = df_fond.sort_values(by=['number', 'oilRate'], axis=0, ascending=[False, True])
-            list_optim = list(df_fond['wellName'].explode())
+            list_optim = list(df_fond['wellName'].str.split("_").str[0].explode())
             while len(list_optim) != 0:
                 if (len(df_fond['intersection'].explode().unique()) == 1) and (
                         math.isnan(df_fond['intersection'].explode().unique()[0])):
                     list_check_well += list_optim.copy()
                     break
                 list_check_well += [list_optim[0]]
-                list_exception = [list_optim[0]] + list(
-                    df_fond[df_fond['wellName'] == list_optim[0]][
-                        'intersection'].explode().unique())
+                list_exception = [list_optim[0]] + list(set(part for item in df_fond[
+                    df_fond['wellName'].str.split("_").str[0] == list_optim[0]]['intersection'].values[0] for part in
+                                                            item.split("_")))
                 list_optim = [x for x in list_optim if x not in list_exception]
             list_check_well = list(set(list_check_well))
             # добавление обязательных скважин к результирующему DataFrame
-            df_current_result = df_fond[df_fond['wellName'].isin(list_check_well)]
+            df_current_result = df_fond[df_fond['wellName'].str.split("_").str[0].isin(list_check_well)]
             df_current_result = pd.concat([df_necessarily_fond, df_current_result], axis=0, sort=False).reset_index(
                 drop=True)
         elif df_fond.empty and not df_necessarily_fond.empty:

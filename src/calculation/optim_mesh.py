@@ -5,7 +5,7 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 from .support_functions import get_time_coef, get_property
 from .shapely_geometry import intersect_number, check_intersection_area, add_shapely_types
-import shapely as spl
+from shapely.geometry import LineString, Point, Polygon, MultiPolygon
 
 
 @logger.catch(level='DEBUG')
@@ -36,12 +36,13 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
     """
     # удаление исключенных скважин из DataFrame пьезометров и нагнетательных
     log_user.emit("Удаление из расчета исключенных скважин")
-    df_piez_inj_exception = pd.concat([df_piez_wells[df_piez_wells['wellName'].isin(list_exception)],
-                                       df_inj_wells[df_inj_wells['wellName'].isin(list_exception)]],
-                                      axis=0, sort=False).reset_index(drop=True)
+    df_piez_inj_exception = pd.concat(
+        [df_piez_wells[df_piez_wells["wellName"].str.split("_").str[0].isin(list_exception)],
+         df_inj_wells[df_inj_wells["wellName"].str.split("_").str[0].isin(list_exception)]],
+        axis=0, sort=False).reset_index(drop=True)
     df_piez_inj_exception['wellNet'] = 'В списке исключений'
-    df_piez = df_piez_wells[~df_piez_wells['wellName'].isin(list_exception)]
-    df_inj = df_inj_wells[~df_inj_wells['wellName'].isin(list_exception)]
+    df_piez = df_piez_wells[~df_piez_wells['wellName'].str.split("_").str[0].isin(list_exception)]
+    df_inj = df_inj_wells[~df_inj_wells['wellName'].str.split("_").str[0].isin(list_exception)]
     log_user.emit("Процесс построения опорной сети")
     df_result = core_optim_mesh(list_exception, path_property, dict_parameters['percent'], mean_rad, coeff,
                                 horizon, obj_square, dict_parameters['min_research_time'],
@@ -127,6 +128,7 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
         list_proj_research = list(check_intersection_area(unary_union(list(df_result['AREA'].explode())),
                                                           df_proj_wells, dict_parameters['percent'],
                                                           dict_parameters['calc_option']))
+        df_proj_wells["marker_num"] = "33"
         df_proj_wells.loc[df_proj_wells['wellName'].isin(list_proj_research), 'wellNet'] = 'Охвачена исследованиями'
         df_proj_wells.loc[df_proj_wells['wellNet'].isnull(), 'wellNet'] = 'Не охвачена исследованиями'
         df_result = pd.concat([df_result, df_proj_wells], axis=0, sort=False).reset_index(drop=True)
@@ -369,7 +371,8 @@ def single_calc(list_exception, isolated_wells, hor_prod_wells, df_result, perce
                           value=list(map(lambda x: len(x), hor_prod_wells['intersection'])))
 
     # delete exception wells
-    list_prod_exception = list(set(list_exception).intersection(hor_prod_wells['wellName'].explode().unique()))
+    list_prod_exception = list(
+        set(list_exception).intersection(hor_prod_wells['wellName'].str.split("_").str[0].explode().unique()))
     hor_prod_wells = hor_prod_wells[~hor_prod_wells['wellName'].isin(list_prod_exception)]
 
     single_wells += list(hor_prod_wells[hor_prod_wells['number'] == 0].wellName)

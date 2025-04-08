@@ -1,6 +1,7 @@
 import pandas as pd
 from loguru import logger
 from shapely.ops import unary_union
+from shapely.geometry import Point, LineString
 from tqdm import tqdm
 from .check_first_row_wells import mean_radius
 from .support_functions import dict_keys
@@ -11,7 +12,7 @@ from src.input_output.preparing_data import fonds_for_calc
 
 
 @logger.catch(level='DEBUG')
-def calculation(polygon, df_in_contour, contour_name, path_property, list_exception,
+def calculation(polygon, df_in_contour, contour_name, path_property, df_excluded_wells,
                 dict_parameters, log_user, progress_bar):
     """
     Основная функция расчета
@@ -19,7 +20,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     :param df_in_contour: DataFrame из скважин, находящихся внутри контура
     :param contour_name: имя контура
     :param path_property: путь к справочнику с PVT свойствами
-    :param list_exception: список исключаемых скважин
+    :param df_excluded_wells: список исключаемых скважин
     :param dict_parameters: словарь с параметрами расчета
     :param log_user: сигнал, передающий сообщения для пользователя в окно логирования приложения
     :param progress_bar: сигнал передачи значения в линию прогресса текущей задачи
@@ -32,15 +33,16 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
     dict_result = dict_keys(dict_parameters['mult_coef'], contour_name)
     list_objects = list(set(df_in_contour.workHorizon.str.replace(" ", "").str.split(",").explode()))
     list_objects.sort()
-
     for horizon in tqdm(list_objects, "Calculation for objects", position=0, leave=True,
                         colour='white', ncols=80, disable=True):
         logger.info(f'Current horizon: {horizon}')
         log_user.emit(f"-----Построение опорной сетки по объекту {horizon}")
-        # для каждого объекта определяется свой df_horizon
+        # для каждого объекта определяется свой df_horizon и свой df_excluded_wells
         df_horizon = df_in_contour[
             list(map(lambda x: len(set(x.replace(" ", "").split(",")) & set([horizon])) > 0,
                      df_in_contour.workHorizon))]
+        list_horizon_excluded = list(df_excluded_wells[df_excluded_wells["workHorizon"].map(str).str.contains(horizon)][
+                                         "wellName"].explode().unique())
         # условие на пропуск итерации, если все скважины текущего объекта в контуре - проектные
         if df_horizon[df_horizon['fond'] != 'ПРОЕКТ'].empty:
             log_user.emit("На текущем объекте расчета нет скважин, кроме проектных. Итерация пропускается")
@@ -58,8 +60,14 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
         log_user.emit(f"-----Применение заданных коэффициентов на средний радиус исследования")
         total_count_coef = len(dict_parameters['mult_coef'])
         for i, (key, coeff) in enumerate(zip(dict_result, dict_parameters['mult_coef'])):
-            # площадь многоугольника построенного по крайним скважинам, попавшим на расчет
-            obj_square = unary_union(list(df_horizon[df_horizon['fond'] != 'ПРОЕКТ']['GEOMETRY'].explode())).convex_hull
+            # Получаем геометрии из DataFrame, исключая "ПРОЕКТ"
+            geoms = list(df_horizon[df_horizon['fond'] != 'ПРОЕКТ'].geometry)
+            # Преобразуем вырожденные LineString (нулевая длина) в Point
+            processed_geoms = [Point(geom.coords[0]) if isinstance(geom, LineString) and geom.length == 0 else geom for
+                               geom in geoms]
+            # Минимальный выпуклый многоугольник, охватывающий все точки
+            obj_square = unary_union(processed_geoms).convex_hull
+            # Площадь многоугольника с буферизацией на текущий радиус исследования
             obj_square = obj_square.buffer(
                 mean_rad * coeff).area  # площадь охватывающая все скважины объекта, попавшие на расчет
             logger.info(f'Add shapely types with coefficient = {coeff}')
@@ -78,12 +86,13 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                 # то вычисления по объекту нет
                 if (df_prod_wells.shape[0] + df_necessarily_wells.shape[0]) == 0:
                     logger.info(f'THERE ARE NO PRODUCTION AND NECESSARILY WELLS FOR OBJECT {horizon}')
-                    log_user.emit(f"")
+                    log_user.emit(
+                        f"Отсутствуют добывающие и обязательные для исследования скважины на объекте: {horizon}")
                     continue
                 df_result = calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result,
                                             df_necessarily_wells, horizon, mean_rad, coeff, key, obj_square,
                                             path_property,
-                                            list_exception, dict_parameters, log_user)
+                                            list_horizon_excluded, dict_parameters, log_user)
             # сценарий с построением регулярной сеткой на каждом из фондов
             elif dict_parameters['calculation_scenario'] == 'regular':
                 logger.info(f'Selected regular mesh scenario')
@@ -94,7 +103,7 @@ def calculation(polygon, df_in_contour, contour_name, path_property, list_except
                                    dict_parameters['percent_oilrate'])
                 df_result = calc_regular_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells, df_result,
                                               df_necessarily_wells, horizon, path_property, dict_parameters, obj_square,
-                                              mean_rad, coeff, list_exception, log_user)
+                                              mean_rad, coeff, list_horizon_excluded, log_user)
 
             else:
                 raise NameError(
