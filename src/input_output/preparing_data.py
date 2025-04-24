@@ -9,7 +9,6 @@ import xlwings as xw
 from dateutil.parser import parse as parseDate
 from loguru import logger
 from shapely.geometry import Point, LineString
-
 from src.calculation.support_functions import get_path, clean_work_horizon, unpack_status, min_color_diff
 from src.calculation.shapely_geometry import check_intersection_area
 from .dictionaries import dict_geobd_columns, dict_ngt_column, dict_project_columns, dict_ngt_encoding

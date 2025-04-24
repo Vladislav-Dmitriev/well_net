@@ -1,6 +1,5 @@
 import json
 import os.path
-
 import geopandas as gpd
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -10,7 +9,6 @@ from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
 from matplotlib.widgets import CheckButtons
 from src.calculation.support_functions import get_path
-
 import xml.etree.ElementTree as ET
 from svgpath2mpl import parse_path
 from matplotlib.path import Path
@@ -318,17 +316,10 @@ def plot_results(df_result, script):
     piez = mpatches.Patch(color='black', fc='springgreen', label='Пьезометры')
     inj = mpatches.Patch(color='black', fc='azure', label='Нагнетательные')
     prod = mpatches.Patch(color='black', fc='lightsalmon', label='Добыващие(с исследованием)')
-    wellnet_point = Line2D([0], [0], marker='^', color='black', label='Включены в программу ГДИС',
-                           markerfacecolor='blue', markersize=14, linestyle='None')
-    research_wells = Line2D([0], [0], marker='.', color='black', label='Охваченные исследованиями',
-                            markerfacecolor='black', markersize=14, linestyle='None')
-    proj_wells = Line2D([0], [0], marker='.', color='black', label='Проектный фонд',
-                        markerfacecolor='chocolate', markersize=14, linestyle='None')
-    exception_wells = Line2D([0], [0], marker='.', color='black', label='Исключенные',
-                             markerfacecolor='gray', markersize=14, linestyle='None')
-    contour_boundary = Line2D([0], [0], marker='_', color='black', label='Граница контура',
-                              markerfacecolor='saddlebrown', markersize=14, linestyle='None')
-    handles = [piez, inj, prod, wellnet_point, research_wells, proj_wells, exception_wells]
+
+    contour_boundary = Line2D([0], [0], color='saddlebrown', label='Граница контура',
+                              markersize=20, linestyle='-')
+    handles = [piez, inj, prod]
 
     # Условная легенда для сценария "Оптимальная сетка"
     if script == 'Оптимальная сетка':

@@ -1,8 +1,5 @@
-from pydantic import field_validator, BaseModel, ValidationError, Field
+from pydantic import field_validator, BaseModel, Field
 from typing import Union
-from loguru import logger
-import pandas as pd
-import os
 
 
 class ValidateToBD(BaseModel):

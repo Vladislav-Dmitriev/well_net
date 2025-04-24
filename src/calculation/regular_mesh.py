@@ -1,11 +1,9 @@
 import math
-
 import numpy as np
 import pandas as pd
 from shapely.ops import unary_union
 from tqdm import tqdm
 from loguru import logger
-
 from src.calculation.support_functions import get_property, get_time_coef
 from src.calculation.shapely_geometry import check_intersection_area
 

@@ -5,7 +5,6 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 from .support_functions import get_time_coef, get_property
 from .shapely_geometry import intersect_number, check_intersection_area, add_shapely_types
-from shapely.geometry import LineString, Point, Polygon, MultiPolygon
 
 
 @logger.catch(level='DEBUG')
@@ -71,15 +70,15 @@ def calc_optim_mesh(df_prod_wells, df_piez_wells, df_inj_wells, df_proj_wells,
             df_prod_recalc = add_shapely_types(
                 df_prod_intersection[df_prod_intersection['wellName'].isin(list_invisible_wells)],
                 mean_rad, dict_parameters['limit_radius_coef'])
-            # обновление столбца AREA с максимально допустимым R в DataFrame скважин, попавших на первую итерацию расчета
+            # обновление столбца AREA с максимально допустимым R в DataFrame скважин, попавших на 1-ую итерацию расчета
             df_piez_recalc = add_shapely_types(df_piez, mean_rad, dict_parameters['limit_radius_coef'])
             df_inj_recalc = add_shapely_types(df_inj, mean_rad, dict_parameters['limit_radius_coef'])
             log_user.emit("Процесс построения опорной сети на исследование в следующие года")
             df_result_invisible = core_optim_mesh(list_exception, path_property, dict_parameters['percent'], mean_rad,
                                                   coeff, horizon, obj_square, dict_parameters['min_research_time'],
                                                   dict_parameters['max_research_time'], dict_parameters['calc_option'],
-                                                  dict_parameters['limit_research_time'], df_piez_recalc, df_prod_recalc,
-                                                  df_inj_recalc, df_result_invisible,
+                                                  dict_parameters['limit_research_time'], df_piez_recalc,
+                                                  df_prod_recalc, df_inj_recalc, df_result_invisible,
                                                   pd.DataFrame(columns=df_piez_recalc.columns))
 
             if (dict_parameters['separation_by_years'] == 1) and (not df_result_invisible.empty):
