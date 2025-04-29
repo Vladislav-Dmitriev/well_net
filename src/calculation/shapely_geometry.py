@@ -1,9 +1,12 @@
-import geopandas as gpd
+import os
+from tqdm import tqdm
 import numpy as np
-import pandas as pd
-from shapely.geometry import LineString, Point, Polygon
+from loguru import logger
+import geopandas as gpd
+from shapely.geometry import LineString, Point, Polygon, MultiPolygon
 
 
+@logger.catch(level='DEBUG')
 def get_polygon_well(R_well, type_well, *coordinates):
     """
     Создание зоны вокруг скважины с заданным радиусом
@@ -24,6 +27,7 @@ def get_polygon_well(R_well, type_well, *coordinates):
         raise NameError(f'Wrong well type: {type_well}. Allowed values: vertical or horizontal')
 
 
+@logger.catch(level='ERROR')
 def check_intersection_area(area, df_points, percent, calc_option):
     """
     Проверка входят ли скважины из df_point в зону другой скважины area
@@ -37,7 +41,7 @@ def check_intersection_area(area, df_points, percent, calc_option):
         '''Столбец GEOMETRY позволит включать скважины в зону охвата,
         если скважина попадает в нее на определенное кол-во процентов'''
         df_points = gpd.GeoDataFrame(df_points, geometry="GEOMETRY")
-        df_points = df_points[(df_points["GEOMETRY"].intersects(area))]
+        df_points = df_points[df_points["GEOMETRY"].intersects(area)]
         df_points['part_in'] = list(map(lambda x: area.intersection(x).length / x.length if x.length != 0 else 1,
                                         df_points["GEOMETRY"]))
         df_points = df_points[df_points['part_in'] >= percent / 100]
@@ -53,6 +57,7 @@ def check_intersection_area(area, df_points, percent, calc_option):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
+@logger.catch(level='DEBUG')
 def check_intersection_point(point, df_areas, percent, calc_option):
     """
     Функция позволяет узнать, перечесение со сколькими зонами имеет определенная скважина
@@ -60,7 +65,7 @@ def check_intersection_point(point, df_areas, percent, calc_option):
     :param percent: процент попадания скважины в зону охвата
     :param point: геометрия скважины(точка/линия)
     :param df_areas: DataFrame со столбцом зон вокруг скважин
-    :return: перечесение со сколькими зонами имеет определенная скважина
+    :return: пересечение со сколькими зонами имеет определенная скважина
     """
     if calc_option:
         df_areas = gpd.GeoDataFrame(df_areas, geometry="AREA")
@@ -79,6 +84,7 @@ def check_intersection_point(point, df_areas, percent, calc_option):
         raise TypeError(f'Wrong calculation option type: {calc_option}. Expected values: True or False')
 
 
+@logger.catch(level='DEBUG')
 def intersect_number(df_prod, df_inj_piez, percent, calc_option):
     """
     Функция добавляет в DataFrame столбец 'intersection', в него записываются
@@ -108,51 +114,7 @@ def intersect_number(df_prod, df_inj_piez, percent, calc_option):
     return df_prod, df_inj_piez
 
 
-def optimization(df_prod, df_inj_piez):
-    """
-    Выделяется список нагнетательных/пьезометров из DataFrame продуктивных,
-    имеющих 1 пересечение. Оптимизация заключается в переопределении
-    списка нагн/пьез. с помощью исключения скважин, входящих
-    как в список пересечений, так и в список исключений, из df_optim
-    :param df_prod: DataFrame добывающих скважин
-    :param df_inj_piez: DataFrame нагнетательных/пьезометров
-    :return: Возвращает обновленный список нагнетательных/пьезометров
-    """
-    list_inj_piez_wells = []
-    # выделяем из столбца пересечений DataFrame продуктивных скважин строки, где добывающие охвачены только 1
-    # пьезометром, и включаем эти пьезометры в список
-    list_inj_piez_wells += list(df_prod[df_prod['number'] == 1]['intersection'].explode().unique())
-    # по выделенному списку пьезометров из DataFrame пьезометрических скважин выделяем добывающие, которые охвачены ими
-    list_prod_wells = df_inj_piez[
-        df_inj_piez['wellName'].isin(list_inj_piez_wells)]['intersection'].explode().unique()
-    # создаем dataframe оптимизации из DataFrame пьезометров, исключая те пьезометры, которые единственные охватывают
-    # одну из добывающих скважин, их в любом случае включаем в опорную сеть
-    df_optim = df_inj_piez[~df_inj_piez['wellName'].isin(list_inj_piez_wells)]
-    # из столбца пересечений DataFrame оптимизации удаляются все добывающие, которые охвачены только 1 пьезометром
-    df_optim.intersection = list(
-        map(lambda x: list(set(x).difference(set(list_prod_wells))), df_optim['intersection']))
-    # добавление столбца с кол-вом пересечений
-    df_optim.number = list(map(lambda x: len(x), df_optim['intersection']))
-    # отсеиваются одиночные скважины, не имеющие пересечений
-    df_optim = df_optim[df_optim['number'] > 0]
-    # в df_optim остались скважины с ненулевыми пересечениями
-    if not df_optim.empty:
-        #  создаем сет уникальных значений столбца с пересечениями и сортируем dataframe по кол-ву пересечений
-        set_visible_wells = set(df_optim['intersection'].explode().unique())
-        df_optim = df_optim.sort_values(by=['number'], ascending=True)
-        # на каждой итерации создается набор исключений, кроме итерируемой скважины,
-        # он сравнивается с набором скважин, входящих в список пересечений выше
-        for well in df_optim.wellName.values:
-            set_exception = set(df_optim[df_optim['wellName'] != well]['intersection'].explode().unique())
-            # при совпадении наборов исключений и пересечений из df_optim исключается итерируемая скважина
-            # и добавляется к списку нагн./пьез.
-            if set_exception == set_visible_wells:
-                df_optim = df_optim[df_optim.wellName != well]
-        list_inj_piez_wells += list(df_optim.wellName.values)
-
-    return list_inj_piez_wells
-
-
+@logger.catch(level='DEBUG')
 def add_shapely_types(df_input, mean_rad, coeff):
     """
     Добавление в DataFrame столбца с площадью охвата скважин, в зависимости от среднего радиуса охвата по контуру
@@ -179,17 +141,55 @@ def add_shapely_types(df_input, mean_rad, coeff):
     return df_input
 
 
-def load_contour(contour_path):
+@logger.catch(level='DEBUG')
+def get_contours(contours_path, log_user, progress_bar):
     """
-    Загрузка файла с координатами контура и построение многоугольника
-    :param contour_path: Путь к файлу с координатами контура
-    :return: Возвращается многоугольник GeoPandas на основе координат из файла
+    Получение многоугольников контуров, заданных пользователем
+    :param contours_path: абсолютный путь к .txt файлу с координатами контуров
+    :param progress_bar: сигнал для изменения значения progress bar
+    :param log_user: сигнал для вывода логов в окно для пользователя
+    :return: словарь с многоугольниками, построенными из координат контруров, ключами словаря будут названия файлов
     """
-    columns_name = ['coordinateX', 'coordinateY']
-    df_contour = pd.read_csv(contour_path, sep=' ', decimal=',', header=0, names=columns_name)
-    df_contour = df_contour[df_contour['coordinateX'] != '/']
-    gdf_contour = gpd.GeoDataFrame(df_contour)
-    list_of_coord = [[x, y] for x, y in zip(gdf_contour.coordinateX, gdf_contour.coordinateY)]
-    polygon = Polygon(list_of_coord)
+    list_of_files = [f for f in os.listdir(path=contours_path) if f.endswith('.txt')]
+    dict_contours = {}
+    log_user.emit("Подготовка контуров")
+    total_files_count = len(list_of_files)
 
-    return polygon
+    for current_file in tqdm(list_of_files, "Preparing contour coordinates", position=0, leave=True,
+                             colour='white', ncols=80, disable=True):
+        with open(f'{contours_path}{current_file}', 'r') as file:
+            data = list(filter(None, file.read().split('/')))
+            list_polygons = []
+
+            for i in range(len(data)):
+                contour = [[float(y) for y in x.split(' ')] for x in list(filter(None, data[i].split('\n')))]
+                list_polygons += [Polygon(contour)]
+            exteriors = []
+            holes = []
+
+            for poly in list_polygons:
+                hole_status = False
+
+                for other in list_polygons:
+                    if other == poly:
+                        continue
+                    if other.contains(poly):
+                        hole_status = True
+                        break
+
+                if hole_status:
+                    holes.append(poly)
+                else:
+                    exteriors.append(poly)
+
+            multi_polygons = []
+            for exterior in exteriors:
+                interior_holes = [hole for hole in holes if exterior.contains(hole)]
+                multi_polygons.append(
+                    Polygon(exterior.exterior.coords, [hole.exterior.coords for hole in interior_holes]))
+
+            dict_contours[f'{current_file.replace(".txt", "")}'] = MultiPolygon(multi_polygons)
+
+        progress_bar.emit(int((list_of_files.index(current_file) + 1) / total_files_count * 100))
+
+    return dict_contours

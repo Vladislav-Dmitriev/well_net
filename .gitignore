@@ -1,10 +1,12 @@
 /venv/
 /.idea/
-/files/
-/conf_files/
-/Опорная сетка.docx
 /output/
-/contours/
-/main.exe
-/main.spec
-__pycache__
+/src/gui/qtsample.ui
+/Методичка ОС.docx
+/input/
+/Модуль ОС/
+/src/test.py
+/Icon.ico
+/wellnet_default.db
+/src/__init__.py
+/markers/

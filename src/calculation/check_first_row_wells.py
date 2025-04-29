@@ -1,11 +1,12 @@
 import math
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from loguru import logger
 
 
+@logger.catch(level='DEBUG')
 def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     """
     Проверка пересечений между скважинами в исходном массиве, для исключения перекрываемых скважин второго ряда
@@ -46,6 +47,7 @@ def check_well_intersection(df_intersectionWells, MaxOverlapPercent):
     return list_dropWell
 
 
+@logger.catch(level='DEBUG')
 def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                                verticalWellAngle, MaxOverlapPercent,
                                angle_horizontalT1, angle_horizontalT3):
@@ -60,6 +62,8 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
                              пересечении, чтобы скважина осталась в первом ряду
     :return: listNamesFisrtRowWells - список скважин первого ряда
     """
+    if None in [verticalWellAngle, MaxOverlapPercent, angle_horizontalT1, angle_horizontalT3]:
+        raise ValueError("Incorrect angle values for searching first row wells")
     #  injection well type check
     if df_WellOneArea["well type"].loc[wellNumberInj] == "vertical":
         """Выбор центральных точек для оценки первого ряда: 
@@ -224,8 +228,9 @@ def first_row_of_well_geometry(df_WellOneArea, wellNumberInj,
     return listNamesFisrtRowWells
 
 
+@logger.catch(level='DEBUG')
 def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
-                angle_horizontalT1, angle_horizontalT3, max_distance):
+                angle_horizontalT1, angle_horizontalT3, max_distance, progress_bar):
     """
     Расчет среднего и минимального радиусов первого ряда окружения по объекту
     :param df_in_contour: DataFrame скважин, попавших в контур
@@ -244,8 +249,10 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
     df_in_contour["min_dist"] = np.nan
     # df_in_contour["distance"], df_in_contour["mean_dist"], df_in_contour["min_dist"] = 0, 0, 0
     df_in_contour = gpd.GeoDataFrame(df_in_contour, geometry="GEOMETRY")
-    wells = df_in_contour.wellName.unique()
-    for well in tqdm(wells, "Calculation research radius", position=0, leave=True, colour='white'):
+    wells = list(df_in_contour.wellName.unique())
+    wells_count = len(wells)
+    for i, well in enumerate(tqdm(wells, "Calculation research radius", position=0, leave=True, colour='white',
+                                  disable=True)):
         # Обновляем столбец distance
         df_in_contour["distance"] = list(map(lambda x: df_in_contour.loc[well, "GEOMETRY"].distance(x),
                                              df_in_contour.GEOMETRY))
@@ -264,6 +271,8 @@ def mean_radius(df_in_contour, verticalWellAngle, MaxOverlapPercent,
         else:
             df_in_contour.loc[well, 'mean_dist'] = max_distance
             df_in_contour.loc[well, 'min_dist'] = max_distance
+        progress_bar.emit(int((i + 1) / wells_count * 100))
+
     # среднее среднего от расстояния (или среднее расстояние между скважинами на объект)
     mean_rad = df_in_contour["mean_dist"].mean()
     df_in_contour.drop(columns=['distance', 'mean_dist'], inplace=True)
